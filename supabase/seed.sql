@@ -1,0 +1,1 @@
+-- Dados locais sintéticos serão adicionados junto às migrations de domínio.
