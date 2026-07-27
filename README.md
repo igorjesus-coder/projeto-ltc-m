@@ -3,9 +3,9 @@
 Base técnica do sistema de gestão do portfólio LTC-M: aplicação CRUD, banco
 Supabase/PostgreSQL e camada analítica para Tableau.
 
-Este repositório contém somente a fundação da tarefa 1.01. O modelo de dados, as regras
-transacionais, a importação da planilha e as views analíticas serão entregues em tarefas
-próprias, depois da validação das dependências 0.07 e 0.08.
+Este repositório contém a fundação da tarefa 1.01 e a decisão arquitetural da tarefa 0.07. O
+modelo de dados, as regras transacionais, a importação da planilha e as views analíticas serão
+entregues em tarefas próprias, depois da validação das regras de negócio pendentes.
 
 ## Pré-requisitos
 
@@ -38,8 +38,19 @@ npm run db:start
 npm run db:status
 ```
 
-O primeiro `db:start` baixa as imagens Docker usadas pelo Supabase. Copie a URL e a chave
-anônima exibidas pelo CLI para o `.env`. Nunca inclua a `service_role` em uma variável `VITE_`.
+O primeiro `db:start` baixa as imagens Docker usadas pelo Supabase. Copie para o `.env` a URL e a
+chave publicável exibidas pelo CLI; use a chave `anon` somente quando a stack local não oferecer
+uma chave publicável. Nunca inclua `secret` ou `service_role` em uma variável `VITE_`.
+
+### Trabalho temporário sem Docker
+
+Enquanto Docker ou um runtime compatível não estiver disponível, use somente um projeto Supabase
+gerenciado e exclusivo para desenvolvimento, com dados sintéticos. Não reutilize homologação ou
+produção e não coloque credenciais no repositório.
+
+Configure `.env.local` com a URL e a chave publicável desse projeto. Mudanças de banco continuam
+obrigatoriamente registradas em migrations, mesmo quando forem experimentadas no projeto remoto.
+Esse fluxo não substitui a futura validação local com `db reset` e testes de RLS.
 
 ## Desenvolvimento
 
@@ -104,5 +115,9 @@ Branches, commits, revisão e critérios de pronto estão documentados em
 as decisões de negócio em aberto estão preservados em
 [`docs/project-specification.md`](docs/project-specification.md).
 
-Não há configuração de deploy ou ambiente remoto nesta fundação. Conexões com Supabase
-hospedado e Tableau devem ser adicionadas por ambiente, com segredos fora do Git.
+A decisão, alternativas e condições de revisão da plataforma estão no
+[`ADR-0001`](docs/adr/0001-arquitetura-base-da-plataforma-ltc-m.md).
+
+Deploy e ambientes remotos ainda não estão configurados. A arquitetura recomenda projetos
+Supabase separados, Vercel para o frontend e GitHub Actions para CI/CD, condicionados às
+aprovações organizacionais registradas no ADR.
