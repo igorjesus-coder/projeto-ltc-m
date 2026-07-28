@@ -1,10 +1,16 @@
 # ADR-0001: Arquitetura base da plataforma LTC-M
 
-- Estado: Aceita
+- Estado: Superseded (substituída) pelo
+  [ADR-0002](0002-arquitetura-render-supabase-database-auth0.md)
 - Data: 2026-07-27
 - Tarefa: 0.07
 - Decisores: pendente de nomeação formal
 - Escopo: fundação técnica e operação da plataforma
+
+> **Registro histórico:** este ADR preserva as premissas avaliadas em 2026-07-27, mas deixou de
+> representar a arquitetura vigente em 2026-07-28. Em especial, Supabase Auth, Data API/RPC
+> acessada diretamente pelo frontend e Vercel foram superados. Novas implementações devem seguir
+> o ADR-0002; as menções abaixo não são recomendações atuais.
 
 ## Contexto
 

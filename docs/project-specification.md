@@ -1,5 +1,18 @@
 # Projeto de Banco de Dados, CRUD e Dashboard LTC-M
 
+## Baseline documental
+
+| Campo | Valor |
+| --- | --- |
+| Estado | Aprovada para a primeira versão |
+| Data | 2026-07-28 |
+| Arquitetura vigente | [ADR-0002](adr/0002-arquitetura-render-supabase-database-auth0.md) |
+
+Estão aprovados e datados nesta baseline o dicionário de dados conceitual, o escopo da primeira
+versão, as métricas financeiras, o modelo da Curva S, as regras de atualização, os perfis de
+usuário, os critérios de aceite e os itens fora do escopo. Entidades e campos abaixo são
+conceituais; nenhuma tabela ou migration é criada por esta atualização.
+
 ## 1. Objetivo
 
 Construir uma solução integrada para controlar o portfólio de projetos LTC-M, substituindo a lógica dispersa da planilha por:
@@ -39,9 +52,13 @@ A pasta possui três abas:
 
 1. **Formato largo da previsão**: cada mês é uma coluna. A inclusão de novos meses exige alterar a estrutura da planilha e do dashboard.
 2. **Resumo e detalhe misturados**: alguns valores do resumo são fórmulas e outros são digitados manualmente.
-3. **Possível dupla contagem**: o valor de R$ 1.028.550,00 do projeto 2024-10-12524 é calculado com as linhas do próprio projeto mais a linha de R$ 343.730,00 do projeto 2025-07-14416; esse segundo projeto também aparece separadamente no resumo.
-4. **Divergência no projeto 2026-04-16531**: item comercial de R$ 168.000,00, resumo e previsão mensal de R$ 164.000,00; diferença de R$ 4.000,00.
-5. **Contrato total versus saldo**: o projeto 2024-02-10990 aparece com R$ 2.260.099,66 no resumo e somente R$ 369.749,17 como saldo na previsão mensal. Esses conceitos precisam ser campos diferentes.
+3. **Consolidação conjunta no resumo**: os projetos 2024-10-12524 e 2025-07-14416 aparecem
+   consolidados porque pertencem ao mesmo cliente. A apresentação é intencional, mas os registros
+   devem permanecer separados no banco e nos filtros por projeto.
+4. **Valor oficial do projeto 2026-04-16531**: a divergência da fonte foi resolvida; o valor
+   aprovado é R$ 164.000,00.
+5. **Contrato total versus recebimento**: o projeto 2024-02-10990 está integralmente faturado. R$
+   369.749,17 são previsão de recebimento, não saldo de faturamento.
 6. **Projetos sem programação mensal**: os projetos de maior valor, incluindo 2025-12-15568 e 2026-01-15797, ainda não alimentam a Curva S.
 7. **Clientes não normalizados**: PETROBRAS aparece com variações como “PETROBRAS IBT (saldo)”, “PETROBRAS SRP/BF (Demanda)” e “PETROBRAS (Demanda)”. Saldo e Demanda devem ser atributos do projeto, não parte do nome do cliente.
 8. **Código de projeto com espaço inicial**: 2024-06-11837 contém espaço antes do código.
@@ -56,7 +73,7 @@ A pasta possui três abas:
 
 | Projeto | Total das linhas | Programado mensal | Saldo sem programação |
 |---|---:|---:|---:|
-| 2024-02-10990 | R$ 369.749,17 | R$ 369.749,17 | R$ 0,00 |
+| 2024-02-10990 | R$ 369.749,17 | R$ 0,00 | R$ 0,00 |
 | 2024-06-11837 | R$ 2.783.700,00 | R$ 0,00 | R$ 2.783.700,00 |
 | 2024-10-12524 | R$ 684.820,00 | R$ 684.820,00 | R$ 0,00 |
 | 2025-07-14416 | R$ 343.730,00 | R$ 343.730,00 | R$ 0,00 |
@@ -64,9 +81,21 @@ A pasta possui três abas:
 | 2025-12-15568 | R$ 13.786.887,44 | R$ 0,00 | R$ 13.786.887,44 |
 | 2026-01-15797 | R$ 12.095.014,80 | R$ 0,00 | R$ 12.095.014,80 |
 | 2026-03-16231 | R$ 47.320,00 | R$ 0,00 | R$ 47.320,00 |
-| 2026-04-16531 | R$ 168.000,00 | R$ 164.000,00 | R$ 4.000,00 |
+| 2026-04-16531 | R$ 164.000,00 | R$ 164.000,00 | R$ 0,00 |
 
 A diferença entre “Valor Total do Contrato”, “Saldo Contratual”, “Valor dos Itens Ativos” e “Valor Programado” deve ser mantida explicitamente no banco; não deve ser resolvida por uma única coluna genérica de valor.
+
+No projeto 2024-02-10990, os R$ 369.749,17 da primeira coluna são `receipt_forecast`; por isso não
+integram a coluna de faturamento programado.
+
+### 2.5 Tratamentos aprovados para projetos
+
+- **2026-04-16531:** valor oficial de R$ 164.000,00.
+- **2024-10-12524 e 2025-07-14416:** projetos separados, com itens associados ao projeto correto.
+  A consolidação conjunta ocorre somente por cliente ou grupo de reporte. Um filtro por projeto não
+  mistura registros, e nenhum valor é transferido fisicamente de um projeto para o outro.
+- **2024-02-10990:** projeto integralmente faturado e encerrado quanto ao faturamento. R$
+  369.749,17 permanecem como `receipt_forecast`, fora do previsto de faturamento da Curva S.
 
 ---
 
@@ -74,25 +103,33 @@ A diferença entre “Valor Total do Contrato”, “Saldo Contratual”, “Val
 
 ```mermaid
 flowchart LR
-    U[Usuários] --> C[CRUD Web]
-    C --> R[RPC e validações]
-    R --> S[(Supabase PostgreSQL)]
+    U[Usuários] --> C[React + TypeScript + Vite no Render]
+    C --> AUTH[Auth0 Universal Login]
+    AUTH --> C
+    C --> B[Backend próprio no Render]
+    B --> S[(Supabase PostgreSQL us-east-1)]
     S --> V[Views analíticas]
-    V --> T[Tableau]
-    S --> A[Auditoria e histórico]
+    V --> T[Tableau Extract read-only]
+    S --> AUDIT[Auditoria e histórico]
     I[Importação controlada da planilha] --> ST[Staging]
-    ST --> R
+    ST --> B
 ```
 
 ### Componentes
 
-- **Frontend CRUD**: Bubble.io, React/Next.js ou outra interface web.
-- **Backend**: Supabase/PostgreSQL.
-- **Autenticação**: usuários autenticados e perfis com papéis.
-- **Regras transacionais**: funções RPC para salvar projeto, itens e programação em uma única transação.
-- **Camada analítica**: views específicas para Tableau.
+- **Frontend CRUD**: React, TypeScript e Vite, hospedado no Render.
+- **Backend próprio**: hospedado no Render; tecnologia/framework ainda pendente.
+- **Banco**: PostgreSQL hospedado no Supabase, usado somente como banco e na região `us-east-1`.
+- **Autenticação**: Auth0 com OIDC/OAuth 2.0, Authorization Code Flow e PKCE.
+- **Autorização**: perfis e permissões de negócio mantidos no LTC-M.
+- **Regras transacionais**: backend orquestra operações e funções PostgreSQL quando aplicável.
+- **Camada analítica**: views específicas para Tableau Extract.
 - **Auditoria**: registro de inclusão, alteração, exclusão lógica, usuário e data.
 - **Importação opcional**: staging para futuras cargas de planilha sem gravar diretamente nas tabelas finais.
+
+O frontend não acessa PostgreSQL, tabelas ou RPCs diretamente. No fluxo da aplicação, somente o
+backend usa `DATABASE_URL`. A conexão separada do Tableau é exclusivamente read-only e limitada às
+views analíticas.
 
 ---
 
@@ -101,6 +138,21 @@ flowchart LR
 ## 4. Modelo de dados proposto
 
 ### 4.1 Tabelas principais
+
+#### `app_users`
+
+Identidade e autorização internas, sem armazenar senha:
+
+- `id` — identificador interno;
+- `auth_subject` — claim `sub` do Auth0, estável e único;
+- `email`;
+- `name`;
+- `role` — `viewer`, `editor` ou `admin`;
+- `active`;
+- `created_at` e `updated_at`.
+
+E-mail não é identificador imutável. Auth0 comprova identidade; status, perfil e permissões de
+negócio permanecem no LTC-M. Alterações de perfil devem ser auditáveis.
 
 #### `clients`
 Cadastro único de clientes.
@@ -123,9 +175,10 @@ Campos principais:
 - `project_code` — código natural único, por exemplo 2026-01-15797;
 - `project_name`;
 - `client_id`;
+- `reporting_group`, quando a consolidação não for representada apenas pelo cliente;
 - `classification` — contrato completo, demanda ou saldo;
 - `status`;
-- `base_currency`;
+- `base_currency` — exatamente uma moeda por projeto;
 - `contract_value` — valor total contratual;
 - `opening_balance` — saldo trazido para o horizonte, quando aplicável;
 - `budget_cost` — custo orçado atual;
@@ -157,6 +210,9 @@ Campos principais:
 
 **Regra crítica:** código do item pode repetir. A chave operacional deve ser `project_id + source_line_key` ou `project_id + line_number`, nunca somente projeto + código.
 
+**Regra de moeda:** `currency_code` deve ser igual à moeda do projeto, ou ser derivado dela. Um
+projeto não pode conter itens em moedas diferentes.
+
 #### `plan_versions`
 Versões da previsão financeira.
 
@@ -179,14 +235,19 @@ Cada registro representa um valor em um mês:
 
 - `plan_version_id`;
 - `project_id`;
-- `project_item_id`, quando aplicável;
-- `metric_type`: faturamento, recebimento, receita ou custo;
+- `project_item_id`, nulo somente para planejamento no nível do projeto;
+- `planning_level`: `project` ou `item`;
+- `metric_type`: ao menos `billing_planned` e `receipt_forecast`;
 - `competence_month` — sempre o primeiro dia do mês;
 - `amount`;
 - `currency_code`;
 - `notes`.
 
 Em vez de criar uma coluna para Jul/26, Ago/26 etc., são criadas linhas. Novos meses não alteram o banco.
+
+Cada linha pertence ao projeto **ou** a um item. Quando `planning_level = project`,
+`project_item_id` é nulo; quando `planning_level = item`, ele é obrigatório. Uma view não pode
+somar linhas de item com um total duplicado no nível do projeto.
 
 #### `financial_actual_events`
 Movimentos realizados.
@@ -195,7 +256,7 @@ Campos principais:
 
 - `project_id`;
 - `project_item_id`, opcional;
-- `metric_type`: faturamento, recebimento, receita ou custo;
+- `metric_type`: ao menos `billing_actual` e `receipt_actual`;
 - `competence_date`;
 - `source_key` — chave obrigatória para impedir duplicidade;
 - `document_number`;
@@ -205,6 +266,9 @@ Campos principais:
 - `status`;
 - `notes`;
 - usuário e datas de criação/alteração.
+
+O modelo suporta `receipt_actual`, embora o realizado de recebimento não faça parte da primeira
+entrega. Faturamento planejado/realizado e recebimento previsto/realizado são séries distintas.
 
 #### `units` e `currencies`
 Cadastros de referência para evitar digitação livre.
@@ -232,6 +296,8 @@ Histórico das mudanças com tabela, registro, operação, valores anteriores, n
 
 ```mermaid
 erDiagram
+    APP_USERS ||--o{ PROJECTS : gerencia
+    APP_USERS ||--o{ PLAN_VERSIONS : cria_aprova
     CLIENTS ||--o{ PROJECTS : possui
     PROJECTS ||--o{ PROJECT_ITEMS : contem
     PLAN_VERSIONS ||--o{ FINANCIAL_PLAN_LINES : versiona
@@ -240,7 +306,7 @@ erDiagram
     PROJECTS ||--o{ FINANCIAL_ACTUAL_EVENTS : realiza
     PROJECT_ITEMS ||--o{ FINANCIAL_ACTUAL_EVENTS : referencia
     CURRENCIES ||--o{ PROJECTS : moeda_base
-    CURRENCIES ||--o{ PROJECT_ITEMS : moeda
+    CURRENCIES ||--o{ PROJECT_ITEMS : mesma_moeda_do_projeto
     UNITS ||--o{ PROJECT_ITEMS : unidade
 ```
 
@@ -253,11 +319,17 @@ erDiagram
 5. Manter contrato total, saldo, valor dos itens, programado e realizado como medidas distintas.
 6. Não gravar acumulados e percentuais; eles devem ser calculados por views.
 7. Não permitir preço total digitado: `quantidade × preço unitário`.
-8. Não permitir “A Faturar” digitado: `valor contratual − faturado realizado`, conforme regra aprovada.
+8. Não permitir “A Faturar” digitado: calculá-lo após a definição pendente do denominador
+   contratual aplicável.
 9. Não permitir resultado digitado: calculá-lo com receita/faturamento e custo.
 10. Utilizar `numeric`, nunca ponto flutuante, para valores monetários.
-11. Registrar moeda em todas as linhas financeiras, mesmo que hoje somente BRL seja utilizado.
-12. Se houver consolidação de moedas no futuro, criar tabela de câmbio por data e manter o valor original.
+11. Cada projeto possui exatamente uma moeda; itens e linhas financeiras usam a mesma moeda do
+    projeto.
+12. Não consolidar moedas diferentes sem uma política de conversão aprovada. Taxa, fonte e data de
+    câmbio permanecem pendentes.
+13. Manter `billing_planned`, `billing_actual`, `receipt_forecast` e `receipt_actual` como métricas
+    distintas.
+14. Registrar `planning_level` e impedir a soma duplicada entre total de projeto e linhas de item.
 
 ## 6. Processo de migração inicial
 
@@ -268,7 +340,8 @@ erDiagram
 5. Criar itens com uma chave de linha estável.
 6. Despivotar os meses para `financial_plan_lines`.
 7. Criar uma versão de plano chamada, por exemplo, `Baseline - Planilha inicial`.
-8. Importar o realizado somente depois de identificar seu conceito: faturamento, recebimento ou receita.
+8. Importar o realizado da Curva S como `billing_actual`; importar previsão de recebimento como
+   `receipt_forecast`, em série separada.
 9. Executar reconciliações automáticas.
 10. Liberar a migração somente após aprovação das divergências.
 
@@ -290,10 +363,13 @@ erDiagram
 
 ## 7. Perfis de acesso
 
-- **Visualizador**: consulta dados e dashboards.
-- **Editor**: cadastra e altera projetos, itens, planos e realizados.
-- **Aprovador financeiro**: aprova e bloqueia versões da previsão.
-- **Administrador**: gerencia cadastros, usuários e exclusões lógicas.
+- **`viewer`**: perfil inicial de consulta.
+- **`editor`**: perfil inicial de edição.
+- **`admin`**: perfil administrativo; somente ele pode aprovar, bloquear e reabrir previsões.
+
+Auth0 autentica o usuário. O LTC-M verifica usuário ativo/inativo, perfil e permissão para cada
+operação. A matriz completa de leitura, edição, inativação e administração permanece pendente;
+não se presume exclusão definitiva.
 
 ## 8. Telas sugeridas
 
@@ -402,6 +478,9 @@ Regras:
 - não apagar versões aprovadas;
 - revisões criam nova versão;
 - linha aprovada deve ser bloqueada para edição comum.
+- a programação aceita `planning_level = project` ou `planning_level = item`;
+- uma linha pertence ao projeto ou a um item, nunca aos dois grãos ao mesmo tempo;
+- totais de projeto não podem duplicar a soma das linhas de item.
 
 ### 8.5 Lançamentos realizados
 
@@ -452,7 +531,8 @@ Mostrar:
 
 ### Programação mensal
 
-- chave: versão + projeto + item + tipo de métrica + competência;
+- chave: versão + projeto + nível de planejamento + item, quando aplicável + tipo de métrica +
+  competência;
 - se existir, atualizar o valor;
 - se não existir, inserir;
 - salvar o conjunto em uma transação única.
@@ -468,11 +548,12 @@ Mostrar:
 1. Usuário abre o projeto.
 2. Frontend carrega a versão atual do registro.
 3. Usuário altera projeto, itens ou programação.
-4. Frontend envia um pacote para uma função RPC.
-5. A RPC valida chaves, totais, permissões e concorrência.
-6. Todas as alterações são gravadas em uma transação.
-7. Auditoria registra antes/depois.
-8. Views do Tableau passam a refletir os novos dados.
+4. Frontend envia um access token e o pacote para o backend próprio.
+5. Backend valida o JWT, resolve `app_users` e verifica status e permissão.
+6. Backend valida chaves, totais e concorrência.
+7. Backend grava todas as alterações em uma transação, usando função PostgreSQL quando aplicável.
+8. Auditoria registra identidade, antes/depois e data.
+9. Views analíticas passam a refletir os novos dados no próximo Tableau Extract.
 
 ---
 
@@ -497,16 +578,18 @@ Mostrar:
 
 - valor contratual;
 - valor dos itens;
-- faturamento planejado;
-- recebimento planejado;
+- `billing_planned` — faturamento previsto;
+- `billing_actual` — faturamento realizado;
+- `receipt_forecast` — previsão de recebimento;
+- `receipt_actual` — recebimento realizado, suportado pelo modelo mas fora da primeira entrega;
 - receita planejada;
 - custo planejado;
-- faturamento realizado;
-- recebimento realizado;
 - receita realizada;
 - custo realizado.
 
-O Tableau deve consumir views prontas, evitando cálculos complexos e joins feitos diretamente no workbook.
+Faturamento e recebimento são métricas diferentes e não formam uma única série acumulada. O
+Tableau deve consumir views prontas, evitando cálculos complexos e joins feitos diretamente no
+workbook.
 
 ## 12. Dashboard 1 — Visão Executiva do Portfólio
 
@@ -515,7 +598,7 @@ O Tableau deve consumir views prontas, evitando cálculos complexos e joins feit
 - Valor contratual total;
 - Valor dos itens ativos;
 - Faturado realizado;
-- Recebido realizado;
+- Previsão de recebimento;
 - A faturar;
 - Previsto no horizonte;
 - Saldo sem programação;
@@ -528,7 +611,8 @@ O Tableau deve consumir views prontas, evitando cálculos complexos e joins feit
 ### Visuais
 
 - barras por projeto e cliente;
-- contratado versus faturado versus recebido;
+- contratado versus faturado;
+- previsão de recebimento em visual separado;
 - ranking de saldo a faturar;
 - composição por classificação: contrato, demanda e saldo;
 - calendário/heatmap da previsão mensal;
@@ -545,7 +629,20 @@ O Tableau deve consumir views prontas, evitando cálculos complexos e joins feit
 - moeda;
 - versão do plano.
 
+KPIs financeiros devem ser segmentados por moeda. Não há total de portfólio entre moedas
+diferentes enquanto a política de conversão estiver pendente.
+
 ## 13. Dashboard 2 — Curva S do Avanço Financeiro LTC-M
+
+A Curva S principal compara exclusivamente faturamento previsto e faturamento realizado:
+
+- **Previsto Mensal**: valor previsto para faturamento em cada mês;
+- **Realizado Mensal**: valor efetivamente faturado no mês;
+- **Previsto Acumulado**: soma do previsto do mês corrente com os meses anteriores;
+- **Realizado Acumulado**: soma do realizado do mês corrente com os meses anteriores.
+
+Recebimento não é realizado da Curva S principal. `receipt_forecast` e `receipt_actual` permanecem
+em análises separadas.
 
 ### Visual principal recomendado
 
@@ -583,8 +680,10 @@ Essas três medidas não devem ser tratadas como sinônimos.
 - um ou vários projetos;
 - cliente;
 - plano-base versus previsão atual;
-- faturamento versus recebimento;
 - valores em R$ versus percentual.
+
+Uma análise separada pode comparar previsão e realizado de recebimento quando `receipt_actual`
+entrar no escopo, sem misturá-los com a Curva S de faturamento.
 
 ## 14. Dashboard 3 — Detalhe do Projeto
 
@@ -593,7 +692,7 @@ Cabeçalho:
 - código, nome, cliente, status e responsável;
 - valor contratual;
 - saldo de abertura;
-- faturado, recebido e a faturar;
+- faturado, previsão de recebimento e a faturar;
 - custo e margem;
 - avanço financeiro.
 
@@ -634,7 +733,9 @@ Esse dashboard é necessário porque a planilha atual contém diferenças que po
 - `v_tableau_data_quality`;
 - `v_tableau_plan_versions`.
 
-A fonte do Tableau deve usar um usuário somente leitura. Para o primeiro ciclo, recomenda-se uma fonte publicada com atualização controlada. A decisão entre conexão direta e extrato deve considerar segurança, volume, frequência de atualização e infraestrutura disponível.
+A fonte do Tableau usa obrigatoriamente Extract, com usuário PostgreSQL somente leitura e acesso
+apenas às views analíticas. Agenda de atualização, monitoramento e tratamento de falhas permanecem
+pendentes.
 
 ---
 
@@ -647,7 +748,12 @@ A fonte do Tableau deve usar um usuário somente leitura. Para o primeiro ciclo,
 - meses são convertidos em linhas;
 - divergências ficam registradas e não são corrigidas silenciosamente;
 - valores monetários mantêm precisão de centavos;
-- códigos são normalizados.
+- códigos são normalizados;
+- cada projeto e seus itens usam exatamente uma moeda;
+- linhas com grãos `project` e `item` não causam dupla contagem;
+- o projeto 2026-04-16531 reconcilia em R$ 164.000,00;
+- 2024-10-12524 e 2025-07-14416 permanecem separados quando filtrados por projeto;
+- R$ 369.749,17 de 2024-02-10990 aparecem somente como previsão de recebimento.
 
 ### CRUD
 
@@ -657,18 +763,23 @@ A fonte do Tableau deve usar um usuário somente leitura. Para o primeiro ciclo,
 - item com código repetido pode coexistir em linhas diferentes;
 - programação salva vários meses em transação única;
 - versão aprovada não pode ser alterada por editor comum;
+- somente `admin` pode aprovar, bloquear ou reabrir uma previsão;
 - lançamento duplicado é bloqueado;
-- auditoria identifica usuário, data e valores alterados.
+- auditoria identifica usuário, data e valores alterados;
+- backend rejeita token inválido, usuário inativo ou operação não autorizada;
+- frontend não acessa o PostgreSQL diretamente.
 
 ### Tableau
 
 - KPIs reconciliam com as views SQL;
 - filtros afetam todos os gráficos previstos;
-- Curva S usa acumulados corretos;
+- Curva S usa acumulados corretos de `billing_planned` e `billing_actual`;
+- recebimentos não aparecem como realizado da Curva S principal;
 - seleção de projeto abre o detalhe;
 - saldo sem programação é visível;
 - valores nulos não são tratados automaticamente como zero quando isso altera o significado;
-- versão do plano selecionada aparece no painel.
+- versão do plano selecionada aparece no painel;
+- Tableau usa Extract e acessa somente views com credencial read-only.
 
 ---
 
@@ -707,23 +818,55 @@ A fonte do Tableau deve usar um usuário somente leitura. Para o primeiro ciclo,
 
 ---
 
-## 19. Decisões de negócio que precisam ser confirmadas antes da implementação
+## 19. Escopo aprovado da primeira versão
 
-1. “Realizado” significa faturamento, receita reconhecida ou recebimento?
-2. O valor de venda representa o contrato total ou somente o escopo LTC-M ativo?
-3. Como deve ser tratado o projeto 2024-02-10990: valor total e saldo devem coexistir?
-4. O valor correto do projeto 2026-04-16531 é R$ 168.000,00 ou R$ 164.000,00?
-5. O projeto 2024-10-12524 deve excluir os R$ 343.730,00 do projeto 2025-07-14416?
-6. “US” significa Unidade de Serviço?
-7. Um projeto pode usar mais de uma moeda?
-8. A programação é feita por item, por projeto ou por ambos?
-9. Os percentuais 30/70 são regras contratuais reutilizáveis ou foram ajustes pontuais?
-10. Qual evento aprova e congela uma versão da previsão?
-11. Qual é a periodicidade esperada das atualizações?
-12. Quais usuários podem excluir, aprovar ou reabrir uma previsão?
+Incluído:
+
+- autenticação Auth0 e vínculo com `app_users`;
+- perfis `viewer`, `editor` e `admin`;
+- cadastros de clientes, projetos e itens;
+- planejamento nos níveis de projeto e item;
+- `billing_planned`, `billing_actual` e `receipt_forecast`;
+- versões de previsão, aprovação, bloqueio e reabertura por administradores;
+- auditoria e controles de consistência;
+- views analíticas e dashboards por Tableau Extract.
+
+Fora do escopo:
+
+- `receipt_actual` na primeira entrega, embora o modelo deva suportá-lo;
+- exclusão definitiva de registros;
+- conversão entre moedas sem política aprovada;
+- armazenamento de senhas no LTC-M;
+- acesso direto do frontend ao PostgreSQL/Supabase;
+- Supabase Auth, Data API e Edge Functions como backend da aplicação;
+- escolha automática de framework do backend;
+- Tableau Live como estratégia da primeira versão;
+- implementação de tenant Auth0 ou infraestrutura real nesta atualização documental.
 
 ---
 
-## 20. Recomendação final
+## 20. Decisões pendentes
 
-A planilha deve ser usada como fonte para a migração inicial, mas não como estrutura definitiva. O núcleo da solução deve registrar projetos, itens, versões de plano e movimentos realizados em tabelas separadas. A Curva S deve ser construída a partir de valores mensais normalizados e acumulados calculados no banco. O CRUD deve impedir duplicidade por meio de chaves estáveis, versionamento e transações; o Tableau deve consumir views reconciliadas e expor tanto a visão financeira quanto a qualidade dos dados.
+1. tecnologia/framework do backend próprio;
+2. matriz completa de permissões, especialmente exclusão e inativação;
+3. significado oficial da unidade `US`;
+4. periodicidade, SLA e data de corte das atualizações;
+5. política de conversão monetária, incluindo taxa, fonte e data;
+6. agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
+7. significado do valor de venda como contrato total ou escopo LTC-M ativo;
+8. natureza reutilizável ou pontual dos percentuais 30/70;
+9. regras detalhadas de edição e inativação de cadastros;
+10. RPO, RTO, PITR e retenção detalhada;
+11. estratégia final de RLS e propagação segura do contexto de autorização;
+12. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
+
+---
+
+## 21. Recomendação final
+
+A planilha deve ser usada como fonte para a migração inicial, mas não como estrutura definitiva. O
+núcleo da solução deve registrar projetos, itens, versões de plano e movimentos realizados em
+tabelas separadas. A Curva S deve ser construída com faturamento mensal normalizado e acumulados
+calculados no banco. O CRUD deve impedir duplicidade por chaves estáveis, versionamento e
+transações; o backend deve concentrar acesso e autorização; e o Tableau Extract deve consumir views
+reconciliadas.

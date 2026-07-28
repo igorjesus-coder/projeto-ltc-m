@@ -1,11 +1,12 @@
 # LTC-M
 
-Base técnica do sistema de gestão do portfólio LTC-M: aplicação CRUD, banco
-Supabase/PostgreSQL e camada analítica para Tableau.
+Base técnica do sistema de gestão do portfólio LTC-M: frontend React/TypeScript/Vite, futuro
+backend próprio, banco PostgreSQL hospedado no Supabase e camada analítica para Tableau.
 
-Este repositório contém a fundação da tarefa 1.01 e a decisão arquitetural da tarefa 0.07. O
-modelo de dados, as regras transacionais, a importação da planilha e as views analíticas serão
-entregues em tarefas próprias, depois da validação das regras de negócio pendentes.
+O Auth0 é o mecanismo oficial de autenticação. O frontend e o futuro backend serão hospedados no
+Render; o Supabase será usado somente como banco. O modelo físico, as regras transacionais, a
+importação da planilha, a implementação da autenticação/backend e as views analíticas serão
+entregues em tarefas próprias.
 
 ## Pré-requisitos
 
@@ -31,26 +32,31 @@ No PowerShell, substitua o último comando por:
 Copy-Item .env.example .env
 ```
 
-O app inicial não exige credenciais remotas. Para trabalhar com banco local:
+O app inicial ainda não integra Auth0, backend ou banco e não exige credenciais remotas. O
+`.env.example` documenta as variáveis públicas previstas e as variáveis exclusivamente
+server-side; não preencha segredos no repositório.
+
+Para trabalhar futuramente com PostgreSQL local:
 
 ```bash
 npm run db:start
 npm run db:status
 ```
 
-O primeiro `db:start` baixa as imagens Docker usadas pelo Supabase. Copie para o `.env` a URL e a
-chave publicável exibidas pelo CLI; use a chave `anon` somente quando a stack local não oferecer
-uma chave publicável. Nunca inclua `secret` ou `service_role` em uma variável `VITE_`.
+O primeiro `db:start` baixa as imagens Docker usadas pelo Supabase local. O frontend não usa URL,
+chave publicável ou chave `anon` do Supabase: ele se comunicará somente com o backend próprio.
+`DATABASE_URL` e credenciais PostgreSQL são exclusivamente server-side.
 
 ### Trabalho temporário sem Docker
 
 Enquanto Docker ou um runtime compatível não estiver disponível, use somente um projeto Supabase
-gerenciado e exclusivo para desenvolvimento, com dados sintéticos. Não reutilize homologação ou
-produção e não coloque credenciais no repositório.
+gerenciado, na região `us-east-1`, exclusivo para desenvolvimento e com dados sintéticos. Não
+reutilize homologação ou produção e não coloque credenciais no repositório.
 
-Configure `.env.local` com a URL e a chave publicável desse projeto. Mudanças de banco continuam
+Configure a conexão somente no backend futuro, nunca no frontend. Mudanças de banco continuam
 obrigatoriamente registradas em migrations, mesmo quando forem experimentadas no projeto remoto.
-Esse fluxo não substitui a futura validação local com `db reset` e testes de RLS.
+Esse fluxo não substitui a futura validação local com `db reset` e testes de constraints, grants e
+eventual RLS.
 
 ## Desenvolvimento
 
@@ -115,9 +121,12 @@ Branches, commits, revisão e critérios de pronto estão documentados em
 as decisões de negócio em aberto estão preservados em
 [`docs/project-specification.md`](docs/project-specification.md).
 
-A decisão, alternativas e condições de revisão da plataforma estão no
-[`ADR-0001`](docs/adr/0001-arquitetura-base-da-plataforma-ltc-m.md).
+A decisão vigente, alternativas e condições de revisão estão no
+[`ADR-0002`](docs/adr/0002-arquitetura-render-supabase-database-auth0.md). O
+[`ADR-0001`](docs/adr/0001-arquitetura-base-da-plataforma-ltc-m.md) está preservado como histórico
+e marcado como substituído.
 
-Deploy e ambientes remotos ainda não estão configurados. A arquitetura recomenda projetos
-Supabase separados, Vercel para o frontend e GitHub Actions para CI/CD, condicionados às
-aprovações organizacionais registradas no ADR.
+Deploy e ambientes remotos ainda não estão configurados. A arquitetura aprova Render para
+frontend, futuro backend, domínio e DNS; GitHub Actions para CI/CD; projetos PostgreSQL/Supabase
+isolados; Tableau Extract; e Auth0 com Authorization Code Flow + PKCE. A tecnologia do backend
+próprio permanece pendente.

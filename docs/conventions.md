@@ -75,7 +75,8 @@ Uma tarefa está pronta quando:
 - Chaves primárias usam UUID, salvo justificativa registrada.
 - Timestamps usam `timestamptz`.
 - Dinheiro usa `numeric` com precisão definida pelo domínio.
-- Toda tabela exposta pela API deve ter RLS e políticas testadas.
+- Tabelas de negócio não são expostas diretamente ao frontend; o backend próprio é a fronteira da
+  API. Grants, constraints e eventual RLS usados como defesa em profundidade devem ser testados.
 - Views do Tableau usam o prefixo `v_tableau_`.
 
 ## TypeScript
