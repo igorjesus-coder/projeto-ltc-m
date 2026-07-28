@@ -106,7 +106,7 @@ flowchart LR
     U[Usuários] --> C[React + TypeScript + Vite no Render]
     C --> AUTH[Auth0 Universal Login]
     AUTH --> C
-    C --> B[Backend próprio no Render]
+    C --> B[NestJS + Express no Render Web Service]
     B --> S[(Supabase PostgreSQL us-east-1)]
     S --> V[Views analíticas]
     V --> T[Tableau Extract read-only]
@@ -118,7 +118,8 @@ flowchart LR
 ### Componentes
 
 - **Frontend CRUD**: React, TypeScript e Vite, hospedado no Render.
-- **Backend próprio**: hospedado no Render; tecnologia/framework ainda pendente.
+- **Backend próprio**: Node.js LTS, TypeScript, NestJS e Express, futuramente hospedado como Render
+  Web Service.
 - **Banco**: PostgreSQL hospedado no Supabase, usado somente como banco e na região `us-east-1`.
 - **Autenticação**: Auth0 com OIDC/OAuth 2.0, Authorization Code Flow e PKCE.
 - **Autorização**: perfis e permissões de negócio mantidos no LTC-M.
@@ -548,9 +549,10 @@ Mostrar:
 1. Usuário abre o projeto.
 2. Frontend carrega a versão atual do registro.
 3. Usuário altera projeto, itens ou programação.
-4. Frontend envia um access token e o pacote para o backend próprio.
-5. Backend valida o JWT, resolve `app_users` e verifica status e permissão.
-6. Backend valida chaves, totais e concorrência.
+4. Frontend envia um bearer access token e o pacote para o backend NestJS.
+5. NestJS valida assinatura JWT por JWKS, algoritmo, `issuer`, `audience` e expiração, resolve
+   `app_users` pelo claim `sub` e verifica status e permissão.
+6. Backend valida entradas, chaves, totais e concorrência.
 7. Backend grava todas as alterações em uma transação, usando função PostgreSQL quando aplicável.
 8. Auditoria registra identidade, antes/depois e data.
 9. Views analíticas passam a refletir os novos dados no próximo Tableau Extract.
@@ -766,7 +768,7 @@ pendentes.
 - somente `admin` pode aprovar, bloquear ou reabrir uma previsão;
 - lançamento duplicado é bloqueado;
 - auditoria identifica usuário, data e valores alterados;
-- backend rejeita token inválido, usuário inativo ou operação não autorizada;
+- backend NestJS rejeita token inválido, usuário inativo ou operação não autorizada;
 - frontend não acessa o PostgreSQL diretamente.
 
 ### Tableau
@@ -839,7 +841,7 @@ Fora do escopo:
 - armazenamento de senhas no LTC-M;
 - acesso direto do frontend ao PostgreSQL/Supabase;
 - Supabase Auth, Data API e Edge Functions como backend da aplicação;
-- escolha automática de framework do backend;
+- implementação ou scaffold de `apps/api` nesta atualização documental;
 - Tableau Live como estratégia da primeira versão;
 - implementação de tenant Auth0 ou infraestrutura real nesta atualização documental.
 
@@ -847,7 +849,7 @@ Fora do escopo:
 
 ## 20. Decisões pendentes
 
-1. tecnologia/framework do backend próprio;
+1. biblioteca de acesso ao PostgreSQL;
 2. matriz completa de permissões, especialmente exclusão e inativação;
 3. significado oficial da unidade `US`;
 4. periodicidade, SLA e data de corte das atualizações;
@@ -857,8 +859,9 @@ Fora do escopo:
 8. natureza reutilizável ou pontual dos percentuais 30/70;
 9. regras detalhadas de edição e inativação de cadastros;
 10. RPO, RTO, PITR e retenção detalhada;
-11. estratégia final de RLS e propagação segura do contexto de autorização;
-12. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
+11. ferramenta de observabilidade;
+12. estratégia final de RLS e propagação segura do contexto de autorização;
+13. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
 
 ---
 

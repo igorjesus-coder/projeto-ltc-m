@@ -37,7 +37,7 @@ flowchart LR
   USER[Usuário] --> WEB[Frontend React + TypeScript + Vite<br/>Render]
   WEB -->|Authorization Code + PKCE| AUTH[Auth0 Universal Login]
   AUTH -->|access token curto| WEB
-  WEB -->|Bearer token| API[Backend próprio<br/>Render<br/>framework pendente]
+  WEB -->|Bearer token| API[NestJS + Express<br/>Render Web Service]
   API -->|valida JWT e autorização| USERS[Perfis LTC-M]
   API -->|DATABASE_URL server-side| DB[(Supabase PostgreSQL<br/>us-east-1)]
   DB --> AUDIT[Auditoria de negócio]
@@ -56,6 +56,7 @@ A stack aprovada é:
 
 - npm workspaces na raiz;
 - `apps/web` com React, TypeScript estrito e Vite;
+- evolução futura do workspace com `apps/api` em Node.js LTS, TypeScript e NestJS;
 - Vitest, ESLint e Prettier;
 - frontend hospedado no Render.
 
@@ -68,20 +69,76 @@ substituem validação, autorização e integridade no backend e no banco.
 
 ## 2. Backend próprio e banco
 
-Um backend próprio hospedado no Render é obrigatório. Sua tecnologia/framework ainda depende de
-aprovação humana e não pode ser inferida desta arquitetura.
+O backend próprio será implementado com Node.js em versão LTS, TypeScript, NestJS e o adaptador
+HTTP padrão Express. Ele será implantado como Render Web Service e será a única fronteira da
+aplicação para acesso ao banco.
 
 Responsabilidades do backend:
 
 - expor a API consumida pelo frontend;
-- validar access tokens do Auth0;
-- resolver o usuário interno pelo `auth_subject`;
-- verificar status, perfil e permissão para cada operação;
-- validar contratos de entrada e saída;
-- orquestrar transações e regras críticas;
-- acessar PostgreSQL com credenciais server-side de menor privilégio;
-- produzir auditoria e logs técnicos sem dados sensíveis;
+- validar bearer access tokens JWT do Auth0, incluindo JWKS, algoritmo, `issuer`, `audience` e
+  expiração;
+- identificar o usuário pelo claim `sub` e resolver o usuário interno por `auth_subject`;
+- consultar status, perfil e permissões no banco LTC-M;
+- aplicar autorização por perfis e permissões de negócio;
+- validar entradas e contratos de saída;
+- executar regras de negócio, transações e controle de concorrência;
+- acessar PostgreSQL com papel próprio e credenciais server-side de menor privilégio;
+- registrar auditoria;
+- padronizar erros e respostas;
+- disponibilizar health e readiness checks;
+- suportar, em fases futuras, importação, projetos, itens, planejamento, realizados e aprovações;
 - propagar contexto de usuário ao banco somente por mecanismo futuro, explícito e seguro.
+
+### 2.1 NestJS e Express
+
+O NestJS foi escolhido por oferecer arquitetura modular, controllers, services, providers,
+dependency injection, guards, interceptors, pipes e filters integrados ao TypeScript. A estrutura
+é adequada para regras de negócio, auditoria, autorização e testes unitários e de integração. A
+escolha não garante segurança ou desempenho automaticamente.
+
+Express será o adaptador HTTP inicial porque é o padrão do NestJS, tem amplo ecossistema Node.js,
+reduz a complexidade inicial, facilita integração com middlewares e bibliotecas de autenticação e
+atende ao volume inicial esperado. Fastify somente poderá ser avaliado após medição de desempenho,
+gargalo real, validação de compatibilidade e nova decisão arquitetural aprovada.
+
+### 2.2 Organização modular conceitual
+
+```text
+apps/
+|-- web/
+`-- api/
+    `-- src/
+        |-- auth/
+        |-- authorization/
+        |-- users/
+        |-- clients/
+        |-- projects/
+        |-- project-items/
+        |-- financial-plans/
+        |-- actual-events/
+        |-- imports/
+        |-- audit/
+        |-- health/
+        `-- common/
+```
+
+Essa estrutura é conceitual; `apps/api` não existe ainda e não será criado por esta atualização.
+Tipos e schemas compartilhados poderão ficar em pacote dedicado somente quando houver necessidade
+concreta.
+
+### 2.3 Camadas conceituais de autenticação e autorização
+
+A implementação futura deverá separar:
+
+- guard de autenticação para validar o bearer token;
+- guard de autorização para perfis e permissões;
+- decorator ou metadata de permissões, quando aplicável;
+- serviço de usuários internos;
+- auditoria de ações administrativas.
+
+O NestJS não confiará apenas em claims de perfil enviados no token. Auth0 autentica; o LTC-M
+consulta e aplica usuário ativo/inativo, perfil e permissões de negócio mantidos no PostgreSQL.
 
 Responsabilidades do PostgreSQL:
 
@@ -92,6 +149,11 @@ Responsabilidades do PostgreSQL:
 - histórico e auditoria de negócio;
 - views analíticas e acumulados;
 - grants e eventual RLS como defesa em profundidade.
+
+A API utilizará papel PostgreSQL próprio e de menor privilégio; credenciais administrativas não
+serão usadas em operação normal. Transações serão controladas pela camada de aplicação ou pela
+biblioteca de acesso a dados futuramente aprovada. A escolha de ORM, query builder ou driver
+permanece pendente; esta arquitetura não escolhe Prisma, TypeORM, Drizzle ou alternativa.
 
 O Supabase fornece somente o PostgreSQL gerenciado. Não se assume Supabase Auth, Data API, Edge
 Functions, Storage, Realtime, chave `anon`, publishable key, `service_role` ou RPC exposta ao
@@ -134,8 +196,8 @@ O backend deverá validar, no mínimo:
 - expiração;
 - integridade do token.
 
-Decodificar o JWT sem validar esses elementos não é suficiente. A implementação fica pendente até
-a escolha da tecnologia do backend.
+Decodificar o JWT sem validar esses elementos não é suficiente. A implementação ocorrerá no
+backend NestJS, sem presumir biblioteca de validação antes do scaffold.
 
 ### Tokens no frontend
 
@@ -188,8 +250,8 @@ operação.
 
 Constraints, grants e eventual RLS reforçam a proteção, mas não substituem o backend. Não se
 afirma que JWTs do Auth0 serão consumidos diretamente por RLS; isso dependeria de solução
-aprovada para propagar o contexto com segurança. A estratégia final de RLS será revista quando o
-framework do backend for escolhido.
+aprovada para propagar o contexto com segurança. A estratégia final de RLS será revista com base
+na conexão do backend e na propagação segura do contexto.
 
 Funções transacionais PostgreSQL podem existir futuramente, mas serão chamadas pelo backend, não
 expostas diretamente ao navegador. Credenciais privilegiadas nunca entram em código cliente,
@@ -199,7 +261,7 @@ logs, issues, pull requests ou screenshots.
 
 | Ambiente               | Frontend/backend              | PostgreSQL                  | Dados                    | Regra                    |
 | ---------------------- | ----------------------------- | --------------------------- | ------------------------ | ------------------------ |
-| Local                  | Vite e backend futuro local   | Supabase CLI + Docker       | Sintéticos               | desejável                |
+| Local                  | Vite e NestJS locais          | Supabase CLI + Docker       | Sintéticos               | desejável                |
 | Desenvolvimento remoto | serviços dev no Render        | projeto Supabase dev        | Sintéticos               | aprovado temporariamente |
 | Homologação            | serviços staging no Render    | projeto Supabase staging    | Sintéticos ou mascarados | isolado                  |
 | Produção               | serviços production no Render | projeto Supabase production | Reais                    | isolado e controlado     |
@@ -216,8 +278,8 @@ indisponibilidade não bloqueia documentação. O projeto remoto de desenvolvime
 
 ## 7. Hospedagem, domínio e DNS
 
-Render é a plataforma aprovada para o frontend e o futuro backend. O domínio e a responsabilidade
-pelo DNS ficam no Render. Vercel não integra a arquitetura vigente.
+Render é a plataforma aprovada para o frontend e o backend. O domínio e a responsabilidade pelo
+DNS ficam no Render. Vercel não integra a arquitetura vigente.
 
 Build do frontend:
 
@@ -229,6 +291,11 @@ Diretório de saída: apps/web/dist
 Quando roteamento cliente for adicionado, o Render deverá redirecionar rotas desconhecidas da SPA
 para `index.html`. HTTPS, origens, callbacks e logout URLs devem ser separados por ambiente.
 Configuração real de Render e DNS está fora desta tarefa.
+
+O backend será um Render Web Service separado do frontend. O processo deverá escutar `PORT`,
+expor endpoint obrigatório de health check, manter variáveis server-side no ambiente do serviço e
+aceitar CORS somente de origens aprovadas por ambiente. A comunicação com o frontend será por
+HTTPS. Build e start commands serão definidos quando `apps/api` for criado.
 
 ## 8. Variáveis e segredos
 
@@ -247,6 +314,9 @@ Variáveis `VITE_` são públicas e ficam incorporadas ao bundle.
 - `AUTH0_DOMAIN` ou issuer equivalente;
 - `AUTH0_AUDIENCE`;
 - `DATABASE_URL`;
+- `NODE_ENV`;
+- `PORT`;
+- `CORS_ALLOWED_ORIGINS`;
 - outras configurações de banco e segurança que a tecnologia aprovada exigir.
 
 Não existem referências de aplicação às antigas variáveis `VITE_SUPABASE_URL`,
@@ -280,8 +350,10 @@ GitHub Actions é a plataforma aprovada. O pipeline proposto, ainda não impleme
 6. `npm run build`;
 7. verificações de dependências e segredos;
 8. quando houver banco de domínio, reset/lint/testes SQL em ambiente descartável;
-9. deploy nos serviços Render do ambiente correspondente;
-10. promoção controlada das mesmas migrations.
+9. testes unitários, de integração, autenticação, autorização e contratos da API quando o backend
+   existir;
+10. deploy nos serviços Render do ambiente correspondente;
+11. promoção controlada das mesmas migrations.
 
 Desenvolvimento, homologação e produção terão credenciais e gates próprios. Produção exige
 controles e aprovação compatíveis com o risco.
@@ -294,9 +366,16 @@ Serão separadas:
 - logs técnicos do frontend, backend, Render e PostgreSQL;
 - monitoramento dos Extracts do Tableau.
 
-Logs estruturados podem usar `correlation_id`, mas omitem tokens, senhas, documentos, payloads
-financeiros completos e dados pessoais desnecessários. Ferramentas, alertas, retenção e
-responsáveis por incidentes permanecem pendentes.
+O backend deverá ter logs estruturados com correlation/request ID, tratamento centralizado de
+exceções, limitação de payload, timeouts, encerramento gracioso, health/readiness checks, auditoria
+de negócio e atualização periódica de dependências. Tokens, credenciais, documentos, payloads
+financeiros completos e dados pessoais desnecessários não entram em logs. Rate limiting será
+avaliado conforme risco e exposição.
+
+A implementação futura também deverá cobrir lint, typecheck, build, validação de variáveis, testes
+unitários, integração, autenticação, autorização, contratos de API, fluxos financeiros críticos,
+transações e concorrência. Não há meta numérica de cobertura aprovada. Ferramenta de
+observabilidade, alertas, retenção e responsáveis por incidentes permanecem pendentes.
 
 ## 12. Backups e recuperação
 
@@ -336,9 +415,24 @@ Em 2026-07-28 foram aprovados:
 As definições, inclusive faturamento versus recebimento, moedas, granularidade e decisões dos
 projetos, estão em [`project-specification.md`](project-specification.md).
 
+### Tarefa 0.07 concluída
+
+A seleção da stack e da arquitetura de implantação foi concluída com:
+
+- React, TypeScript e Vite;
+- Node.js LTS, TypeScript, NestJS e Express;
+- Auth0;
+- Supabase/PostgreSQL somente como banco em `us-east-1`;
+- Render;
+- GitHub Actions;
+- Tableau Extract;
+- backup mensal.
+
+Essa conclusão não abrange as decisões operacionais ainda listadas abaixo.
+
 ## 15. Decisões pendentes
 
-- tecnologia/framework do backend próprio;
+- biblioteca de acesso ao PostgreSQL;
 - matriz completa de permissões, especialmente exclusão e inativação;
 - significado oficial da unidade `US`;
 - periodicidade, SLA e data de corte das atualizações;

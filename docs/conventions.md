@@ -85,6 +85,10 @@ Uma tarefa está pronta quando:
 - Componentes usam `PascalCase`; funções e variáveis usam `camelCase`.
 - Evite `any`; valide dados externos na fronteira do sistema.
 - Regras financeiras e estados de domínio não devem existir apenas na interface.
+- No futuro `apps/api`, módulos NestJS devem separar controllers, services, providers, guards e
+  responsabilidades de domínio sem acoplamento circular.
+- Express é o adaptador HTTP aprovado; não introduza Fastify ou biblioteca de acesso ao banco sem
+  a decisão arquitetural correspondente.
 
 ## Versionamento
 

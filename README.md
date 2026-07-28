@@ -1,12 +1,13 @@
 # LTC-M
 
-Base técnica do sistema de gestão do portfólio LTC-M: frontend React/TypeScript/Vite, futuro
-backend próprio, banco PostgreSQL hospedado no Supabase e camada analítica para Tableau.
+Base técnica do sistema de gestão do portfólio LTC-M: frontend React/TypeScript/Vite, backend
+Node.js LTS/TypeScript/NestJS com Express, banco PostgreSQL hospedado no Supabase e camada
+analítica para Tableau.
 
-O Auth0 é o mecanismo oficial de autenticação. O frontend e o futuro backend serão hospedados no
-Render; o Supabase será usado somente como banco. O modelo físico, as regras transacionais, a
-importação da planilha, a implementação da autenticação/backend e as views analíticas serão
-entregues em tarefas próprias.
+O Auth0 é o mecanismo oficial de autenticação. O frontend será um serviço separado do backend
+NestJS, que será implantado futuramente como Render Web Service; o Supabase será usado somente
+como banco. O modelo físico, as regras transacionais, a importação da planilha, a implementação da
+autenticação/backend e as views analíticas serão entregues em tarefas próprias.
 
 ## Pré-requisitos
 
@@ -113,6 +114,17 @@ Novas migrations ficam em `supabase/migrations` e testes SQL em `supabase/tests`
 `-- package.json
 ```
 
+Quando o backend for implementado, o npm workspace evoluirá conceitualmente para:
+
+```text
+apps/
+|-- web/                  # frontend React/Vite
+`-- api/                  # backend NestJS/Express
+```
+
+`apps/api` ainda não existe. Tipos ou schemas compartilhados só serão extraídos para pacote
+dedicado quando houver necessidade concreta.
+
 ## Fluxo de contribuição
 
 Branches, commits, revisão e critérios de pronto estão documentados em
@@ -126,7 +138,7 @@ A decisão vigente, alternativas e condições de revisão estão no
 [`ADR-0001`](docs/adr/0001-arquitetura-base-da-plataforma-ltc-m.md) está preservado como histórico
 e marcado como substituído.
 
-Deploy e ambientes remotos ainda não estão configurados. A arquitetura aprova Render para
-frontend, futuro backend, domínio e DNS; GitHub Actions para CI/CD; projetos PostgreSQL/Supabase
-isolados; Tableau Extract; e Auth0 com Authorization Code Flow + PKCE. A tecnologia do backend
-próprio permanece pendente.
+Deploy e ambientes remotos ainda não estão configurados. A tarefa 0.07 concluiu a seleção de
+React, TypeScript, Vite, Node.js LTS, NestJS, Express, Auth0, PostgreSQL/Supabase somente como
+banco em `us-east-1`, Render, GitHub Actions, Tableau Extract e backup mensal. A biblioteca de
+acesso ao PostgreSQL e outras decisões operacionais permanecem pendentes.

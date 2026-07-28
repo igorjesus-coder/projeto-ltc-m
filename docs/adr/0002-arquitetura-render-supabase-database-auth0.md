@@ -1,8 +1,8 @@
-# ADR-0002: Render, Supabase Database e Auth0
+# ADR-0002: Render, Supabase Database, Auth0 e NestJS
 
-- Estado: Aceita, com tecnologia do backend pendente
+- Estado: Aceita
 - Data: 2026-07-28
-- Tarefa: atualização da baseline arquitetural e funcional
+- Tarefa: 0.07 — seleção da stack e arquitetura de implantação concluída
 - Decisão anterior: substitui o
   [ADR-0001](0001-arquitetura-base-da-plataforma-ltc-m.md)
 - Escopo: arquitetura da primeira versão do LTC-M
@@ -36,12 +36,24 @@ do navegador ao banco não fazem parte da arquitetura aprovada.
 
 ### Backend próprio
 
-Um backend próprio, hospedado no Render, será a única fronteira de acesso da aplicação ao banco.
-Ele validará identidade e autorização antes das operações e usará `DATABASE_URL` exclusivamente
-em contexto server-side.
+O backend próprio será desenvolvido com Node.js em versão LTS, TypeScript, NestJS e o adaptador
+HTTP padrão Express. Será implantado futuramente como Render Web Service e continuará sendo a
+única fronteira da aplicação para acesso ao banco.
 
-A tecnologia ou o framework desse backend permanece pendente. Este ADR não escolhe linguagem,
-framework, ORM ou biblioteca de validação JWT.
+O NestJS foi escolhido por oferecer arquitetura modular, controllers, services, providers,
+dependency injection, guards, interceptors, pipes e filters integrados ao TypeScript. Essa
+estrutura é adequada para separar regras de negócio, autorização, auditoria e testes unitários e
+de integração. A escolha não garante segurança ou desempenho automaticamente; esses atributos
+dependem da implementação, configuração, testes e operação.
+
+O Express será o adaptador HTTP inicial por ser o padrão do NestJS, possuir amplo ecossistema
+Node.js, reduzir a complexidade inicial, integrar-se com middlewares e bibliotecas de autenticação
+e atender ao volume inicial esperado. Fastify poderá ser avaliado somente após medição de
+desempenho, identificação de gargalo real, validação de compatibilidade e nova decisão
+arquitetural aprovada.
+
+A biblioteca de acesso ao PostgreSQL — ORM, query builder ou driver — permanece pendente. Este
+ADR não escolhe Prisma, TypeORM, Drizzle ou alternativa equivalente.
 
 ### Autenticação
 
@@ -69,6 +81,18 @@ client secret no frontend.
 MFA é obrigatório para administradores. Reautenticação ou step-up authentication é recomendada
 para ações administrativas críticas.
 
+No NestJS, a implementação futura deverá separar conceitualmente:
+
+- guard de autenticação para validar o bearer access token;
+- guard de autorização para verificar perfis e permissões;
+- decorator ou metadata de permissões, quando aplicável;
+- serviço de usuários internos para resolver o claim `sub`;
+- auditoria das ações administrativas.
+
+O backend não confiará somente em claims de perfil contidos no token. O usuário interno, seu
+status e suas permissões de negócio serão consultados conforme a estratégia de autorização
+aprovada.
+
 ### Autorização de negócio
 
 Auth0 comprova a identidade; a aplicação e o banco LTC-M controlam usuário ativo/inativo, perfil,
@@ -91,8 +115,53 @@ e administração permanece pendente; não se presume exclusão definitiva.
 ### Defesa no banco
 
 O backend valida autorização, enquanto constraints, grants e, quando aplicável, RLS formam defesa
-em profundidade. Não se assume que o JWT do Auth0 será consumido diretamente por RLS. A estratégia
-final de RLS e a propagação segura de contexto serão revistas após a escolha do backend.
+em profundidade. A API usará papel PostgreSQL próprio e de menor privilégio; credenciais
+administrativas não serão usadas em operação normal. `DATABASE_URL` é exclusivamente server-side.
+
+Transações serão controladas pela aplicação ou pela futura biblioteca de acesso a dados.
+Migrations continuam sendo a fonte de verdade do schema. Não se assume que o JWT do Auth0 será
+consumido diretamente por RLS. A estratégia final de RLS e a propagação segura de contexto
+permanecem pendentes.
+
+### Organização modular
+
+O npm workspace evoluirá, quando o scaffold for criado, para incluir `apps/web` e `apps/api`. A
+estrutura conceitual do backend é:
+
+```text
+apps/
+|-- web/
+`-- api/
+    `-- src/
+        |-- auth/
+        |-- authorization/
+        |-- users/
+        |-- clients/
+        |-- projects/
+        |-- project-items/
+        |-- financial-plans/
+        |-- actual-events/
+        |-- imports/
+        |-- audit/
+        |-- health/
+        `-- common/
+```
+
+Um pacote dedicado a tipos ou schemas compartilhados só será criado quando houver necessidade
+concreta. Esta decisão não cria diretórios nem altera o workspace atual.
+
+### Implantação no Render
+
+Frontend e backend serão serviços separados. O backend será um Render Web Service que:
+
+- escutará a porta indicada por `PORT`;
+- oferecerá health check obrigatório e readiness check quando aplicável;
+- manterá variáveis server-side no ambiente do serviço;
+- receberá chamadas do frontend por HTTPS;
+- permitirá CORS somente para origens aprovadas por ambiente.
+
+Build e start commands serão definidos quando o scaffold existir. Nenhuma configuração real do
+Render integra esta decisão documental.
 
 ### CI/CD
 
@@ -100,6 +169,26 @@ O pipeline proposto no GitHub Actions executará `npm ci`, formatação, lint, t
 build, verificações de segurança e, quando houver migrations, validações SQL. A promoção seguirá
 desenvolvimento, homologação e produção isolados. Deploy de produção terá controles e aprovação
 compatíveis com o risco. O pipeline não é implementado nesta tarefa.
+
+### Qualidade, observabilidade e segurança do backend
+
+A implementação futura deverá ter testes unitários, de integração, autenticação, autorização,
+contratos da API, fluxos financeiros críticos, transações e concorrência, além de lint, typecheck,
+build e validação de variáveis. Nenhuma meta numérica de cobertura foi aprovada.
+
+Também serão requisitos:
+
+- logs estruturados com correlation/request ID;
+- tratamento centralizado de exceções e respostas padronizadas;
+- ausência de tokens, credenciais e dados sensíveis em logs;
+- limitação de tamanho de payload;
+- timeouts e encerramento gracioso;
+- health e readiness checks;
+- auditoria de ações de negócio;
+- atualização periódica de dependências;
+- avaliação futura de rate limiting.
+
+A ferramenta específica de observabilidade permanece pendente.
 
 ### Backup
 
@@ -126,13 +215,18 @@ critérios de aceite e os itens fora do escopo descritos em
 - identidade fica delegada a um provedor especializado sem armazenar senhas no LTC-M;
 - o navegador deixa de possuir credenciais ou acesso direto ao PostgreSQL;
 - o backend centraliza validação de token, autorização e contratos de API;
+- NestJS fornece fronteiras modulares explícitas para o domínio;
+- Express reduz a complexidade operacional inicial;
 - PostgreSQL preserva constraints, transações, auditoria e views analíticas;
 - frontend, backend e banco podem evoluir com responsabilidades explícitas;
 - Tableau fica isolado por views e credencial somente leitura.
 
 ### Negativas
 
-- um backend adicional precisa ser escolhido, implementado, implantado e operado;
+- um backend adicional precisa ser implementado, testado, implantado e operado;
+- NestJS e Express aumentam a superfície de dependências e atualização;
+- a estrutura modular exige disciplina para evitar acoplamento entre módulos;
+- Express pode precisar ser revisto se medições futuras identificarem gargalo real;
 - Auth0 e Render adicionam dependências externas e configuração por ambiente;
 - a aplicação não pode usar diretamente facilidades de Auth, Data API ou RPC do Supabase;
 - a autorização precisa de contexto seguro entre backend e banco;
@@ -148,6 +242,10 @@ critérios de aceite e os itens fora do escopo descritos em
 | Segredo no bundle Vite             | nenhum client secret ou credencial server-side com prefixo `VITE_`      |
 | Acesso indevido ao banco           | backend como única fronteira, menor privilégio e defesa em profundidade |
 | Permissão obsoleta                 | autorização consultada e auditada no LTC-M                              |
+| Autorização baseada só no token    | consultar usuário interno, status e permissões aprovadas                |
+| API usa credencial administrativa  | papel PostgreSQL próprio e de menor privilégio                          |
+| CORS permissivo                    | allowlist de origens por ambiente                                       |
+| Falha silenciosa do serviço        | health/readiness checks, logs estruturados e alertas futuros            |
 | Mistura entre ambientes            | projetos, credenciais e dados isolados                                  |
 | Perda de dados                     | backup mensal e testes periódicos de restauração                        |
 | Extract desatualizado              | agenda, monitoramento e tratamento de falhas ainda devem ser definidos  |
@@ -155,7 +253,7 @@ critérios de aceite e os itens fora do escopo descritos em
 
 ## Decisões pendentes
 
-- tecnologia/framework do backend próprio;
+- biblioteca de acesso ao PostgreSQL;
 - matriz completa de permissões, especialmente exclusão e inativação;
 - significado oficial da unidade `US`;
 - periodicidade, SLA e data de corte das atualizações;
@@ -164,13 +262,14 @@ critérios de aceite e os itens fora do escopo descritos em
 - RPO, RTO, PITR e retenção detalhada;
 - parâmetros operacionais de sessão e step-up além do MFA obrigatório para administradores;
 - estratégia final de RLS e propagação segura do contexto de autorização;
-- ferramentas e responsabilidades de observabilidade e resposta a incidentes.
+- ferramenta e responsabilidades de observabilidade e resposta a incidentes.
 
 ## Condições de revisão
 
 Revisar esta decisão quando:
 
-- a tecnologia do backend for aprovada;
+- medições demonstrarem gargalo no Express e justificarem avaliar Fastify;
+- a biblioteca de acesso ao PostgreSQL for aprovada;
 - os requisitos de rede, residência de dados ou identidade corporativa mudarem;
 - a política de autorização ou isolamento por organização for detalhada;
 - volume, concorrência ou SLA exigirem outra topologia;

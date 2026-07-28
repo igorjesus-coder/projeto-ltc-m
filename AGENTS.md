@@ -12,15 +12,21 @@ Este arquivo define as regras para agentes e contribuidores automatizados neste 
 ## Arquitetura e limites
 
 - `apps/web`: aplicação CRUD React/TypeScript.
+- `apps/api`: futuro backend Node.js LTS/TypeScript/NestJS com Express; não existe até a tarefa de
+  scaffold correspondente.
 - `supabase`: configuração local, migrations, seed e testes de banco.
 - `scripts`: automações reproduzíveis e sem segredos.
 - `docs`: arquitetura, convenções e decisões do projeto.
 - `tests`: testes transversais que não pertencem a um pacote específico.
 
 O PostgreSQL hospedado no Supabase é a fonte de verdade. O Supabase é usado somente como banco;
-o frontend não acessa o banco diretamente. Autenticação usa Auth0, e o backend próprio é a
+o frontend não acessa o banco diretamente. Autenticação usa Auth0, e o backend NestJS/Express é a
 fronteira para validar tokens, aplicar autorização e acessar o PostgreSQL. Regras que exigem
-atomicidade ou integridade devem permanecer no banco; o frontend não deve duplicar regras críticas.
+atomicidade ou integridade devem permanecer no banco; o frontend não deve duplicar regras
+críticas.
+
+Não escolha ORM/query builder antes da decisão correspondente. Fastify só pode substituir Express
+com medição, compatibilidade validada e nova decisão arquitetural aprovada.
 
 O modelo deve manter separados contrato total, saldo de abertura, itens ativos, valores
 planejados e realizados. Valores monetários usam `numeric`; códigos recebidos são normalizados;
@@ -45,6 +51,9 @@ npm run build
 Adicione testes no mesmo pacote do comportamento alterado. Migrations devem ser incrementais,
 idempotentes quando aplicável e acompanhadas por testes SQL para constraints, grants e políticas
 RLS quando utilizadas como defesa em profundidade.
+
+Quando `apps/api` existir, mudanças no backend devem cobrir, conforme o comportamento afetado,
+testes unitários, integração, autenticação, autorização, contratos, transações e concorrência.
 
 ## Segurança
 
