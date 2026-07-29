@@ -100,10 +100,21 @@ comando deste repositório aponta para produção por padrão.
 Novas migrations ficam em `supabase/migrations` e testes SQL em `supabase/tests`. O arquivo
 `supabase/seed.sql` deve conter apenas dados sintéticos e não sensíveis.
 
+Valide toda migration antes de qualquer dry-run ou aplicação:
+
+```bash
+npm run migrations:check
+```
+
 Desenhos de banco ainda não promovidos a migration ficam em `database/design`. O
 [`schema revisado do P003`](database/design/schema-ltc-m-reviewed.sql) é somente uma proposta
 técnica e não deve ser aplicado diretamente. Os achados, decisões e pendências estão no
 [`relatório de revisão`](database/design/schema-review.md).
+
+A baseline versionada e aplicada no desenvolvimento compartilhado, o inventário de metadados, a
+matriz de objetos e o rollback manual da P004 estão documentados em
+[`docs/database/migrations.md`](docs/database/migrations.md). O rollback fica fora de
+`supabase/migrations` e nunca é automático.
 
 ## Estrutura
 

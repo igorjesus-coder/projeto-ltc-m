@@ -37,9 +37,9 @@ Enquanto vigorar a exceção documentada em `docs/environments.md`, o projeto Su
 `Funcionarios` é somente desenvolvimento temporário e compartilhado; nunca o trate como
 homologação ou produção. Todo objeto de domínio futuro do LTC-M deve pertencer ao schema `ltc_m`,
 nunca a `public`. Qualifique objetos com `ltc_m.` em migrations e consultas, não altere objetos do
-outro sistema e exija backup recuperável antes da primeira migration remota. Extensões
-compartilhadas exigem análise explícita, e migrations devem falhar antes de operar fora de
-`ltc_m`.
+outro sistema e exija backup recuperável antes de migrations remotas. A ausência de backup só pode
+ser aceita por exceção formal, explícita e documentada para a execução específica. Extensões
+compartilhadas exigem análise explícita, e migrations devem falhar antes de operar fora de `ltc_m`.
 
 Não implemente decisões de negócio ainda pendentes como se estivessem aprovadas. Consulte
 `docs/architecture.md` e a documentação funcional de origem.
@@ -50,6 +50,7 @@ Antes de concluir uma alteração, execute:
 
 ```bash
 npm run env:check
+npm run migrations:check
 npm run format:check
 npm run lint
 npm run typecheck
@@ -60,6 +61,11 @@ npm run build
 Adicione testes no mesmo pacote do comportamento alterado. Migrations devem ser incrementais,
 idempotentes quando aplicável e acompanhadas por testes SQL para constraints, grants e políticas
 RLS quando utilizadas como defesa em profundidade.
+
+Toda migration deve passar por `npm run migrations:check`. O scanner rejeita DML, operações
+destrutivas, objetos fora de `ltc_m`, referências a schemas externos, Supabase Auth, seeds, roles,
+grants, extensões, SQL dinâmico e tipos financeiros imprecisos. Exceções exigem decisão
+arquitetural e revisão explícitas antes de alterar o scanner.
 
 Quando `apps/api` existir, mudanças no backend devem cobrir, conforme o comportamento afetado,
 testes unitários, integração, autenticação, autorização, contratos, transações e concorrência.

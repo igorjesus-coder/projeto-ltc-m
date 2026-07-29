@@ -1,5 +1,6 @@
 coverage
 dist
 docs/project-specification.md
+docs/database/inventory-*.json
 node_modules
 package-lock.json

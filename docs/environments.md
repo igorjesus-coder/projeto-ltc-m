@@ -39,6 +39,11 @@ O resultado da tarefa 1.02 é **Concluída provisoriamente com exceção de ambi
 possível foi validada, mas a ausência de um projeto separado de homologação continua sendo uma
 pendência formal e impede considerar pronta a promoção entre ambientes.
 
+Em 2026-07-29, a P004 aplicou a baseline `20260729163000_create_ltcm_relational_core.sql` no
+desenvolvimento compartilhado. O schema `ltc_m` foi criado com o núcleo relacional vazio, e o
+fingerprint dos metadados preexistentes permaneceu idêntico. O relatório completo está em
+[`database/post-application-report.md`](database/post-application-report.md).
+
 ## 1. Responsabilidades dos ambientes
 
 ### Desenvolvimento remoto
@@ -218,7 +223,7 @@ Regras operacionais:
 11. `db pull` é diagnóstico; sua saída deve ser revisada e nunca substitui silenciosamente a
     fonte versionada.
 12. Nenhuma migration de domínio pertence à tarefa 1.02.
-13. A primeira migration de domínio deverá criar o schema `ltc_m` de modo explícito e aprovado.
+13. A primeira migration de domínio criou o schema `ltc_m` de modo explícito e aprovado na P004.
 14. Tabelas, views, materialized views, funções/RPC, sequências, tipos e demais objetos exclusivos
     do LTC-M pertencem a `ltc_m` quando tecnicamente apropriado; triggers e policies pertencem
     somente a tabelas nesse schema.
@@ -226,20 +231,20 @@ Regras operacionais:
 16. Migrations e consultas da aplicação qualificam objetos com `ltc_m.` e não dependem de um
     `search_path` implícito.
 17. Nenhuma migration do LTC-M pode alterar, mover, renomear ou excluir objetos do outro sistema.
-18. Antes da primeira migration remota do LTC-M, gerar e verificar um backup recuperável do
-    projeto compartilhado.
+18. Backup recuperável permanece obrigatório antes de migrations remotas. A P004 prosseguiu sem
+    ele somente pela exceção formal aprovada e registrada nos relatórios da tarefa.
 19. Extensões compartilhadas só podem ser criadas, atualizadas, movidas ou removidas depois de
     análise e aprovação explícitas.
 20. Migrations devem validar o schema-alvo e falhar com segurança antes de atingir objetos fora de
     `ltc_m`.
 
-O histórico de migrations da Supabase é compartilhado por banco, não por schema. A consulta atual
-não encontrou histórico remoto. Se aparecer qualquer versão desconhecida antes do primeiro push
-real, interromper a execução, identificar o repositório proprietário e aprovar uma estratégia de
-baseline/reconciliação. Não usar `migration repair`, arquivos vazios ou `db pull` para forçar
-alinhamento.
+O histórico de migrations da Supabase é compartilhado por banco, não por schema. O histórico
+remoto contém somente a baseline P004 `20260729163000`, alinhada ao arquivo local. Se aparecer
+qualquer versão desconhecida, interromper a execução, identificar o repositório proprietário e
+aprovar uma estratégia de reconciliação. Não usar `migration repair`, arquivos vazios ou
+`db pull` para forçar alinhamento.
 
-Quando existirem migrations no P004, a validação no desenvolvimento temporário será:
+Para toda migration posterior, a validação no desenvolvimento temporário será:
 
 1. vincular desenvolvimento;
 2. revisar `migration list --linked`;
@@ -256,8 +261,8 @@ Depois que houver homologação isolada:
 4. aplicar exatamente os mesmos arquivos;
 5. homologar antes de qualquer promoção futura para produção.
 
-Hoje `supabase/migrations` contém somente `.gitkeep`; por isso não há migration a aplicar e o teste
-completo de promoção fica reservado ao P004.
+Hoje `supabase/migrations` contém a baseline P004, já aplicada no desenvolvimento remoto. A
+promoção continua bloqueada até existir homologação isolada.
 
 ## 7. Conexão PostgreSQL
 
@@ -275,17 +280,17 @@ completo de promoção fica reservado ao P004.
 
 - rotina mensal de backup aprovada;
 - teste periódico de restauração obrigatório;
-- backup recuperável obrigatório antes da primeira migration do LTC-M em `Funcionarios`;
+- a primeira migration foi aplicada sem backup somente pela exceção formal da P004;
+- backup recuperável volta a ser obrigatório antes de qualquer migration remota posterior;
 - responsáveis e procedimento detalhado ainda pendentes;
 - RPO, RTO, PITR e retenção permanecem decisões futuras;
 - nenhum backup real é configurado nesta tarefa.
 
 ## 9. Ações manuais necessárias
 
-1. antes do P004, definir responsável, retenção e procedimento do backup pré-migration de
-   `Funcionarios`;
-2. criar e testar esse backup antes da primeira migration do LTC-M;
-3. revisar a primeira migration para garantir criação e qualificação exclusiva de `ltc_m`;
+1. definir responsável, retenção e procedimento de backup de `Funcionarios`;
+2. disponibilizar e testar um ponto de restauração antes da próxima migration remota;
+3. validar a baseline em PostgreSQL descartável quando Docker ou Podman estiver disponível;
 4. repetir `migration list --linked` e `db push --linked --dry-run` imediatamente antes de aplicar
    qualquer migration;
 5. interromper se surgir histórico remoto desconhecido ou alteração fora de `ltc_m`;
@@ -300,7 +305,7 @@ Produção não integra essas ações.
 
 | Risco                                    | Tratamento                                                   |
 | ---------------------------------------- | ------------------------------------------------------------ |
-| impacto no outro sistema                 | isolamento em `ltc_m`, revisão e backup pré-migration        |
+| impacto no outro sistema                 | isolamento em `ltc_m`, scanner, fingerprint e backup futuro  |
 | conflito de nomes ou `search_path`       | nomes qualificados; nenhum objeto LTC-M em `public`          |
 | histórico de migration passar a divergir | parar e aprovar baseline; nunca executar `repair` automático |
 | vínculo apontar para ambiente errado     | confirmar nome e região antes de cada operação               |
@@ -311,6 +316,5 @@ Produção não integra essas ações.
 | ausência de containers                   | validar localmente quando Docker/Podman estiver disponível   |
 | migration destrutiva                     | backup, rollback e aprovação obrigatórios                    |
 
-Próximo marco técnico: no P004, preparar o backup e revisar a primeira migration versionada para
-criar `ltc_m`, sem tocar em `public` ou nos objetos preexistentes. A promoção continuará bloqueada
-até existir homologação isolada.
+Antes da próxima migration, disponibilizar backup recuperável e validação em PostgreSQL
+descartável. A promoção continuará bloqueada até existir homologação isolada.
