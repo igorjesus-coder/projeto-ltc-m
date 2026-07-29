@@ -138,6 +138,17 @@ views analíticas.
 
 ## 4. Modelo de dados proposto
 
+Todos os nomes desta seção são nomes lógicos. Na implementação física, cada tabela, view,
+materialized view, função/RPC, sequência, tipo e objeto auxiliar exclusivo do LTC-M pertence ao
+schema dedicado `ltc_m` quando tecnicamente apropriado; triggers e policies pertencem somente às
+tabelas desse schema. Migrations e consultas da aplicação devem usar nomes qualificados, como
+`ltc_m.projects`, e não criar objetos de domínio em `public`.
+
+Essa regra é especialmente obrigatória durante a exceção temporária que usa o projeto
+`Funcionarios` para desenvolvimento, pois ele contém objetos e dados de outro sistema. A exceção
+não autoriza migration nesta tarefa nem altera os modelos lógicos abaixo. A primeira migration
+futura deverá criar `ltc_m` de forma versionada, após backup e revisão explícita.
+
 ### 4.1 Tabelas principais
 
 #### `app_users`

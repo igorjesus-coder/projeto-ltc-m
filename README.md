@@ -24,18 +24,13 @@ No Windows, use `npm.cmd` se a política do PowerShell bloquear `npm.ps1`.
 git clone <url-do-repositorio>
 cd projeto-ltc-m
 npm ci
-cp .env.example .env
-```
-
-No PowerShell, substitua o último comando por:
-
-```powershell
-Copy-Item .env.example .env
 ```
 
 O app inicial ainda não integra Auth0, backend ou banco e não exige credenciais remotas. O
 `.env.example` documenta as variáveis públicas previstas e as variáveis exclusivamente
-server-side; não preencha segredos no repositório.
+server-side; não preencha segredos no repositório. Quando as integrações existirem, use arquivos
+locais separados por serviço, como `apps/web/.env.development.local` e
+`apps/api/.env.development.local`.
 
 Para trabalhar futuramente com PostgreSQL local:
 
@@ -50,14 +45,21 @@ chave publicável ou chave `anon` do Supabase: ele se comunicará somente com o 
 
 ### Trabalho temporário sem Docker
 
-Enquanto Docker ou um runtime compatível não estiver disponível, use somente um projeto Supabase
-gerenciado, na região `us-east-1`, exclusivo para desenvolvimento e com dados sintéticos. Não
-reutilize homologação ou produção e não coloque credenciais no repositório.
+Enquanto Docker ou um runtime compatível não estiver disponível, o projeto Supabase
+`Funcionarios`, em `us-east-1`, está aprovado como desenvolvimento remoto temporário. Ele é
+compartilhado com outro sistema: todo objeto futuro do LTC-M deverá ficar no schema `ltc_m`, nunca
+em `public`, e somente por migration versionada após backup. Não o use como homologação ou
+produção e não coloque credenciais no repositório.
 
 Configure a conexão somente no backend futuro, nunca no frontend. Mudanças de banco continuam
 obrigatoriamente registradas em migrations, mesmo quando forem experimentadas no projeto remoto.
 Esse fluxo não substitui a futura validação local com `db reset` e testes de constraints, grants e
 eventual RLS.
+
+O procedimento de criação, vínculo, alternância e promoção entre desenvolvimento e homologação
+está em [`docs/environments.md`](docs/environments.md). Project refs, tokens, senhas e connection
+strings permanecem fora do Git. Homologação está formalmente adiada até que a conta permita um
+projeto separado; nenhum schema ou branch no projeto compartilhado a substitui.
 
 ## Desenvolvimento
 
@@ -75,6 +77,7 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run env:check
 ```
 
 Execute tudo em sequência com:
@@ -133,12 +136,16 @@ Branches, commits, revisão e critérios de pronto estão documentados em
 as decisões de negócio em aberto estão preservados em
 [`docs/project-specification.md`](docs/project-specification.md).
 
+Os ambientes Supabase, o fluxo seguro da CLI e a promoção de migrations estão documentados em
+[`docs/environments.md`](docs/environments.md).
+
 A decisão vigente, alternativas e condições de revisão estão no
 [`ADR-0002`](docs/adr/0002-arquitetura-render-supabase-database-auth0.md). O
 [`ADR-0001`](docs/adr/0001-arquitetura-base-da-plataforma-ltc-m.md) está preservado como histórico
 e marcado como substituído.
 
-Deploy e ambientes remotos ainda não estão configurados. A tarefa 0.07 concluiu a seleção de
-React, TypeScript, Vite, Node.js LTS, NestJS, Express, Auth0, PostgreSQL/Supabase somente como
+Deploy ainda não está configurado. O desenvolvimento remoto está vinculado provisoriamente a
+`Funcionarios`; homologação e produção permanecem indisponíveis. A tarefa 0.07 concluiu a seleção
+de React, TypeScript, Vite, Node.js LTS, NestJS, Express, Auth0, PostgreSQL/Supabase somente como
 banco em `us-east-1`, Render, GitHub Actions, Tableau Extract e backup mensal. A biblioteca de
 acesso ao PostgreSQL e outras decisões operacionais permanecem pendentes.

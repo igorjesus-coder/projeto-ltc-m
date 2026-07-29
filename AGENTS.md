@@ -33,6 +33,14 @@ planejados e realizados. Valores monetários usam `numeric`; códigos recebidos 
 itens repetidos não podem usar apenas o código do item como chave; acumulados analíticos devem
 ser calculados por views.
 
+Enquanto vigorar a exceção documentada em `docs/environments.md`, o projeto Supabase
+`Funcionarios` é somente desenvolvimento temporário e compartilhado; nunca o trate como
+homologação ou produção. Todo objeto de domínio futuro do LTC-M deve pertencer ao schema `ltc_m`,
+nunca a `public`. Qualifique objetos com `ltc_m.` em migrations e consultas, não altere objetos do
+outro sistema e exija backup recuperável antes da primeira migration remota. Extensões
+compartilhadas exigem análise explícita, e migrations devem falhar antes de operar fora de
+`ltc_m`.
+
 Não implemente decisões de negócio ainda pendentes como se estivessem aprovadas. Consulte
 `docs/architecture.md` e a documentação funcional de origem.
 
@@ -41,6 +49,7 @@ Não implemente decisões de negócio ainda pendentes como se estivessem aprovad
 Antes de concluir uma alteração, execute:
 
 ```bash
+npm run env:check
 npm run format:check
 npm run lint
 npm run typecheck
@@ -62,6 +71,8 @@ testes unitários, integração, autenticação, autorização, contratos, trans
 - Use `.env.example` apenas com nomes e valores locais não sensíveis.
 - `DATABASE_URL`, segredos do Auth0 e credenciais PostgreSQL são exclusivamente server-side.
 - Não execute `supabase db reset`, migrations remotas ou comandos de produção sem autorização.
+- No banco compartilhado, interrompa diante de migration remota desconhecida; não use
+  `migration repair` para forçar alinhamento.
 - A conexão do Tableau deve usar uma função somente leitura.
 
 ## Código e documentação

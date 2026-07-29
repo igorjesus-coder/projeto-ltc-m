@@ -259,22 +259,38 @@ logs, issues, pull requests ou screenshots.
 
 ## 6. Ambientes e desenvolvimento
 
-| Ambiente               | Frontend/backend              | PostgreSQL                  | Dados                    | Regra                    |
-| ---------------------- | ----------------------------- | --------------------------- | ------------------------ | ------------------------ |
-| Local                  | Vite e NestJS locais          | Supabase CLI + Docker       | Sintéticos               | desejável                |
-| Desenvolvimento remoto | serviços dev no Render        | projeto Supabase dev        | Sintéticos               | aprovado temporariamente |
-| Homologação            | serviços staging no Render    | projeto Supabase staging    | Sintéticos ou mascarados | isolado                  |
-| Produção               | serviços production no Render | projeto Supabase production | Reais                    | isolado e controlado     |
+| Ambiente               | Frontend/backend              | PostgreSQL                    | Dados                    | Regra                |
+| ---------------------- | ----------------------------- | ----------------------------- | ------------------------ | -------------------- |
+| Local                  | Vite e NestJS locais          | Supabase CLI + Docker         | Sintéticos               | desejável            |
+| Desenvolvimento remoto | serviços dev no Render        | `Funcionarios`, compartilhado | Sintéticos               | exceção temporária   |
+| Homologação            | serviços staging no Render    | projeto Supabase ainda adiado | Sintéticos ou mascarados | isolado              |
+| Produção               | serviços production no Render | projeto Supabase production   | Reais                    | isolado e controlado |
 
 O Supabase local com Docker permanece desejável para migrations e testes, mas sua
-indisponibilidade não bloqueia documentação. O projeto remoto de desenvolvimento:
+indisponibilidade não bloqueia documentação. Como a conta atual não permite criar outro projeto,
+`Funcionarios`, em `us-east-1`, foi aprovado excepcionalmente como desenvolvimento remoto
+temporário. Esse banco contém objetos e dados de outro sistema, não é isolado e nunca pode
+representar homologação ou produção.
 
-- usa a região aprovada;
-- é exclusivo e isolado;
-- recebe somente dados sintéticos;
-- não substitui homologação ou produção;
-- não torna alterações manuais a fonte de verdade;
-- deve evitar drift por meio de migrations versionadas quando o domínio for implementado.
+Para reduzir o risco de colisão ou impacto cruzado:
+
+- todos os objetos de domínio do LTC-M serão criados no schema dedicado `ltc_m`;
+- não será criado objeto de domínio do LTC-M em `public`;
+- migrations e consultas qualificarão nomes com `ltc_m.` e não dependerão de `search_path`
+  implícito;
+- nenhuma migration poderá alterar objetos preexistentes do outro sistema;
+- extensões compartilhadas exigirão análise e aprovação explícitas;
+- migrations deverão validar o alvo e falhar antes de operar fora de `ltc_m`;
+- um backup recuperável será obrigatório antes da primeira migration remota;
+- mudanças manuais não serão fonte de verdade; toda mudança seguirá migration versionada.
+
+Homologação está formalmente adiada até que exista um projeto Supabase separado em `us-east-1`.
+Prefixo de tabela, segundo conjunto de tabelas, schema ou branch no banco compartilhado não
+substitui o isolamento de ambiente. A exceção deve ser encerrada quando a restrição da conta
+deixar de existir.
+
+Criação, vinculação, alternância, contrato de variáveis e promoção segura entre ambientes estão
+detalhados em [`environments.md`](environments.md).
 
 ## 7. Hospedagem, domínio e DNS
 
@@ -335,6 +351,12 @@ incremental em `supabase/migrations`. Mudanças pelo Dashboard não são a fonte
 Migrations compartilhadas são imutáveis e correções usam novas migrations. Seeds contêm somente
 dados sintéticos determinísticos. Mudanças destrutivas exigem revisão, backup, teste de
 restauração e plano de reversão.
+
+A primeira migration de domínio deverá criar explicitamente `ltc_m`. Tabelas, views, materialized
+views, funções/RPC, sequências, tipos e objetos auxiliares do LTC-M pertencem a esse schema quando
+tecnicamente apropriado; triggers e policies pertencem apenas às tabelas `ltc_m`. O histórico da
+Supabase é compartilhado pelo banco: qualquer versão remota desconhecida exige interrupção e
+estratégia aprovada de reconciliação, sem `migration repair` automático.
 
 Nenhuma migration de domínio é criada por esta atualização documental.
 
