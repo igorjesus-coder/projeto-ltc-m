@@ -30,6 +30,6 @@
   },
   "devDependencies": {
     "prettier": "3.9.6",
-    "supabase": "^2.110.0"
+    "supabase": "2.110.0"
   }
 }
