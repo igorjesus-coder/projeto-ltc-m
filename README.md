@@ -80,6 +80,7 @@ npm run build
 npm run env:check
 npm run migrations:check
 npm run seeds:check
+npm run integrity:check
 ```
 
 Execute tudo em sequência com:
@@ -120,6 +121,10 @@ A baseline versionada e aplicada no desenvolvimento compartilhado, o inventário
 matriz de objetos e o rollback manual da P004 estão documentados em
 [`docs/database/migrations.md`](docs/database/migrations.md). O rollback fica fora de
 `supabase/migrations` e nunca é automático.
+
+A auditoria P006 de constraints e índices, incluindo matriz de lacunas, testes transacionais e
+`EXPLAIN`, está em
+[`docs/database/constraints-audit-p006.md`](docs/database/constraints-audit-p006.md).
 
 ## Estrutura
 

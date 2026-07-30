@@ -49,6 +49,11 @@ idempotência. `US = Unidade e Serviço`; nenhuma moeda ou unidade adicional foi
 operacionais permaneceram vazias e o fingerprint externo continuou idêntico. O relatório está em
 [`database/seed-post-application-report.md`](database/seed-post-application-report.md).
 
+Também em 2026-07-30, a P006 adicionou quatro índices operacionais em `ltc_m`. Constraints e dados
+permaneceram inalterados, os testes sintéticos executaram rollback integral e o fingerprint
+externo continuou idêntico. O relatório está em
+[`database/p006-post-application-report.md`](database/p006-post-application-report.md).
+
 ## 1. Responsabilidades dos ambientes
 
 ### Desenvolvimento remoto

@@ -58,6 +58,38 @@ test('rejeita comandos proibidos, DML e SQL dinâmico', () => {
   assert.ok(issues.some((issue) => issue.includes('bloco dinâmico')));
 });
 
+test('aceita ADD CONSTRAINT aditivo e índice qualificado em ltc_m', () => {
+  const issues = scanMigrationText(`
+    alter table ltc_m.projects
+      add constraint ck_projects_example check (version > 0);
+    create index ix_projects_example on ltc_m.projects (client_id, status);
+  `);
+
+  assert.deepEqual(issues, []);
+});
+
+test('rejeita FK e índice fora de ltc_m', () => {
+  const externalForeignKey = scanMigrationText(`
+    alter table ltc_m.projects
+      add constraint fk_projects_external
+      foreign key (client_id) references public.clients (id);
+  `);
+  const externalIndex = scanMigrationText(`
+    create index ix_external_example on public.projects (id);
+  `);
+
+  assert.ok(externalForeignKey.some((issue) => issue.includes('schema externo')));
+  assert.ok(externalIndex.some((issue) => issue.includes('fora de ltc_m')));
+});
+
+test('rejeita ALTER TABLE não aditivo', () => {
+  const issues = scanMigrationText(`
+    alter table ltc_m.projects add column external_code text;
+  `);
+
+  assert.ok(issues.some((issue) => issue.includes('ADD CONSTRAINT')));
+});
+
 test('rejeita schemas externos e objetos não qualificados', () => {
   const external = scanMigrationText(`
     create table public.example (id uuid references auth.users (id));
@@ -96,6 +128,30 @@ test('rejeita timestamps inválidos ou duplicados', () => {
       assert.ok(issues.some((issue) => issue.includes('timestamp inválido')));
       assert.ok(issues.some((issue) => issue.includes('timestamp duplicado')));
       assert.ok(issues.some((issue) => issue.includes('ordem de timestamp inválida')));
+    },
+  );
+});
+
+test('rejeita nomes duplicados de constraints e índices entre migrations', () => {
+  withMigrationDirectory(
+    {
+      '20260729163000_first.sql': `
+        create table ltc_m.first (
+          id uuid primary key,
+          constraint ck_duplicate check (id is not null)
+        );
+        create index ix_duplicate on ltc_m.first (id);
+      `,
+      '20260730103002_second.sql': `
+        alter table ltc_m.first
+          add constraint ck_duplicate check (id is not null);
+        create index ix_duplicate on ltc_m.first (id);
+      `,
+    },
+    (directory) => {
+      const issues = checkMigrations(directory).issues;
+      assert.ok(issues.some((issue) => issue.includes('constraint duplicado')));
+      assert.ok(issues.some((issue) => issue.includes('índice duplicado')));
     },
   );
 });

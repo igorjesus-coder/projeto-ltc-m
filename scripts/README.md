@@ -15,4 +15,5 @@ Validadores de banco disponíveis:
 
 - `npm run migrations:check`: valida migrations de schema;
 - `npm run seeds:check`: valida o seed de valores controlados;
+- `npm run integrity:check`: valida o teste SQL transacional da P006;
 - `scripts/collect-db-inventory.mjs`: gera inventário sanitizado e fingerprints separados.

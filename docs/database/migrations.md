@@ -98,3 +98,17 @@ Ele remove somente `ltc_m`, mas apagará todos os dados futuros do LTC-M. Não a
 5. não usar `migration repair` e não apagar registros do histórico manualmente.
 
 O rollback não foi executado na P004.
+
+## Complemento P006 / 1.06
+
+A migration
+[`20260730103002_add_ltcm_core_query_indexes.sql`](../../supabase/migrations/20260730103002_add_ltcm_core_query_indexes.sql)
+adiciona quatro índices operacionais comprovadamente ausentes. Nenhuma constraint nova foi
+necessária: PKs, FKs compostas, CHECKs de grão/competência e coerência monetária já estavam
+presentes na P004.
+
+A matriz completa, as redundâncias preservadas e as decisões não codificadas estão em
+[`constraints-audit-p006.md`](constraints-audit-p006.md).
+
+O rollback manual, não executado, está em
+[`rollback-ltcm-p006-indexes.sql`](../../database/rollback/rollback-ltcm-p006-indexes.sql).

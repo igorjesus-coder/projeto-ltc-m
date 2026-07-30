@@ -13,7 +13,6 @@ const FORBIDDEN_PATTERNS = [
   [/\binsert\b/i, 'comando INSERT'],
   [/\bmerge\b/i, 'comando MERGE'],
   [/\bcopy\b/i, 'comando COPY'],
-  [/\balter\s+table\b/i, 'comando ALTER TABLE'],
   [/\balter\s+schema\b/i, 'comando ALTER SCHEMA'],
   [/\balter\s+role\b/i, 'comando ALTER ROLE'],
   [/\balter\s+default\s+privileges\b/i, 'comando ALTER DEFAULT PRIVILEGES'],
@@ -145,6 +144,39 @@ function requireQualifiedObjects(sql, issues) {
   }
 }
 
+function requireAdditiveAlterTables(sql, issues) {
+  const alterPattern = /\balter\s+table\b[\s\S]*?;/gi;
+  const statements = [...sql.matchAll(alterPattern)];
+
+  for (const match of statements) {
+    if (
+      !/^\s*alter\s+table\s+ltc_m\.[a-z_][a-z0-9_]*\s+add\s+constraint\s+[a-z_][a-z0-9_]*\s+(?:check|unique|foreign\s+key)\b/i.test(
+        match[0],
+      )
+    ) {
+      issues.push('ALTER TABLE permitido somente para ADD CONSTRAINT aditivo em ltc_m');
+    }
+  }
+
+  if (/\balter\s+table\b/i.test(sql.replace(alterPattern, ' '))) {
+    issues.push('ALTER TABLE incompleto ou não aditivo');
+  }
+}
+
+export function extractNamedObjects(sql) {
+  const stripped = stripSqlNoise(sql);
+  return {
+    constraints: [...stripped.matchAll(/\bconstraint\s+([a-z_][a-z0-9_]*)/gi)].map((match) =>
+      match[1].toLowerCase(),
+    ),
+    indexes: [
+      ...stripped.matchAll(
+        /\bcreate\s+(?:unique\s+)?index\s+(?!concurrently\b)([a-z_][a-z0-9_]*)/gi,
+      ),
+    ].map((match) => match[1].toLowerCase()),
+  };
+}
+
 export function scanMigrationText(sql) {
   const issues = [];
   const stripped = stripSqlNoise(sql);
@@ -157,6 +189,7 @@ export function scanMigrationText(sql) {
   }
 
   requireQualifiedObjects(stripped, issues);
+  requireAdditiveAlterTables(stripped, issues);
 
   if (/--project-ref\b/i.test(sql) || /\b[a-z0-9]{20}\.supabase\.co\b/i.test(sql)) {
     issues.push('project ref ou endpoint remoto versionado');
@@ -178,6 +211,8 @@ export function checkMigrations(directory) {
   }
 
   const timestamps = new Set();
+  const constraintNames = new Set();
+  const indexNames = new Set();
   let previousTimestamp = null;
 
   for (const filename of entries) {
@@ -204,6 +239,20 @@ export function checkMigrations(directory) {
     const sql = fs.readFileSync(path.join(directory, filename), 'utf8');
     for (const issue of scanMigrationText(sql)) {
       issues.push(`${filename}: ${issue}`);
+    }
+
+    const namedObjects = extractNamedObjects(sql);
+    for (const name of namedObjects.constraints) {
+      if (constraintNames.has(name)) {
+        issues.push(`${filename}: nome de constraint duplicado: ${name}`);
+      }
+      constraintNames.add(name);
+    }
+    for (const name of namedObjects.indexes) {
+      if (indexNames.has(name)) {
+        issues.push(`${filename}: nome de índice duplicado: ${name}`);
+      }
+      indexNames.add(name);
     }
   }
 
