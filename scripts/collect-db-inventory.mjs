@@ -111,14 +111,11 @@ function parseCliPayload(stdout) {
 }
 
 function runInventoryQuery(rootDirectory) {
-  const cliWrapperPath = path.join(
-    rootDirectory,
-    'node_modules',
-    'supabase',
-    'dist',
-    'supabase.js',
-  );
-  const queryPath = path.join(rootDirectory, 'database', 'audit', 'remote-metadata-inventory.sql');
+  // A CLI empacotada no Windows não interpreta corretamente estes argumentos absolutos
+  // quando o caminho do workspace contém espaços. O subprocesso já usa rootDirectory
+  // como cwd, portanto caminhos relativos são suficientes e portáveis.
+  const cliWrapperPath = path.join('node_modules', 'supabase', 'dist', 'supabase.js');
+  const queryPath = path.join('database', 'audit', 'remote-metadata-inventory.sql');
   const result = spawnSync(
     process.execPath,
     [cliWrapperPath, 'db', 'query', '--linked', '--file', queryPath, '--output-format', 'json'],

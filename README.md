@@ -81,6 +81,9 @@ npm run env:check
 npm run migrations:check
 npm run seeds:check
 npm run integrity:check
+npm run p007:check
+npm run pw902:check
+npm run d21:check
 ```
 
 Execute tudo em sequência com:
@@ -125,6 +128,10 @@ matriz de objetos e o rollback manual da P004 estão documentados em
 A auditoria P006 de constraints e índices, incluindo matriz de lacunas, testes transacionais e
 `EXPLAIN`, está em
 [`docs/database/constraints-audit-p006.md`](docs/database/constraints-audit-p006.md).
+
+O desenho P007 de timestamps, versionamento otimista, contexto do ator, auditoria e workflow está
+em
+[`docs/database/versioning-audit-workflow-p007.md`](docs/database/versioning-audit-workflow-p007.md).
 
 ## Estrutura
 

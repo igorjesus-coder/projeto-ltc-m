@@ -110,5 +110,90 @@ presentes na P004.
 A matriz completa, as redundâncias preservadas e as decisões não codificadas estão em
 [`constraints-audit-p006.md`](constraints-audit-p006.md).
 
+## P007 / 1.07 — versionamento, timestamps e auditoria
+
+As migrations
+[`20260730144303_add_ltcm_workflow_enum_values.sql`](../../supabase/migrations/20260730144303_add_ltcm_workflow_enum_values.sql)
+e
+[`20260730144304_add_ltcm_versioning_audit_workflow.sql`](../../supabase/migrations/20260730144304_add_ltcm_versioning_audit_workflow.sql)
+adicionam, somente em `ltc_m`, metadata automática, versionamento otimista, auditoria append-only,
+contexto transacional do ator e o workflow de versões. A separação mantém cada arquivo
+transacional: valores novos de enum só podem ser usados depois do commit que os adiciona.
+
+Ela adiciona o estado essencial `pending_approval`, os eventos `SUBMIT` e `RETURN`, colunas
+`row_version` nas entidades mutáveis que ainda não possuíam versão, linhagem de reabertura e
+metadata sanitizada em `audit_log`. `projects.version` é preservada como coluna de concorrência.
+
+As funções de workflow são `SECURITY DEFINER` com `search_path` vazio por causa do guard de
+imutabilidade; validam ator, perfil e estado internamente. A concessão de EXECUTE e a retirada de
+DML direto pertencem à P008.
+
+Detalhes, matriz, integração NestJS e catálogo de eventos:
+[`versioning-audit-workflow-p007.md`](versioning-audit-workflow-p007.md).
+
+Relatórios:
+
+- [`p007-pre-application-report.md`](p007-pre-application-report.md);
+- [`p007-post-application-report.md`](p007-post-application-report.md).
+
+Rollback manual:
+[`rollback-ltcm-p007-versioning-audit-workflow.sql`](../../database/rollback/rollback-ltcm-p007-versioning-audit-workflow.sql).
+
 O rollback manual, não executado, está em
 [`rollback-ltcm-p006-indexes.sql`](../../database/rollback/rollback-ltcm-p006-indexes.sql).
+
+### Estado remoto da P007
+
+Em 2026-07-30, a autorização D19 permitiu um único `supabase db push --linked` das duas migrations
+P007 no projeto compartilhado `Funcionarios`, mesmo sem backup recuperável. O push concluiu, o
+histórico local/remoto ficou alinhado e o fingerprint externo permaneceu idêntico.
+
+A suíte PostgreSQL posterior falhou em `PW902`, pois uma transição direta
+`draft -> pending_approval` foi aceita. A transação de teste foi revertida sem dados residuais,
+mas `rollback_clean` não chegou a ser emitido e os cenários posteriores não foram executados. A
+P007 está parcialmente concluída; as migrations aplicadas são imutáveis e uma eventual correção
+deve usar nova migration forward em tarefa separada. Não houve `repair`, rollback manual,
+alteração SQL avulsa ou repetição do push.
+
+### Correção forward PW902
+
+A autorização D20 aplicou uma única vez a migration
+[`20260730155749_fix_ltcm_workflow_guard_fail_closed.sql`](../../supabase/migrations/20260730155749_fix_ltcm_workflow_guard_fail_closed.sql).
+Ela usa `CREATE OR REPLACE FUNCTION` somente em `workflow_guard_active`,
+`protect_plan_version`, `audit_row_change` e `approve_plan_version`, sem recriar triggers ou
+alterar tabelas, dados e privilégios.
+
+A guarda passa a retornar `false` para ausência, vazio, valor inválido e `NULL`; a proteção exige
+resultado explicitamente verdadeiro. A causa, os demais usos auditados e o plano de teste estão
+em [`p007-pw902-root-cause.md`](p007-pw902-root-cause.md).
+
+O histórico ficou alinhado nas cinco migrations e o fingerprint externo permaneceu idêntico.
+PW902 e as demais transições diretas passaram, mas a suíte encontrou depois `42703` em
+`enforce_admin_inactivation()` ao acessar `OLD.deleted_at` no trigger de `app_users`. Não houve
+segunda migration nem segundo push. O relatório está em
+[`p007-pw902-post-correction-report.md`](p007-pw902-post-correction-report.md).
+
+### Correção forward D21 para o erro 42703
+
+A autorização D21 permitiu exatamente uma segunda migration forward:
+[`20260730163419_fix_ltcm_admin_inactivation_columns.sql`](../../supabase/migrations/20260730163419_fix_ltcm_admin_inactivation_columns.sql).
+Ela foi aplicada uma única vez e substituiu somente `ltc_m.enforce_admin_inactivation()`.
+
+A função continua genérica, mas passa a consultar e alterar campos opcionais somente por JSONB.
+Os quatro triggers existentes não são recriados. Em `app_users`, a coluna real de ciclo de vida é
+`active`; mudanças de `role` também passam a exigir admin ativo, enquanto justificativa permanece
+obrigatória para inativação/restauração.
+
+Causa, matriz e auditoria de funções genéricas:
+[`p007-d21-root-cause.md`](p007-d21-root-cause.md).
+
+Preflight:
+[`p007-d21-pre-correction-report.md`](p007-d21-pre-correction-report.md).
+
+O histórico terminou alinhado nas seis migrations. A suíte P007 integral passou com
+`rollback_clean = true`, BRL/US permaneceram íntegros, não houve dados residuais e o fingerprint
+externo permaneceu
+`7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95`.
+
+Resultado:
+[`p007-d21-post-correction-report.md`](p007-d21-post-correction-report.md).

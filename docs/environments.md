@@ -54,6 +54,32 @@ permaneceram inalterados, os testes sintéticos executaram rollback integral e o
 externo continuou idêntico. O relatório está em
 [`database/p006-post-application-report.md`](database/p006-post-application-report.md).
 
+Ainda em 2026-07-30, a autorização D19 permitiu aplicar uma única vez as duas migrations P007 sem
+backup recuperável. O histórico ficou alinhado e o fingerprint externo permaneceu idêntico, mas a
+suíte PostgreSQL falhou em `PW902` ao aceitar uma transição direta
+`draft -> pending_approval`. A transação abortada não deixou dados sintéticos. O workflow e sua
+promoção permanecem bloqueados até correção incremental em tarefa separada; não houve `repair`,
+rollback manual ou segundo push. O relatório está em
+[`database/p007-post-application-report.md`](database/p007-post-application-report.md).
+
+A autorização D20 aplicou depois uma única migration forward e corrigiu PW902 sem alterar o
+fingerprint externo. A suíte avançou por todas as transições diretas e pela reabertura, mas falhou
+em `42703` quando `enforce_admin_inactivation()` acessou `OLD.deleted_at` no trigger de
+`app_users`. A transação também não deixou resíduos. O workflow continua sem promoção e nenhuma
+segunda correção foi aplicada. Relatório:
+[`database/p007-pw902-post-correction-report.md`](database/p007-pw902-post-correction-report.md).
+
+A autorização D21 foi concedida exclusivamente para uma segunda e única migration forward do
+erro `42703`, novamente no projeto `Funcionarios`, região `us-east-1` e schema `ltc_m`, mesmo sem
+backup recuperável. Ela não autoriza segundo push, objetos externos, seed, privilégios, RLS,
+policies, `repair`, reset, pull, rollback automático, SQL manual ou início da P008. O fingerprint
+externo deve permanecer idêntico.
+
+A D21 foi aplicada em um único push, a suíte P007 integral retornou `rollback_clean = true` e o
+fingerprint externo permaneceu idêntico. Não houve dados residuais nem alteração fora de `ltc_m`
+e do histórico de migrations. O P007 foi concluído; o projeto continua sendo apenas
+desenvolvimento remoto temporário e compartilhado.
+
 ## 1. Responsabilidades dos ambientes
 
 ### Desenvolvimento remoto

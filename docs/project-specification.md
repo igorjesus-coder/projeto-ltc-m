@@ -380,8 +380,10 @@ erDiagram
 - **`admin`**: perfil administrativo; somente ele pode aprovar, bloquear e reabrir previsões.
 
 Auth0 autentica o usuário. O LTC-M verifica usuário ativo/inativo, perfil e permissão para cada
-operação. A matriz completa de leitura, edição, inativação e administração permanece pendente;
-não se presume exclusão definitiva.
+operação. A matriz de leitura, edição, inativação, workflow e administração foi aprovada na P007
+e está em
+[`database/versioning-audit-workflow-p007.md`](database/versioning-audit-workflow-p007.md).
+Exclusão física não integra o sistema.
 
 ## 8. Telas sugeridas
 
@@ -861,17 +863,16 @@ Fora do escopo:
 ## 20. Decisões pendentes
 
 1. biblioteca de acesso ao PostgreSQL;
-2. matriz completa de permissões, especialmente exclusão e inativação;
-3. periodicidade, SLA e data de corte das atualizações;
-4. política de conversão monetária, incluindo taxa, fonte e data;
-5. agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
-6. significado do valor de venda como contrato total ou escopo LTC-M ativo;
-7. natureza reutilizável ou pontual dos percentuais 30/70;
-8. regras detalhadas de edição e inativação de cadastros;
-9. RPO, RTO, PITR e retenção detalhada;
-10. ferramenta de observabilidade;
-11. estratégia final de RLS e propagação segura do contexto de autorização;
-12. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
+2. periodicidade, SLA e data de corte das atualizações;
+3. política de conversão monetária, incluindo taxa, fonte e data;
+4. agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
+5. significado do valor de venda como contrato total ou escopo LTC-M ativo;
+6. natureza reutilizável ou pontual dos percentuais 30/70;
+7. reutilização de códigos e ciclo detalhado após inativação;
+8. RPO, RTO, PITR e retenção detalhada;
+9. ferramenta de observabilidade;
+10. estratégia final de RLS e propagação segura do contexto de autorização;
+11. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
 
 ---
 

@@ -222,9 +222,11 @@ Perfis iniciais aprovados:
 - `editor`;
 - `admin`.
 
-Somente `admin` pode aprovar, bloquear e reabrir previsões. A matriz completa de leitura, edição,
-inativação e administração permanece pendente. Nenhuma permissão de exclusão definitiva é
-presumida.
+Somente `admin` pode aprovar, bloquear, reabrir ou devolver previsões, inativar registros e
+administrar usuários. `editor` mantém cadastros ativos, rascunhos, realizados e importações;
+`viewer` lê somente dados oficiais/aprovados. Exclusão física não integra o sistema. A matriz
+completa aprovada está em
+[`database/versioning-audit-workflow-p007.md`](database/versioning-audit-workflow-p007.md).
 
 ### Identidade interna
 
@@ -455,7 +457,6 @@ Essa conclusão não abrange as decisões operacionais ainda listadas abaixo.
 ## 15. Decisões pendentes
 
 - biblioteca de acesso ao PostgreSQL;
-- matriz completa de permissões, especialmente exclusão e inativação;
 - periodicidade, SLA e data de corte das atualizações;
 - política de conversão monetária;
 - agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;

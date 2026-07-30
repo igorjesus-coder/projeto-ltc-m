@@ -54,7 +54,7 @@ test('rejeita comandos proibidos, DML e SQL dinâmico', () => {
   `);
 
   assert.ok(issues.some((issue) => issue.includes('INSERT')));
-  assert.ok(issues.some((issue) => issue.includes('ALTER TABLE')));
+  assert.ok(issues.some((issue) => issue.includes('fora do escopo P007')));
   assert.ok(issues.some((issue) => issue.includes('bloco dinâmico')));
 });
 
@@ -87,7 +87,97 @@ test('rejeita ALTER TABLE não aditivo', () => {
     alter table ltc_m.projects add column external_code text;
   `);
 
-  assert.ok(issues.some((issue) => issue.includes('ADD CONSTRAINT')));
+  assert.ok(issues.some((issue) => issue.includes('fora do escopo P007')));
+});
+
+test('aceita colunas, enum, função e trigger estritamente aprovados para P007', () => {
+  const issues = scanMigrationText(`
+    alter type ltc_m.plan_status
+      add value 'pending_approval' after 'draft';
+    alter table ltc_m.app_users
+      add column row_version bigint not null default 1,
+      add constraint ck_app_users_row_version check (row_version > 0);
+    create function ltc_m.current_actor_id(p_required boolean default false)
+    returns uuid
+    language plpgsql
+    security invoker
+    set search_path = ''
+    as $function$
+    begin
+      update ltc_m.app_users
+      set row_version = row_version + 1
+      where false;
+      return null;
+    end;
+    $function$;
+    create trigger trg_example
+    before update on ltc_m.app_users
+    for each row execute function ltc_m.current_actor_id();
+  `);
+
+  assert.deepEqual(issues, []);
+});
+
+test('rejeita função insegura, SECURITY DEFINER não aprovado e trigger externo', () => {
+  const issues = scanMigrationText(`
+    create function ltc_m.unapproved()
+    returns void
+    language plpgsql
+    security definer
+    set search_path = ''
+    as $function$
+    begin
+      execute 'update public.example set value = 1';
+    end;
+    $function$;
+    create trigger trg_external
+    before update on public.example
+    for each row execute function ltc_m.unapproved();
+  `);
+
+  assert.ok(issues.some((issue) => issue.includes('SECURITY DEFINER')));
+  assert.ok(issues.some((issue) => issue.includes('SQL dinâmico')));
+  assert.ok(issues.some((issue) => issue.includes('schema externo')));
+  assert.ok(issues.some((issue) => issue.includes('trigger')));
+});
+
+test('inspeciona CREATE OR REPLACE FUNCTION com as mesmas regras de segurança', () => {
+  const valid = scanMigrationText(`
+    create or replace function ltc_m.workflow_guard_active(p_action text)
+    returns boolean
+    language sql
+    security invoker
+    set search_path = ''
+    as $function$
+      select coalesce(p_action = 'submit', false);
+    $function$;
+  `);
+  const external = scanMigrationText(`
+    create or replace function public.workflow_guard_active(p_action text)
+    returns boolean
+    language sql
+    security invoker
+    set search_path = ''
+    as $function$
+      select true;
+    $function$;
+  `);
+
+  assert.deepEqual(valid, []);
+  assert.ok(external.some((issue) => issue.includes('schema externo')));
+  assert.ok(external.some((issue) => issue.includes('sem qualificação')));
+});
+
+test('rejeita RLS, policy e alterações de enum fora do fluxo P007', () => {
+  const issues = scanMigrationText(`
+    alter table ltc_m.projects enable row level security;
+    create policy projects_policy on ltc_m.projects for select using (true);
+    alter type ltc_m.plan_status add value 'invented';
+  `);
+
+  assert.ok(issues.some((issue) => issue.includes('RLS')));
+  assert.ok(issues.some((issue) => issue.includes('policy')));
+  assert.ok(issues.some((issue) => issue.includes('ALTER TYPE')));
 });
 
 test('rejeita schemas externos e objetos não qualificados', () => {
