@@ -44,6 +44,11 @@ desenvolvimento compartilhado. O schema `ltc_m` foi criado com o núcleo relacio
 fingerprint dos metadados preexistentes permaneceu idêntico. O relatório completo está em
 [`database/post-application-report.md`](database/post-application-report.md).
 
+Em 2026-07-30, a P005 aplicou duas vezes o seed transacional de `BRL` e `US`, comprovando
+idempotência. `US = Unidade e Serviço`; nenhuma moeda ou unidade adicional foi criada, as tabelas
+operacionais permaneceram vazias e o fingerprint externo continuou idêntico. O relatório está em
+[`database/seed-post-application-report.md`](database/seed-post-application-report.md).
+
 ## 1. Responsabilidades dos ambientes
 
 ### Desenvolvimento remoto

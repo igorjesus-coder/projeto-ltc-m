@@ -74,9 +74,13 @@ A consulta read-only
 metadados técnicos. Definições de funções, views, constraints, índices, triggers e policies são
 representadas por hash, sem retornar seus textos.
 
-O coletor `scripts/collect-db-inventory.mjs` normaliza e ordena os registros. O fingerprint
-SHA-256 exclui `ltc_m` e `supabase_migrations`, permitindo comparar os objetos preexistentes sem
-considerar a baseline ou o registro técnico da CLI.
+O coletor `scripts/collect-db-inventory.mjs` normaliza e ordena os registros. Ele mantém o
+fingerprint SHA-256 externo compatível com a P004 e também calcula fingerprints separados para
+`ltc_m` e para `supabase_migrations`. A consulta inclui o histórico sanitizado de versões de
+migration, sem retornar SQL em texto aberto.
+
+Os valores controlados da P005, seu scanner e o procedimento de aplicação estão documentados em
+[`seeds.md`](seeds.md).
 
 ## Rollback manual
 

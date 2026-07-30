@@ -33,12 +33,22 @@ export function normalizeInventoryRows(rows) {
     });
 }
 
-export function fingerprintExternalRows(rows) {
-  const externalRows = normalizeInventoryRows(rows).filter(
-    (row) => !EXCLUDED_FINGERPRINT_SCHEMAS.has(row.schema_name),
-  );
-  const canonical = JSON.stringify(externalRows);
+function fingerprintRows(rows, predicate) {
+  const selectedRows = normalizeInventoryRows(rows).filter(predicate);
+  const canonical = JSON.stringify(selectedRows);
   return createHash('sha256').update(canonical, 'utf8').digest('hex').toUpperCase();
+}
+
+export function fingerprintExternalRows(rows) {
+  return fingerprintRows(rows, (row) => !EXCLUDED_FINGERPRINT_SCHEMAS.has(row.schema_name));
+}
+
+export function fingerprintLtcmRows(rows) {
+  return fingerprintRows(rows, (row) => row.schema_name === 'ltc_m');
+}
+
+export function fingerprintMigrationRows(rows) {
+  return fingerprintRows(rows, (row) => row.schema_name === 'supabase_migrations');
 }
 
 export function summarizeInventory(rows) {
@@ -54,6 +64,7 @@ export function summarizeInventory(rows) {
   return {
     totalObjects: normalized.length,
     ltcmObjects: normalized.filter((row) => row.schema_name === 'ltc_m').length,
+    migrationObjects: normalized.filter((row) => row.schema_name === 'supabase_migrations').length,
     byKind: Object.fromEntries(
       Object.entries(byKind).sort(([left], [right]) => compareText(left, right)),
     ),
@@ -162,6 +173,8 @@ function main() {
   const objects = normalizeInventoryRows(rows);
   const summary = summarizeInventory(objects);
   const externalFingerprint = fingerprintExternalRows(objects);
+  const ltcmFingerprint = fingerprintLtcmRows(objects);
+  const migrationFingerprint = fingerprintMigrationRows(objects);
   const document = {
     formatVersion: 1,
     phase: options.phase,
@@ -174,6 +187,23 @@ function main() {
       excludedSchemas: [...EXCLUDED_FINGERPRINT_SCHEMAS].sort(),
       value: externalFingerprint,
     },
+    fingerprints: {
+      external: {
+        algorithm: 'SHA-256',
+        excludedSchemas: [...EXCLUDED_FINGERPRINT_SCHEMAS].sort(),
+        value: externalFingerprint,
+      },
+      ltcm: {
+        algorithm: 'SHA-256',
+        includedSchemas: ['ltc_m'],
+        value: ltcmFingerprint,
+      },
+      migrationHistory: {
+        algorithm: 'SHA-256',
+        includedSchemas: ['supabase_migrations'],
+        value: migrationFingerprint,
+      },
+    },
     summary,
     objects,
   };
@@ -184,6 +214,8 @@ function main() {
   console.log(`Inventário ${options.phase}: ${summary.totalObjects} metadados`);
   console.log(`Objetos ltc_m: ${summary.ltcmObjects}`);
   console.log(`Fingerprint externo: ${externalFingerprint}`);
+  console.log(`Fingerprint ltc_m: ${ltcmFingerprint}`);
+  console.log(`Fingerprint de migrations: ${migrationFingerprint}`);
 }
 
 const currentFile = fileURLToPath(import.meta.url);

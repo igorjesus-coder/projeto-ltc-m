@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import {
   fingerprintExternalRows,
+  fingerprintLtcmRows,
+  fingerprintMigrationRows,
   normalizeInventoryRows,
   summarizeInventory,
 } from './collect-db-inventory.mjs';
@@ -65,10 +67,23 @@ test('fingerprint muda quando metadado externo muda', () => {
   assert.notEqual(fingerprintExternalRows(changed), baseline);
 });
 
+test('fingerprints de ltc_m e migrations são calculados separadamente', () => {
+  const ltcmBaseline = fingerprintLtcmRows(rows);
+  const migrationsBaseline = fingerprintMigrationRows(rows);
+  const withChangedLtcm = rows.map((row) =>
+    row.schema_name === 'ltc_m' ? { ...row, definition_hash: 'CHANGED' } : row,
+  );
+
+  assert.notEqual(fingerprintLtcmRows(withChangedLtcm), ltcmBaseline);
+  assert.equal(fingerprintMigrationRows(withChangedLtcm), migrationsBaseline);
+  assert.notEqual(ltcmBaseline, migrationsBaseline);
+});
+
 test('sumário contabiliza objetos e schemas', () => {
   assert.deepEqual(summarizeInventory(rows), {
     totalObjects: 3,
     ltcmObjects: 1,
+    migrationObjects: 1,
     byKind: { schema: 1, table: 2 },
     bySchema: { ltc_m: 1, public: 1, supabase_migrations: 1 },
   });

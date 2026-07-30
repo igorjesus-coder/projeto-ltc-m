@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "check": "npm run env:check && npm run migrations:check && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "check": "npm run env:check && npm run migrations:check && npm run seeds:check && npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "db:reset": "supabase db reset",
     "db:start": "supabase start",
     "db:status": "supabase status",
@@ -19,9 +19,11 @@
     "format:check": "prettier --check .",
     "lint": "npm run lint --workspaces --if-present",
     "migrations:check": "node scripts/check-migrations.mjs",
-    "test": "npm run test:env && npm run test:migrations && npm run test --workspaces --if-present",
+    "seeds:check": "node scripts/check-seeds.mjs",
+    "test": "npm run test:env && npm run test:migrations && npm run test:seeds && npm run test --workspaces --if-present",
     "test:env": "node --test scripts/check-env.test.mjs",
     "test:migrations": "node --test scripts/check-migrations.test.mjs scripts/collect-db-inventory.test.mjs",
+    "test:seeds": "node --test scripts/check-seeds.test.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "engines": {

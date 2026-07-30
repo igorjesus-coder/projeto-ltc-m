@@ -289,7 +289,7 @@ Exemplos de unidade inicial:
 
 - `UN` — Unidade;
 - `SERV` — Serviço;
-- `US` — Unidade de Serviço, após confirmação da regra de negócio.
+- `US` — Unidade e Serviço.
 
 #### `import_batches` e `import_row_errors`
 Controle das importações futuras:
@@ -862,17 +862,16 @@ Fora do escopo:
 
 1. biblioteca de acesso ao PostgreSQL;
 2. matriz completa de permissões, especialmente exclusão e inativação;
-3. significado oficial da unidade `US`;
-4. periodicidade, SLA e data de corte das atualizações;
-5. política de conversão monetária, incluindo taxa, fonte e data;
-6. agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
-7. significado do valor de venda como contrato total ou escopo LTC-M ativo;
-8. natureza reutilizável ou pontual dos percentuais 30/70;
-9. regras detalhadas de edição e inativação de cadastros;
-10. RPO, RTO, PITR e retenção detalhada;
-11. ferramenta de observabilidade;
-12. estratégia final de RLS e propagação segura do contexto de autorização;
-13. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
+3. periodicidade, SLA e data de corte das atualizações;
+4. política de conversão monetária, incluindo taxa, fonte e data;
+5. agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
+6. significado do valor de venda como contrato total ou escopo LTC-M ativo;
+7. natureza reutilizável ou pontual dos percentuais 30/70;
+8. regras detalhadas de edição e inativação de cadastros;
+9. RPO, RTO, PITR e retenção detalhada;
+10. ferramenta de observabilidade;
+11. estratégia final de RLS e propagação segura do contexto de autorização;
+12. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
 
 ---
 

@@ -456,7 +456,6 @@ Essa conclusão não abrange as decisões operacionais ainda listadas abaixo.
 
 - biblioteca de acesso ao PostgreSQL;
 - matriz completa de permissões, especialmente exclusão e inativação;
-- significado oficial da unidade `US`;
 - periodicidade, SLA e data de corte das atualizações;
 - política de conversão monetária;
 - agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;

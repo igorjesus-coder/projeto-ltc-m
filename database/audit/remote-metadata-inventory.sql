@@ -255,6 +255,30 @@ inventory as (
         on pg_class.oid = pg_policy.polrelid
     join user_schemas
         on user_schemas.oid = pg_class.relnamespace
+
+    union all
+
+    select
+        'migration_history',
+        'supabase_migrations',
+        schema_migrations.version,
+        'statement_count='
+            || pg_catalog.cardinality(schema_migrations.statements),
+        pg_catalog.md5(
+            pg_catalog.concat_ws(
+                '|',
+                schema_migrations.version,
+                coalesce(
+                    pg_catalog.array_to_string(
+                        schema_migrations.statements,
+                        E'\n'
+                    ),
+                    ''
+                ),
+                coalesce(schema_migrations.name, '')
+            )
+        )
+    from supabase_migrations.schema_migrations
 )
 select
     inventory.object_kind,

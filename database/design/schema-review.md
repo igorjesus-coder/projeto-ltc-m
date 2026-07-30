@@ -195,7 +195,8 @@ uma escolha pendente em arquitetura aprovada.
 2. matriz completa de leitura, edição, inativação e administração;
 3. roles PostgreSQL, ownership e grants de menor privilégio para backend e Tableau;
 4. adoção de RLS como defesa em profundidade e propagação segura do contexto Auth0;
-5. significado oficial da unidade `US`;
+5. significado oficial da unidade `US` (resolvido posteriormente na P005 como
+   `US = Unidade e Serviço`);
 6. normalização e formato de `tax_id`;
 7. formato exato permitido para `project_code`;
 8. ciclo detalhado de estados de projeto, plano, aprovação, bloqueio e reabertura;

@@ -78,6 +78,8 @@ npm run typecheck
 npm test
 npm run build
 npm run env:check
+npm run migrations:check
+npm run seeds:check
 ```
 
 Execute tudo em sequência com:
@@ -98,12 +100,15 @@ npm run db:stop
 comando deste repositório aponta para produção por padrão.
 
 Novas migrations ficam em `supabase/migrations` e testes SQL em `supabase/tests`. O arquivo
-`supabase/seed.sql` deve conter apenas dados sintéticos e não sensíveis.
+`supabase/seed.sql` contém somente valores controlados aprovados, determinísticos e não
+sensíveis. A estratégia de idempotência, aplicação e divergências está em
+[`docs/database/seeds.md`](docs/database/seeds.md).
 
 Valide toda migration antes de qualquer dry-run ou aplicação:
 
 ```bash
 npm run migrations:check
+npm run seeds:check
 ```
 
 Desenhos de banco ainda não promovidos a migration ficam em `database/design`. O
@@ -129,7 +134,7 @@ matriz de objetos e o rollback manual da P004 estão documentados em
 |-- supabase/
 |   |-- migrations/       # alterações incrementais do banco
 |   |-- tests/            # testes SQL
-|   `-- seed.sql          # dados locais sintéticos
+|   `-- seed.sql          # valores controlados aprovados
 |-- tests/                # testes transversais
 |-- AGENTS.md
 `-- package.json
