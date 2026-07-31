@@ -1,0 +1,23 @@
+{
+  "task": "P008 / 1.08",
+  "decisionDate": "2026-07-31",
+  "role": "ltc_m_runtime",
+  "preflight": [
+    {
+      "member": "postgres",
+      "grantor": "supabase_admin",
+      "admin_option": true,
+      "inherit_option": false,
+      "set_option": false
+    }
+  ],
+  "temporaryIntermediate": {
+    "additionalGrantor": "postgres",
+    "admin_option": false,
+    "inherit_option": false,
+    "set_option": true
+  },
+  "final": "preflight",
+  "expectedMemberUsage": false,
+  "expectedMemberSet": false
+}

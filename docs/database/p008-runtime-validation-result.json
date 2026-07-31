@@ -1,0 +1,459 @@
+{
+  "formatVersion": 1,
+  "task": "P008 / 1.08 — validação dinâmica ltc_m_runtime",
+  "runId": "r20260731-d28-final",
+  "target": {
+    "project": "Funcionarios",
+    "region": "us-east-1"
+  },
+  "decisions": ["D26", "D27", "D28"],
+  "startedAtUtc": "2026-07-31T18:32:36.476Z",
+  "status": "Concluída",
+  "stages": [
+    {
+      "name": "fingerprint_pre",
+      "ok": true,
+      "durationMs": 0,
+      "connection": "inventory-pre"
+    },
+    {
+      "name": "d26_preflight",
+      "ok": true,
+      "durationMs": 9692,
+      "connection": "connection-01"
+    },
+    {
+      "name": "migration_alignment_pre",
+      "ok": true,
+      "durationMs": 10410,
+      "connection": "migration-list"
+    },
+    {
+      "name": "d27_reversibility_proof",
+      "ok": true,
+      "durationMs": 9161,
+      "connection": "connection-02"
+    },
+    {
+      "name": "d27_temporary_grant",
+      "ok": true,
+      "durationMs": 9042,
+      "connection": "connection-03"
+    },
+    {
+      "name": "invalid_context",
+      "ok": true,
+      "durationMs": 9191,
+      "connection": "connection-04"
+    },
+    {
+      "name": "viewer",
+      "ok": true,
+      "durationMs": 9070,
+      "connection": "connection-05"
+    },
+    {
+      "name": "editor_workflow_p007",
+      "ok": true,
+      "durationMs": 9604,
+      "connection": "connection-06"
+    },
+    {
+      "name": "editor_dml",
+      "ok": true,
+      "durationMs": 9038,
+      "connection": "connection-07"
+    },
+    {
+      "name": "admin_d24",
+      "ok": true,
+      "durationMs": 9896,
+      "connection": "connection-08"
+    },
+    {
+      "name": "admin_d23_sequential",
+      "ok": true,
+      "durationMs": 9331,
+      "connection": "connection-09"
+    },
+    {
+      "name": "p007_full_regression",
+      "ok": true,
+      "durationMs": 9317,
+      "connection": "connection-10"
+    },
+    {
+      "name": "p008_comprehensive_runtime",
+      "ok": true,
+      "durationMs": 9631,
+      "connection": "connection-11"
+    },
+    {
+      "name": "d23_concurrency",
+      "ok": true,
+      "durationMs": 70072,
+      "connection": "connections-12-and-13"
+    },
+    {
+      "name": "d27_cleanup_finally",
+      "ok": true,
+      "durationMs": 9826,
+      "connection": "connection-finally-01"
+    },
+    {
+      "name": "final_state",
+      "ok": true,
+      "durationMs": 9090,
+      "connection": "connection-finally-02"
+    },
+    {
+      "name": "structural_postcheck",
+      "ok": true,
+      "durationMs": 9690,
+      "connection": "connection-finally-03"
+    },
+    {
+      "name": "fingerprint_post",
+      "ok": true,
+      "durationMs": 0,
+      "connection": "inventory-post"
+    }
+  ],
+  "fingerprints": {
+    "expected": {
+      "external": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95",
+      "ltcm": "F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154",
+      "migrations": "A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3"
+    },
+    "before": {
+      "external": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95",
+      "ltcm": "F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154",
+      "migrations": "A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3"
+    },
+    "after": {
+      "external": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95",
+      "ltcm": "F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154",
+      "migrations": "A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3"
+    }
+  },
+  "migrationHashes": {
+    "20260729163000_create_ltcm_relational_core.sql": "FEBE19BC524A467263415415300EA72FABDB42411F240E1F776D785ECA73CABF",
+    "20260730103002_add_ltcm_core_query_indexes.sql": "DC7E651D290C443F5C34F4C7D61071B1BE38CDD88E67EAC0B8EBB10E09D59339",
+    "20260730144303_add_ltcm_workflow_enum_values.sql": "6E8588D4538B1D32CAEBDC425C2CEC505011309C1B7D5AA0F46A4801FE021B7E",
+    "20260730144304_add_ltcm_versioning_audit_workflow.sql": "7891D5FFBC35A9C8D55B0824E2C692F47C261ECFBC02BCF8BA6C58DAEE017361",
+    "20260730155749_fix_ltcm_workflow_guard_fail_closed.sql": "C7CB68A7C93734F5D667089DBC6EBE10C866889AC762E8A26638B2D66EA07FE3",
+    "20260730163419_fix_ltcm_admin_inactivation_columns.sql": "04DBB1184E86394B4301766749A9CD16F79C84B7ABBC0531CFBB6B038E70A90F",
+    "20260731103000_add_ltcm_audit_read_event.sql": "B2722B5695786191A40A39745DC7B36DCDF28623DDA0A1E29FFC2A3C4B1661F8",
+    "20260731103001_add_ltcm_runtime_rls_security.sql": "485DB38DE4194F2564C6A22D22B145ECA49710A2340B5EBD39C91990EA5CC14A",
+    "20260731120000_fix_ltcm_runtime_function_acl.sql": "E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8"
+  },
+  "cleanup": {
+    "attempted": true,
+    "succeeded": true,
+    "localLockRemoved": true
+  },
+  "previousAttempts": [
+    {
+      "runId": "r20260731174457-84bbe139",
+      "status": "Bloqueada — reversibilidade da concessão temporária não comprovada",
+      "startedAtUtc": "2026-07-31T17:44:57.649Z",
+      "finishedAtUtc": "2026-07-31T17:45:27.844Z",
+      "failurePhase": "d26_preflight",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 9415,
+          "connection": "connection-01"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": false,
+          "durationMs": 0,
+          "connection": "orchestrator",
+          "detail": "migration 20260729163000 não está alinhada"
+        }
+      ]
+    },
+    {
+      "runId": "r20260731174649-fd38602a",
+      "status": "Parcialmente concluída — harness executado, validação dinâmica incompleta",
+      "startedAtUtc": "2026-07-31T17:46:49.233Z",
+      "finishedAtUtc": "2026-07-31T17:48:41.256Z",
+      "failurePhase": "editor_and_p007_workflow",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 9649,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 10653,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 8635,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 9769,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 8446,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 9710,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_and_p007_workflow",
+          "ok": false,
+          "durationMs": 9015,
+          "connection": "connection-06",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  42501: permission denied for function current_actor_id\\\\nCONTEXT:  PL/pgSQL function ltc_m.maintain_row_metadat"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 10130,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 8229,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 10256,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260731175109-2d8d7e62",
+      "status": "Parcialmente concluída — harness executado, validação dinâmica incompleta",
+      "startedAtUtc": "2026-07-31T17:51:09.500Z",
+      "finishedAtUtc": "2026-07-31T17:56:56.098Z",
+      "failurePhase": "editor_dml",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 8984,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 9955,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 9678,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 15175,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 8397,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 10351,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 8644,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": false,
+          "durationMs": 10497,
+          "connection": "connection-07",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  42501: permission denied for function current_actor_id\\\\nCONTEXT:  PL/pgSQL function ltc_m.maintain_row_metadat"
+        },
+        {
+          "name": "admin_d24",
+          "ok": false,
+          "durationMs": 8612,
+          "connection": "connection-08",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  P0001: P008 isolated: D24 expôs auth_subject.\\\\nCONTEXT:  PL/pgSQL function inline_code_block line 22 at RAISE\\"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": false,
+          "durationMs": 10298,
+          "connection": "connection-09",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  P0001: P008 isolated: D24 expôs auth_subject.\\\\nCONTEXT:  PL/pgSQL function inline_code_block line 44 at RAISE\\"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 8581,
+          "connection": "connection-10"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": false,
+          "durationMs": 10403,
+          "connection": "connection-11",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  P0001: P008-r20260731175109-2d8d7e62 falhou: consulta auditada expôs segredo ou auth_subject.\\\\nCONTEXT:  PL/pg"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": false,
+          "durationMs": 174969,
+          "connection": "connections-12-and-13",
+          "detail": "error\":{\"code\":\"LegacyDbConfigConnectTempRoleError\",\"message\":\"failed to connect as temp role: failed to connect to postgres: effect/sql/SqlError: PgClient: Failed to connect\",\"suggestion\":\"Connect to your database by setting the env var correct"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 9479,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 8175,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 16661,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260731-d27fix01",
+      "status": "Bloqueada — preflight D26 divergente",
+      "startedAtUtc": "2026-07-31T18:01:13.538Z",
+      "finishedAtUtc": "2026-07-31T18:01:14.044Z",
+      "failurePhase": "preflight",
+      "stages": [
+        {
+          "name": "preflight",
+          "ok": false,
+          "durationMs": 0,
+          "connection": "orchestrator",
+          "detail": "a consulta remota read-only falhou"
+        }
+      ]
+    }
+  ],
+  "migrations": [
+    {
+      "local": "20260729163000",
+      "remote": "20260729163000",
+      "time": "2026-07-29 16:30:00"
+    },
+    {
+      "local": "20260730103002",
+      "remote": "20260730103002",
+      "time": "2026-07-30 10:30:02"
+    },
+    {
+      "local": "20260730144303",
+      "remote": "20260730144303",
+      "time": "2026-07-30 14:43:03"
+    },
+    {
+      "local": "20260730144304",
+      "remote": "20260730144304",
+      "time": "2026-07-30 14:43:04"
+    },
+    {
+      "local": "20260730155749",
+      "remote": "20260730155749",
+      "time": "2026-07-30 15:57:49"
+    },
+    {
+      "local": "20260730163419",
+      "remote": "20260730163419",
+      "time": "2026-07-30 16:34:19"
+    },
+    {
+      "local": "20260731103000",
+      "remote": "20260731103000",
+      "time": "2026-07-31 10:30:00"
+    },
+    {
+      "local": "20260731103001",
+      "remote": "20260731103001",
+      "time": "2026-07-31 10:30:01"
+    },
+    {
+      "local": "20260731120000",
+      "remote": "20260731120000",
+      "time": "2026-07-31 12:00:00"
+    }
+  ],
+  "concurrency": {
+    "individualDurationMs": [39240, 55056],
+    "staggerMs": 15000,
+    "durationDeltaMs": 15816
+  },
+  "failurePhase": null,
+  "finishedAtUtc": "2026-07-31T18:36:27.526Z"
+}

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -18,14 +19,7 @@ const FORBIDDEN_PATTERNS = [
   [/\bcopy\b/i, 'comando COPY'],
   [/\balter\s+schema\b/i, 'comando ALTER SCHEMA'],
   [/\balter\s+role\b/i, 'comando ALTER ROLE'],
-  [/\balter\s+default\s+privileges\b/i, 'comando ALTER DEFAULT PRIVILEGES'],
-  [/\bcreate\s+role\b/i, 'comando CREATE ROLE'],
   [/\bdrop\s+role\b/i, 'comando DROP ROLE'],
-  [/\bgrant\b/i, 'comando GRANT'],
-  [/\brevoke\b/i, 'comando REVOKE'],
-  [/\benable\s+row\s+level\s+security\b/i, 'RLS proibida'],
-  [/\bforce\s+row\s+level\s+security\b/i, 'RLS proibida'],
-  [/\bcreate\s+policy\b/i, 'policy proibida'],
   [/\balter\s+policy\b/i, 'policy proibida'],
   [/\bdrop\s+policy\b/i, 'policy proibida'],
   [/\bcreate\s+extension\b/i, 'comando CREATE EXTENSION'],
@@ -33,7 +27,6 @@ const FORBIDDEN_PATTERNS = [
   [/\bcreate\s+publication\b/i, 'comando CREATE PUBLICATION'],
   [/\balter\s+publication\b/i, 'alteração de publication'],
   [/\bcreate\s+procedure\b/i, 'procedure proibida'],
-  [/\bdo\b/i, 'bloco dinâmico DO'],
   [/\bcreate\s+(?:unique\s+)?index\s+concurrently\b/i, 'CREATE INDEX CONCURRENTLY'],
   [/\b(?:real|float4|float8|float|double\s+precision|money)\b/i, 'tipo financeiro impreciso'],
   [/\b(?:auth\.users|auth\.uid\s*\()/i, 'dependência de Supabase Auth'],
@@ -72,6 +65,62 @@ const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.approve_plan_version',
   'ltc_m.lock_plan_version',
   'ltc_m.reopen_plan_version',
+  'ltc_m.set_actor_context',
+  'ltc_m.authorization_context',
+  'ltc_m.current_actor_id',
+  'ltc_m.enforce_admin_inactivation',
+  'ltc_m.read_audit_log',
+]);
+
+const APPLIED_MIGRATION_HASHES = new Map([
+  [
+    '20260729163000_create_ltcm_relational_core.sql',
+    'FEBE19BC524A467263415415300EA72FABDB42411F240E1F776D785ECA73CABF',
+  ],
+  [
+    '20260730103002_add_ltcm_core_query_indexes.sql',
+    'DC7E651D290C443F5C34F4C7D61071B1BE38CDD88E67EAC0B8EBB10E09D59339',
+  ],
+  [
+    '20260730144303_add_ltcm_workflow_enum_values.sql',
+    '6E8588D4538B1D32CAEBDC425C2CEC505011309C1B7D5AA0F46A4801FE021B7E',
+  ],
+  [
+    '20260730144304_add_ltcm_versioning_audit_workflow.sql',
+    '7891D5FFBC35A9C8D55B0824E2C692F47C261ECFBC02BCF8BA6C58DAEE017361',
+  ],
+  [
+    '20260730155749_fix_ltcm_workflow_guard_fail_closed.sql',
+    'C7CB68A7C93734F5D667089DBC6EBE10C866889AC762E8A26638B2D66EA07FE3',
+  ],
+  [
+    '20260730163419_fix_ltcm_admin_inactivation_columns.sql',
+    '04DBB1184E86394B4301766749A9CD16F79C84B7ABBC0531CFBB6B038E70A90F',
+  ],
+  [
+    '20260731103000_add_ltcm_audit_read_event.sql',
+    'B2722B5695786191A40A39745DC7B36DCDF28623DDA0A1E29FFC2A3C4B1661F8',
+  ],
+  [
+    '20260731103001_add_ltcm_runtime_rls_security.sql',
+    '485DB38DE4194F2564C6A22D22B145ECA49710A2340B5EBD39C91990EA5CC14A',
+  ],
+]);
+
+const P008_RLS_TABLES = new Set([
+  'app_users',
+  'currencies',
+  'units',
+  'clients',
+  'projects',
+  'project_items',
+  'plan_versions',
+  'financial_plan_scopes',
+  'financial_plan_lines',
+  'financial_actual_events',
+  'import_batches',
+  'import_row_errors',
+  'audit_log',
 ]);
 
 function consumeDollarTag(sql, index) {
@@ -203,6 +252,18 @@ function requireAdditiveAlterTables(sql, issues) {
     }
 
     const tableName = tableMatch[1].toLowerCase();
+    if (/\b(?:enable|force)\s+row\s+level\s+security\s*;/i.test(statement)) {
+      if (
+        !P008_RLS_TABLES.has(tableName) ||
+        !/^\s*alter\s+table\s+ltc_m\.[a-z_][a-z0-9_]*\s+(?:enable|force)\s+row\s+level\s+security\s*;/i.test(
+          statement,
+        )
+      ) {
+        issues.push('RLS permitida somente nas 13 tabelas ltc_m aprovadas');
+      }
+      continue;
+    }
+
     for (const columnMatch of statement.matchAll(/\badd\s+column\s+([a-z_][a-z0-9_]*)\b/gi)) {
       const allowedColumns = P007_COLUMNS.get(tableName);
       if (!allowedColumns?.has(columnMatch[1].toLowerCase())) {
@@ -242,6 +303,9 @@ function requireApprovedAlterTypes(sql, issues) {
         match[0],
       ) &&
       !/^\s*alter\s+type\s+ltc_m\.audit_operation\s+add\s+value\s+'(?:SUBMIT|RETURN)'\s+after\s+'(?:UPDATE|SUBMIT)'\s*;/i.test(
+        match[0],
+      ) &&
+      !/^\s*alter\s+type\s+ltc_m\.audit_operation\s+add\s+value\s+'AUDIT_READ'\s+after\s+'RETURN'\s*;/i.test(
         match[0],
       )
     ) {
@@ -298,6 +362,10 @@ function requireSafeFunctions(sql, issues) {
 
   for (const body of extractDollarBodies(sql)) {
     const strippedBody = stripSqlNoise(body);
+    const approvedRuntimeRoleExecute =
+      /execute\s+'create role ltc_m_runtime nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls'\s*;/i.test(
+        body,
+      ) && (body.match(/\bexecute\b/gi) ?? []).length === 1;
     for (const [pattern, message] of [
       [/\bexecute\b/i, 'SQL dinâmico EXECUTE em função'],
       [/\b(?:drop|truncate|alter|grant|revoke)\b/i, 'DDL ou privilégio proibido em função'],
@@ -309,7 +377,110 @@ function requireSafeFunctions(sql, issues) {
       [/\binsert\s+into\s+(?!ltc_m\.)/i, 'INSERT não qualificado em função'],
       [/\bupdate\s+(?!ltc_m\.)/i, 'UPDATE não qualificado em função'],
     ]) {
+      if (message === 'SQL dinâmico EXECUTE em função' && approvedRuntimeRoleExecute) continue;
       if (pattern.test(strippedBody)) issues.push(message);
+    }
+  }
+}
+
+function requireP008Security(sql, stripped, issues) {
+  const approvedRoleCreate =
+    'create role ltc_m_runtime nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls';
+  const doCount = (stripped.match(/\bdo\b/gi) ?? []).length;
+
+  if (doCount > 0) {
+    const safeRoleBlock =
+      doCount === 1 &&
+      /\bdo\s+\$runtime_role\$/i.test(sql) &&
+      sql.toLowerCase().includes(`execute '${approvedRoleCreate}'`) &&
+      /pg_roles\.rolname\s*=\s*'ltc_m_runtime'/i.test(sql) &&
+      /pg_auth_members/i.test(sql) &&
+      /raise\s+exception/i.test(sql);
+    if (!safeRoleBlock)
+      issues.push('DO permitido somente para criação idempotente de ltc_m_runtime');
+  }
+
+  const roleSqlWithoutApproved = sql.toLowerCase().replace(approvedRoleCreate, '');
+  if (/\bcreate\s+role\b/i.test(roleSqlWithoutApproved)) {
+    issues.push('somente a role ltc_m_runtime pode ser criada');
+  }
+  if (/\bowner\s+to\s+ltc_m_runtime\b/i.test(stripped)) {
+    issues.push('ltc_m_runtime não pode receber ownership');
+  }
+  if (/\b(?:request\.jwt\.claims|auth\.uid\s*\(|auth\.users)\b/i.test(sql)) {
+    issues.push('autorização não pode usar JWT ou Supabase Auth no banco');
+  }
+  if (/current_setting\s*\(\s*'[^']*(?:jwt|role)[^']*'/i.test(sql)) {
+    issues.push('role ou JWT em GUC não pode ser fonte de autorização');
+  }
+
+  const policyKeys = new Set();
+  for (const match of stripped.matchAll(/\bcreate\s+policy\b[\s\S]*?;/gi)) {
+    const statement = match[0];
+    const header = statement.match(
+      /^\s*create\s+policy\s+([a-z_][a-z0-9_]*)\s+on\s+ltc_m\.([a-z_][a-z0-9_]*)\s+for\s+(select|insert|update|delete|all)\s+to\s+ltc_m_runtime\b/i,
+    );
+    if (!header) {
+      issues.push('policy deve pertencer a ltc_m, ser operacional e usar ltc_m_runtime');
+      continue;
+    }
+
+    const [, , tableNameRaw, commandRaw] = header;
+    const tableName = tableNameRaw.toLowerCase();
+    const command = commandRaw.toLowerCase();
+    if (!P008_RLS_TABLES.has(tableName)) issues.push('policy fora das 13 tabelas ltc_m');
+    if (command === 'delete' || command === 'all')
+      issues.push('policy de DELETE ou FOR ALL proibida');
+    if ((command === 'select' || command === 'update') && !/\busing\s*\(/i.test(statement)) {
+      issues.push('policy SELECT/UPDATE exige USING');
+    }
+    if ((command === 'insert' || command === 'update') && !/\bwith\s+check\s*\(/i.test(statement)) {
+      issues.push('policy INSERT/UPDATE exige WITH CHECK');
+    }
+
+    const key = `${tableName}:${command}`;
+    if (policyKeys.has(key)) issues.push(`policies permissivas sobrepostas: ${key}`);
+    policyKeys.add(key);
+  }
+
+  for (const match of stripped.matchAll(/\bgrant\b[\s\S]*?;/gi)) {
+    const statement = match[0];
+    if (!/\bto\s+ltc_m_runtime\s*;/i.test(statement)) {
+      issues.push('GRANT permitido somente para ltc_m_runtime');
+    }
+    if (!/\b(?:schema\s+ltc_m|(?:table|sequence|function)\s+ltc_m\.)/i.test(statement)) {
+      issues.push('GRANT permitido somente em objetos ltc_m');
+    }
+    if (/\b(?:delete|truncate|trigger|references|create)\b/i.test(statement)) {
+      issues.push('GRANT contém privilégio proibido');
+    }
+  }
+
+  for (const match of stripped.matchAll(/\brevoke\b[\s\S]*?;/gi)) {
+    const statement = match[0];
+    if (
+      /^\s*revoke\s+execute\s+on\s+functions\s+from\s+public\s*;/i.test(statement) &&
+      /\balter\s+default\s+privileges\s+in\s+schema\s+ltc_m\s+revoke\s+execute\s+on\s+functions\s+from\s+public\s*;/i.test(
+        stripped,
+      )
+    ) {
+      continue;
+    }
+    if (!/\bfrom\s+(?:public|ltc_m_runtime)\s*;/i.test(statement)) {
+      issues.push('REVOKE permitido somente de PUBLIC ou ltc_m_runtime');
+    }
+    if (!/\b(?:schema\s+ltc_m|in\s+schema\s+ltc_m|function\s+ltc_m\.)/i.test(statement)) {
+      issues.push('REVOKE permitido somente em objetos ltc_m');
+    }
+  }
+
+  for (const match of stripped.matchAll(/\balter\s+default\s+privileges\b[\s\S]*?;/gi)) {
+    if (
+      !/^\s*alter\s+default\s+privileges\s+in\s+schema\s+ltc_m\s+revoke\s+execute\s+on\s+functions\s+from\s+public\s*;/i.test(
+        match[0],
+      )
+    ) {
+      issues.push('ALTER DEFAULT PRIVILEGES fora do deny-by-default aprovado');
     }
   }
 }
@@ -343,6 +514,7 @@ export function scanMigrationText(sql) {
   requireAdditiveAlterTables(stripped, issues);
   requireApprovedAlterTypes(sql, issues);
   requireSafeFunctions(sql, issues);
+  requireP008Security(sql, stripped, issues);
 
   if (/--project-ref\b/i.test(sql) || /\b[a-z0-9]{20}\.supabase\.co\b/i.test(sql)) {
     issues.push('project ref ou endpoint remoto versionado');
@@ -390,6 +562,13 @@ export function checkMigrations(directory) {
     previousTimestamp = timestamp;
 
     const sql = fs.readFileSync(path.join(directory, filename), 'utf8');
+    const appliedHash = APPLIED_MIGRATION_HASHES.get(filename);
+    if (
+      appliedHash &&
+      createHash('sha256').update(sql, 'utf8').digest('hex').toUpperCase() !== appliedHash
+    ) {
+      issues.push(`${filename}: migration aplicada foi alterada`);
+    }
     for (const issue of scanMigrationText(sql)) {
       issues.push(`${filename}: ${issue}`);
     }

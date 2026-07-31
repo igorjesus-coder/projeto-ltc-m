@@ -2,10 +2,10 @@
 
 - Estado: Aceita
 - Data: 31/07/2026
-- Tarefa: P008-PRE — registro documental das decisões D22–D25
+- Tarefa: P008-PRE/P008 — decisões D22–D28 e validação dinâmica controlada
 - Decisão base: complementa o
   [ADR-0002](0002-arquitetura-render-supabase-database-auth0.md)
-- Implementação: P008 ainda não implementado; exige nova execução
+- Implementação: migrations P008 e D28 aplicadas; validação dinâmica remota concluída
 - Escopo: autorização PostgreSQL, último administrador, consulta de auditoria e aplicação remota
 
 ## Contexto
@@ -21,9 +21,10 @@ outro sistema. Objetos de domínio do LTC-M pertencem exclusivamente ao schema `
 backup recuperável disponível para a aplicação do P008, por isso qualquer exceção precisa ser
 específica, explícita e limitada.
 
-Este ADR é a fonte canônica de D22–D25. Ele registra decisões aprovadas pelo responsável do
-projeto em 31/07/2026, mas não cria migration, role, grant, policy ou função e não autoriza uma
-execução fora dos limites de D25.
+Este ADR é a fonte canônica de D22–D28. Ele registra decisões aprovadas pelo responsável do
+projeto em 31/07/2026. D26 aceita a associação administrativa criada automaticamente pelo
+Supabase e D27 autoriza, apenas para validação dinâmica, uma segunda associação temporária e
+reversível, sem nova migration ou novo push.
 
 ## Resumo das decisões
 
@@ -33,10 +34,13 @@ execução fora dos limites de D25.
 | D23 | Decidida | 31/07/2026 | preservação de pelo menos um administrador ativo               |
 | D24 | Decidida | 31/07/2026 | consulta de auditoria somente por função controlada            |
 | D25 | Decidida | 31/07/2026 | aplicação remota controlada do P008 sem backup recuperável     |
+| D26 | Decidida | 31/07/2026 | associação administrativa automática aceita e preservada       |
+| D27 | Decidida | 31/07/2026 | harness temporário para validação dinâmica do runtime          |
+| D28 | Decidida | 31/07/2026 | ACL forward mínima para dependência invoker do runtime         |
 
 ## D22 — Papel PostgreSQL do backend
 
-**Status:** Decidida  
+**Status:** Decidida
 **Data:** 31/07/2026
 
 ### Decisão
@@ -65,7 +69,7 @@ negação por padrão. Nenhuma credencial será criada no repositório ou em mig
 
 ## D23 — Último administrador ativo
 
-**Status:** Decidida  
+**Status:** Decidida
 **Data:** 31/07/2026
 
 ### Decisão
@@ -143,13 +147,85 @@ escrita ou reparo.
 Esta decisão não executa nem implementa o P008. A aplicação depende de uma nova execução que
 observe todos os gates acima.
 
+## D26 — Associação administrativa automática do Supabase
+
+**Status:** Decidida
+**Data:** 31/07/2026
+
+### Decisão
+
+- aceitar como comportamento esperado do ambiente hospedado a associação automática de
+  `ltc_m_runtime` a `postgres` concedida por `supabase_admin`;
+- exigir a forma exata `ADMIN OPTION = true`, `INHERIT OPTION = false` e `SET OPTION = false`;
+- preservar essa associação permanentemente, sem revogá-la, substituí-la ou alterar suas opções;
+- considerar a associação inerte para uso de privilégios: `postgres` possui `MEMBER`, mas não
+  possui `USAGE` nem `SET` sobre `ltc_m_runtime` por meio dela;
+- manter todas as demais exigências de menor privilégio de D22 para `ltc_m_runtime` e para o
+  futuro login real do backend.
+
+### Justificativa e limite
+
+No PostgreSQL 17, a criação de uma role por um papel com `CREATEROLE` pode produzir essa
+associação administrativa sem transmitir herança nem permitir `SET ROLE`. Ela habilita a
+administração da role, mas não autoriza o executor `postgres` a operar como runtime. D26 resolve o
+delta observado após o único push D25 sem ampliar os privilégios efetivos do backend e sem
+autorizar qualquer outra associação permanente.
+
+## D27 — Harness temporário para validação dinâmica de `ltc_m_runtime`
+
+**Status:** Decidida
+**Data:** 31/07/2026
+
+### Decisão
+
+- executar a validação somente por harness versionado, auditável, reproduzível e sem segredos;
+- provar primeiro, dentro de transação revertida, que uma segunda associação pode ser criada com
+  `ADMIN OPTION = false`, `INHERIT OPTION = false`, `SET OPTION = true` e grantor `postgres`, e
+  removida seletivamente com `REVOKE ... GRANTED BY postgres` sem tocar na associação D26;
+- persistir a segunda associação somente depois dessa prova, pelo menor intervalo necessário;
+- usar trava e precondições estritas para impedir dois harnesses concorrentes ou execução diante
+  de drift;
+- executar cada cenário funcional em conexão separada, assumindo `ltc_m_runtime` apenas durante
+  o cenário e usando contexto P007 transacional;
+- cobrir contexto inválido, Viewer, Editor, Admin, workflow P007, D23 sequencial e concorrente,
+  D24 e limpeza;
+- executar a revogação seletiva em bloco `finally`, mesmo após falha funcional;
+- confirmar ao final exatamente a associação D26, `SET=false`, ausência de dados e travas do
+  harness, migrations alinhadas e fingerprint externo inalterado;
+- proibir login persistente de teste, nova migration, novo `db push`, `repair`, reset, pull,
+  migration down, rollback, SQL Editor ou alteração manual fora do harness.
+
+### Justificativa e limite
+
+A associação D26 não permite `SET ROLE`, portanto não serve para comprovar RLS com a identidade
+efetiva do runtime. A segunda associação D27 é uma capacidade operacional efêmera para teste,
+distinguível pelo grantor e removível sem ambiguidade. Ela não é configuração de aplicação, não
+substitui o futuro login do backend e não pode permanecer após a execução.
+
 ## Relação com decisões anteriores e P007
 
-D22–D25 complementam D13, D15 e D16 sem reabrir seus escopos aprovados: preservam Auth0 como
+D22–D27 complementam D13, D15 e D16 sem reabrir seus escopos aprovados: preservam Auth0 como
 fonte de autenticação, o NestJS como fronteira da aplicação, o PostgreSQL do Supabase somente como
 banco e o isolamento de objetos LTC-M em `ltc_m`. Os registros Markdown anteriores não usam de
 forma consistente os identificadores literais D13, D15 e D16; este ADR mantém a referência
 fornecida pelo histórico de aprovação sem renumerar documentos retroativamente.
+
+## D28 — ACL mínima corretiva do runtime
+
+**Status:** Decidida
+**Data:** 31/07/2026
+
+D28 autoriza uma única migration forward no projeto `Funcionarios`, região `us-east-1`, contendo
+somente a revogação de `PUBLIC EXECUTE` e a concessão explícita de `EXECUTE` a
+`ltc_m_runtime` para dependências comprovadas do grafo P007/P008. A auditoria confirmou que o
+trigger invoker `ltc_m.maintain_row_metadata()` chama `ltc_m.current_actor_id(boolean)` durante
+DML do runtime; essa é a única função adicional concedida. A migration não cria/substitui
+funções, policies, tabelas, roles ou memberships, nem concede privilégios fora de `ltc_m`.
+
+O corpo, owner, `SECURITY DEFINER`/`INVOKER` e `search_path` das funções permanecem inalterados.
+`PUBLIC EXECUTE` continua revogado, e `current_actor_id` apenas valida o contexto já existente;
+o grant não concede acesso de tabela nem bypass de RLS. D28 exige preflight, dry-run, exatamente
+um `db push --linked`, comparação ACL antes/depois e reexecução integral do harness D27.
 
 O contexto transacional, a resolução por `app_users.auth_subject`, a matriz de perfis, o workflow
 e a auditoria que o P008 deverá reutilizar estão documentados em
@@ -180,7 +256,9 @@ P007; D22 define a identidade PostgreSQL que ficará sujeita aos grants e à RLS
 
 ## Limites desta decisão documental
 
-O P008 permanece não implementado até nova execução. Este registro não altera SQL, migrations,
-configuração executável, banco remoto, Auth0, frontend, backend ou Tableau. O primeiro admin e o
-login real do backend deverão ser provisionados futuramente por processos operacionais
-controlados; nenhuma senha, token, chave ou connection string é criada aqui.
+As migrations P008 já foram aplicadas; D28 autoriza somente a migration forward ACL descrita acima,
+e D27 limita a validação dinâmica à evidência e à limpeza do harness. O registro não autoriza
+outras migrations, alteração de Auth0,
+frontend, backend ou Tableau. O primeiro admin real e o login real do backend deverão ser
+provisionados futuramente por processos operacionais controlados; nenhuma senha, token, chave ou
+connection string é criada aqui.

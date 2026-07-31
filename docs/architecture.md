@@ -15,7 +15,8 @@ projeto estão em [`project-specification.md`](project-specification.md). O ADR-
 como histórico, mas não deve orientar novas implementações.
 
 As decisões documentais não implementam migrations, tabelas, Auth0, backend, tenant, pipeline ou
-infraestrutura real. D22–D25 estão decididas, mas o P008 depende de execução própria.
+infraestrutura real. D22–D27 estão decididas; as migrations P008 foram aplicadas e a validação
+dinâmica D27 foi concluída após a correção ACL D28, conforme o relatório versionado.
 
 ## Princípios
 
@@ -149,10 +150,13 @@ Responsabilidades do PostgreSQL:
 - integridade entre projetos, itens, planos e realizados;
 - histórico e auditoria de negócio;
 - views analíticas e acumulados;
-- grants e eventual RLS como defesa em profundidade.
+- grants mínimos e RLS forçada como defesa em profundidade.
 
-A API utilizará papel PostgreSQL próprio e de menor privilégio; credenciais administrativas não
-serão usadas em operação normal. Transações serão controladas pela camada de aplicação ou pela
+A API utilizará uma credencial futura associada exclusivamente a `ltc_m_runtime`, papel
+PostgreSQL `NOLOGIN`, sem ownership e sem `BYPASSRLS`; `postgres` e owners não serão usados em
+operação normal. Em cada transação, o backend validará o JWT Auth0, resolverá `auth_subject` em
+`ltc_m.app_users` e inicializará o contexto P007. A RLS revalida ID, subject, estado ativo e role
+armazenada, sem interpretar JWT ou receber role do cliente. Transações serão controladas pela camada de aplicação ou pela
 biblioteca de acesso a dados futuramente aprovada. A escolha de ORM, query builder ou driver
 permanece pendente; esta arquitetura não escolhe Prisma, TypeORM, Drizzle ou alternativa.
 
@@ -251,7 +255,7 @@ O navegador não possui conexão privilegiada nem direta com o banco. `DATABASE_
 exclusivamente server-side. O backend valida identidade, status e autorização antes de qualquer
 operação.
 
-Constraints, grants e RLS reforçam a proteção, mas não substituem o backend. Conforme D22–D24 no
+Constraints, grants e RLS reforçam a proteção, mas não substituem o backend. Conforme D22–D27 no
 [`ADR-0003`](adr/0003-seguranca-postgresql-e-aplicacao-p008.md), o backend usará o papel
 `ltc_m_runtime`, sem login, ownership ou `BYPASSRLS`; `viewer`, `editor` e `admin` continuarão
 como perfis de negócio em `ltc_m.app_users`. A RLS validará o contexto transacional criado no
@@ -260,7 +264,10 @@ P007 e não consumirá JWTs ou roles do Auth0 diretamente.
 O banco preservará ao menos um administrador ativo por proteção transacional independente do
 backend e da RLS. O runtime não terá `SELECT` direto em `ltc_m.audit_log`; somente admin ativo
 poderá consultar dados sanitizados por função controlada, e o próprio acesso será auditado. Essas
-regras estão aprovadas, mas permanecem não implementadas até a execução do P008.
+regras estão aplicadas pelas migrations P008. A validação dinâmica confirmou preflight, prova de
+reversibilidade, Viewer e limpeza; Editor/Admin/workflow permanecem incompletos por uma lacuna de
+EXECUTE em helper interno do trigger P007, que exige nova alteração de banco fora do escopo desta
+continuação.
 
 Funções transacionais PostgreSQL podem existir futuramente, mas serão chamadas pelo backend, não
 expostas diretamente ao navegador. Credenciais privilegiadas nunca entram em código cliente,
@@ -468,6 +475,7 @@ Essa conclusão não abrange as decisões operacionais ainda listadas abaixo.
 - política de conversão monetária;
 - agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
 - RPO, RTO, PITR e retenção detalhada;
-- implementação e validação do P008 conforme D22–D25;
+- correção da lacuna de EXECUTE de `current_actor_id`/`maintain_row_metadata` e conclusão da
+  validação dinâmica D27 (a aplicação das migrations P008 já foi concluída);
 - ferramenta de observabilidade, alertas e responsáveis por incidentes;
 - parâmetros operacionais de sessão e step-up além do MFA obrigatório para administradores.

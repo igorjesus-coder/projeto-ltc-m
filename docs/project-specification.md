@@ -871,8 +871,8 @@ Fora do escopo:
 7. reutilização de códigos e ciclo detalhado após inativação;
 8. RPO, RTO, PITR e retenção detalhada;
 9. ferramenta de observabilidade;
-10. implementação e validação da estratégia de RLS decidida por D22–D25 no
-    [`ADR-0003`](adr/0003-seguranca-postgresql-e-aplicacao-p008.md);
+10. correção da lacuna de EXECUTE identificada na validação dinâmica D27 e conclusão da
+    estratégia de RLS D22–D27 no [`ADR-0003`](adr/0003-seguranca-postgresql-e-aplicacao-p008.md);
 11. parâmetros de sessão e step-up além do MFA obrigatório para administradores.
 
 ---

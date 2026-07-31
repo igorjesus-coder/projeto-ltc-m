@@ -39,6 +39,57 @@ test('remove comentários e literais antes de analisar comandos', () => {
   assert.deepEqual(scanMigrationText(validSql), []);
 });
 
+test('aceita os artefatos RLS P008 versionados', () => {
+  const migrationsDirectory = path.resolve('supabase', 'migrations');
+  const result = checkMigrations(migrationsDirectory);
+
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.files.length, 9);
+});
+
+test('rejeita desvios de role, policy e grants do modelo P008', () => {
+  const issues = scanMigrationText(`
+    create role attacker;
+    alter table ltc_m.projects enable row level security;
+    create policy projects_delete on ltc_m.projects
+      for delete to ltc_m_runtime using (true);
+    create policy clients_insert on ltc_m.clients
+      for insert to ltc_m_runtime;
+    grant delete on table ltc_m.projects to ltc_m_runtime;
+    grant select on table public.projects to ltc_m_runtime;
+    grant select on table ltc_m.projects to attacker;
+  `);
+
+  assert.ok(issues.some((issue) => issue.includes('somente a role ltc_m_runtime')));
+  assert.ok(issues.some((issue) => issue.includes('DELETE ou FOR ALL')));
+  assert.ok(issues.some((issue) => issue.includes('WITH CHECK')));
+  assert.ok(issues.some((issue) => issue.includes('privilégio proibido')));
+  assert.ok(issues.some((issue) => issue.includes('objetos ltc_m')));
+  assert.ok(issues.some((issue) => issue.includes('somente para ltc_m_runtime')));
+});
+
+test('rejeita fontes de identidade externas e ownership da runtime', () => {
+  const issues = scanMigrationText(`
+    alter table ltc_m.projects owner to ltc_m_runtime;
+    select auth.uid();
+    select current_setting('request.jwt.claims', true);
+  `);
+
+  assert.ok(issues.some((issue) => issue.includes('ownership')));
+  assert.ok(issues.some((issue) => issue.includes('JWT ou Supabase Auth')));
+  assert.ok(issues.some((issue) => issue.includes('role ou JWT em GUC')));
+});
+
+test('rejeita alteração em migration já aplicada', () => {
+  withMigrationDirectory(
+    { '20260729163000_create_ltcm_relational_core.sql': `${validSql}\n-- alterada` },
+    (directory) => {
+      const issues = checkMigrations(directory).issues;
+      assert.ok(issues.some((issue) => issue.includes('migration aplicada foi alterada')));
+    },
+  );
+});
+
 test('aceita migration aditiva, qualificada e com numeric', () => {
   withMigrationDirectory({ '20260729163000_create_ltcm_core.sql': validSql }, (directory) => {
     assert.deepEqual(checkMigrations(directory).issues, []);
@@ -55,7 +106,7 @@ test('rejeita comandos proibidos, DML e SQL dinâmico', () => {
 
   assert.ok(issues.some((issue) => issue.includes('INSERT')));
   assert.ok(issues.some((issue) => issue.includes('fora do escopo P007')));
-  assert.ok(issues.some((issue) => issue.includes('bloco dinâmico')));
+  assert.ok(issues.some((issue) => issue.includes('DO permitido')));
 });
 
 test('aceita ADD CONSTRAINT aditivo e índice qualificado em ltc_m', () => {
@@ -170,7 +221,7 @@ test('inspeciona CREATE OR REPLACE FUNCTION com as mesmas regras de segurança',
 
 test('rejeita RLS, policy e alterações de enum fora do fluxo P007', () => {
   const issues = scanMigrationText(`
-    alter table ltc_m.projects enable row level security;
+    alter table ltc_m.unknown enable row level security;
     create policy projects_policy on ltc_m.projects for select using (true);
     alter type ltc_m.plan_status add value 'invented';
   `);

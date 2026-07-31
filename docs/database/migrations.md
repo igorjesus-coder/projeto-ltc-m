@@ -197,3 +197,35 @@ externo permaneceu
 
 Resultado:
 [`p007-d21-post-correction-report.md`](p007-d21-post-correction-report.md).
+
+## P008 / 1.08 — runtime, menor privilégio e RLS
+
+As migrations
+[`20260731103000_add_ltcm_audit_read_event.sql`](../../supabase/migrations/20260731103000_add_ltcm_audit_read_event.sql)
+e
+[`20260731103001_add_ltcm_runtime_rls_security.sql`](../../supabase/migrations/20260731103001_add_ltcm_runtime_rls_security.sql)
+separam o novo valor `AUDIT_READ` de seu uso e implementam D22–D25. A segunda migration cria
+somente a role global `ltc_m_runtime`; todos os demais objetos e ACLs são restritos a `ltc_m`.
+
+As 13 tabelas recebem RLS e FORCE RLS, sem policy `FOR ALL` ou DELETE. Há uma policy por tabela e
+comando, totalizando 35. A autorização revalida `app_user_id`, `auth_subject`, estado ativo e role
+armazenada em `app_users`; não interpreta JWT nem usa Supabase Auth. O runtime não recebe acesso
+direto a `audit_log` e consulta a trilha somente por `read_audit_log(...)`, quando o contexto é de
+admin ativo.
+
+Desenho, matrizes e threat model:
+[`authorization-rls-p008.md`](authorization-rls-p008.md). Preflight:
+[`p008-pre-application-report.md`](p008-pre-application-report.md). Rollback manual, não executado:
+[`rollback-ltcm-p008-rls-security.sql`](../../database/rollback/rollback-ltcm-p008-rls-security.sql).
+
+O push P008 concluiu e o fingerprint externo permaneceu idêntico. D26 aceitou a associação
+administrativa automática e D27 autorizou somente o harness temporário. A prova e a limpeza
+passaram; a validação funcional foi concluída após D28, conforme o
+[`p008-runtime-validation-report.md`](p008-runtime-validation-report.md).
+
+A migration forward D28
+[`20260731120000_fix_ltcm_runtime_function_acl.sql`](../../supabase/migrations/20260731120000_fix_ltcm_runtime_function_acl.sql)
+concede somente `EXECUTE` em `ltc_m.current_actor_id(boolean)` ao runtime, mantendo `PUBLIC`
+revogado e sem alterar corpos, policies, tabelas, roles ou memberships. O dry-run e o push D28
+foram executados uma única vez após preflight; o hash é
+`E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8`.

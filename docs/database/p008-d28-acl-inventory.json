@@ -1,0 +1,48 @@
+{
+  "formatVersion": 1,
+  "task": "P008 / 1.08 — ACL D28",
+  "target": "Funcionarios",
+  "region": "us-east-1",
+  "before": {
+    "runtimeFunctionCount": 8,
+    "publicExecuteCount": 0,
+    "currentActorId": {
+      "signature": "ltc_m.current_actor_id(boolean)",
+      "runtimeExecute": false,
+      "publicExecute": false
+    }
+  },
+  "after": {
+    "runtimeFunctionCount": 9,
+    "publicExecuteCount": 0,
+    "currentActorId": {
+      "signature": "ltc_m.current_actor_id(boolean)",
+      "runtimeExecute": true,
+      "publicExecute": false
+    }
+  },
+  "approvedDelta": [
+    "REVOKE EXECUTE ON FUNCTION ltc_m.current_actor_id(boolean) FROM PUBLIC",
+    "GRANT EXECUTE ON FUNCTION ltc_m.current_actor_id(boolean) TO ltc_m_runtime"
+  ],
+  "externalFingerprint": {
+    "before": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95",
+    "after": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95"
+  },
+  "evidence": {
+    "pre": {
+      "inventory": "docs/database/p008-d28-inventory-pre.json",
+      "ltcmFingerprint": "EB3431F03FEFAEED558F8F5AB4A70F1EDA7ADC6A445AF47D1A9A200AAE064D34",
+      "migrationFingerprint": "0C71EF52C4F1107560A0D2E093A3E6C20A31FF4C0A8F1CD9489F52C876188281",
+      "migrationCount": 8
+    },
+    "post": {
+      "inventory": "docs/database/p008-d28-inventory-post.json",
+      "ltcmFingerprint": "F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154",
+      "migrationFingerprint": "A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3",
+      "migrationCount": 9,
+      "runtimeFunctionCount": 9,
+      "publicExecuteCount": 0
+    }
+  }
+}

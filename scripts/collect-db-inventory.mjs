@@ -110,7 +110,7 @@ function parseCliPayload(stdout) {
   return payload.rows;
 }
 
-function runInventoryQuery(rootDirectory) {
+export function runInventoryQuery(rootDirectory) {
   // A CLI empacotada no Windows não interpreta corretamente estes argumentos absolutos
   // quando o caminho do workspace contém espaços. O subprocesso já usa rootDirectory
   // como cwd, portanto caminhos relativos são suficientes e portáveis.

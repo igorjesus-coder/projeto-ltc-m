@@ -80,13 +80,24 @@ fingerprint externo permaneceu idêntico. Não houve dados residuais nem altera�
 e do histórico de migrations. O P007 foi concluído; o projeto continua sendo apenas
 desenvolvimento remoto temporário e compartilhado.
 
-Em 31/07/2026, a D25 autorizou especificamente a futura aplicação remota do P008 sem backup
+Em 31/07/2026, o P008 aplicou em um único push as duas migrations aprovadas. A correção D28 foi
+aplicada depois em um único push adicional autorizado. O histórico ficou alinhado em nove
+migrations, 13 tabelas receberam RLS/FORCE RLS, 35 policies foram criadas e o
+fingerprint externo permaneceu idêntico. D26 aceitou a associação administrativa automática
+`supabase_admin` → `postgres` e D27 autorizou apenas a concessão temporária do harness. A prova,
+o cleanup e a restauração D26 passaram; a matriz funcional foi concluída após D28, conforme
+documentado
+no [`database/p008-runtime-validation-report.md`](database/p008-runtime-validation-report.md).
+Não houve segundo push, repair, SQL manual ou rollback.
+
+O registro histórico de 31/07/2026 da D25 autorizou especificamente a aplicação remota do P008 sem backup
 recuperável, sob os gates do
 [`ADR-0003`](adr/0003-seguranca-postgresql-e-aplicacao-p008.md): preflight, dry-run, somente
 migrations P008, um único `supabase db push --linked`, mudanças em `ltc_m`, grants apenas nesse
 schema e criação de `ltc_m_runtime` como único delta global. `repair`, reset, pull, migration
 down, SQL Editor, DDL manual e segundo push após falha permanecem proibidos. A tarefa P008-PRE
-somente registra a decisão; não implementa nem aplica o P008.
+registrou as decisões; as migrations já foram aplicadas e a continuação D27 limita-se ao harness
+versionado e à limpeza comprovável.
 
 ## 1. Responsabilidades dos ambientes
 

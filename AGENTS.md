@@ -44,13 +44,19 @@ compartilhadas exigem análise explícita, e migrations devem falhar antes de op
 Não implemente decisões de negócio ainda pendentes como se estivessem aprovadas. Consulte
 `docs/architecture.md` e a documentação funcional de origem.
 
-As decisões de segurança D22–D25 estão, cada uma, marcadas como `Decidida` desde 31/07/2026 e têm como fonte canônica o
-[`ADR-0003`](docs/adr/0003-seguranca-postgresql-e-aplicacao-p008.md). O P008 ainda não está
-implementado. Uma execução futura deve usar somente o papel `ltc_m_runtime` aprovado, preservar
-os perfis de negócio em `ltc_m.app_users`, proteger o último admin ativo, impedir acesso direto do
-runtime a `ltc_m.audit_log` e cumprir integralmente o preflight e o limite de um único push da D25.
-O registro documental não autoriza atalhos, credenciais no repositório ou alterações fora de
-`ltc_m`, exceto a criação global expressamente aprovada de `ltc_m_runtime`.
+As decisões de segurança D22–D28 estão, cada uma, marcadas como `Decidida` desde 31/07/2026 e têm
+como fonte canônica o
+[`ADR-0003`](docs/adr/0003-seguranca-postgresql-e-aplicacao-p008.md). As migrations P008 já foram
+aplicadas. D26 aceita e exige preservar a associação automática
+`ltc_m_runtime` → `postgres`, concedida por `supabase_admin` com `ADMIN=true`, `INHERIT=false` e
+`SET=false`. D27 permite somente ao harness versionado de validação criar uma segunda associação
+temporária, concedida por `postgres` com `ADMIN=false`, `INHERIT=false` e `SET=true`; o harness
+deve provar a reversibilidade, usar trava e conexões separadas, revogar seletivamente o grantor
+`postgres` em `finally` e restaurar exatamente D26. D28 autoriza uma única migration forward
+somente de ACL de funções no schema `ltc_m`, seguida de um único `db push`; nenhuma outra
+migration, grant manual, login persistente de teste ou alteração de policy/tabela/role é permitida.
+Preserve os perfis em `ltc_m.app_users`, proteja o último admin ativo e impeça acesso direto do
+runtime a `ltc_m.audit_log`.
 
 ## Qualidade
 

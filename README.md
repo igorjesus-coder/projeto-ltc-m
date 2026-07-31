@@ -82,6 +82,8 @@ npm run migrations:check
 npm run seeds:check
 npm run integrity:check
 npm run p007:check
+npm run p008:check
+npm run d28:check
 npm run pw902:check
 npm run d21:check
 ```
@@ -133,9 +135,12 @@ O desenho P007 de timestamps, versionamento otimista, contexto do ator, auditori
 em
 [`docs/database/versioning-audit-workflow-p007.md`](docs/database/versioning-audit-workflow-p007.md).
 
-As decisões D22–D25 de segurança PostgreSQL e aplicação controlada do P008 estão no
+As decisões D22–D28 de segurança PostgreSQL e aplicação controlada do P008 estão no
 [`ADR-0003`](docs/adr/0003-seguranca-postgresql-e-aplicacao-p008.md). Elas estão decididas desde
-31/07/2026, mas o P008 ainda não foi implementado.
+31/07/2026; as migrations P008 e a correção ACL D28 estão aplicadas, e a revalidação D27 foi
+concluída com sucesso. O desenho de role runtime, grants, RLS e policies está em
+[`authorization-rls-p008.md`](docs/database/authorization-rls-p008.md); o login real do backend e
+qualquer credencial permanecem fora das migrations e do repositório.
 
 ## Estrutura
 
