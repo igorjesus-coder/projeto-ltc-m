@@ -7,6 +7,12 @@
   [ADR-0001](0001-arquitetura-base-da-plataforma-ltc-m.md)
 - Escopo: arquitetura da primeira versão do LTC-M
 
+> **Complemento posterior:** as decisões D22–D25 sobre o papel PostgreSQL do backend, último
+> administrador ativo, consulta controlada da auditoria e aplicação remota do P008 foram decididas
+> em 31/07/2026 e estão no
+> [ADR-0003](0003-seguranca-postgresql-e-aplicacao-p008.md). As pendências históricas abaixo devem
+> ser lidas à luz desse complemento; o P008 ainda não está implementado.
+
 ## Contexto
 
 O ADR-0001 tratava o Supabase como backend completo, previa autenticação pelo Supabase Auth,

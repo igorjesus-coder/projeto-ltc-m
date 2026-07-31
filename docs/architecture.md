@@ -7,14 +7,15 @@
 | Estado               | Aprovada para a primeira versão                                    |
 | Data da baseline     | 2026-07-28                                                         |
 | Registro vigente     | [ADR-0002](adr/0002-arquitetura-render-supabase-database-auth0.md) |
+| Segurança do P008    | [ADR-0003](adr/0003-seguranca-postgresql-e-aplicacao-p008.md)      |
 | Registro substituído | [ADR-0001](adr/0001-arquitetura-base-da-plataforma-ltc-m.md)       |
 
 Esta página descreve a arquitetura vigente. A especificação funcional, as métricas e as regras de
 projeto estão em [`project-specification.md`](project-specification.md). O ADR-0001 foi preservado
 como histórico, mas não deve orientar novas implementações.
 
-Esta atualização é exclusivamente documental: não aprova migrations, tabelas, implementação de
-Auth0 ou backend, tenant, pipeline ou infraestrutura real.
+As decisões documentais não implementam migrations, tabelas, Auth0, backend, tenant, pipeline ou
+infraestrutura real. D22–D25 estão decididas, mas o P008 depende de execução própria.
 
 ## Princípios
 
@@ -250,10 +251,16 @@ O navegador não possui conexão privilegiada nem direta com o banco. `DATABASE_
 exclusivamente server-side. O backend valida identidade, status e autorização antes de qualquer
 operação.
 
-Constraints, grants e eventual RLS reforçam a proteção, mas não substituem o backend. Não se
-afirma que JWTs do Auth0 serão consumidos diretamente por RLS; isso dependeria de solução
-aprovada para propagar o contexto com segurança. A estratégia final de RLS será revista com base
-na conexão do backend e na propagação segura do contexto.
+Constraints, grants e RLS reforçam a proteção, mas não substituem o backend. Conforme D22–D24 no
+[`ADR-0003`](adr/0003-seguranca-postgresql-e-aplicacao-p008.md), o backend usará o papel
+`ltc_m_runtime`, sem login, ownership ou `BYPASSRLS`; `viewer`, `editor` e `admin` continuarão
+como perfis de negócio em `ltc_m.app_users`. A RLS validará o contexto transacional criado no
+P007 e não consumirá JWTs ou roles do Auth0 diretamente.
+
+O banco preservará ao menos um administrador ativo por proteção transacional independente do
+backend e da RLS. O runtime não terá `SELECT` direto em `ltc_m.audit_log`; somente admin ativo
+poderá consultar dados sanitizados por função controlada, e o próprio acesso será auditado. Essas
+regras estão aprovadas, mas permanecem não implementadas até a execução do P008.
 
 Funções transacionais PostgreSQL podem existir futuramente, mas serão chamadas pelo backend, não
 expostas diretamente ao navegador. Credenciais privilegiadas nunca entram em código cliente,
@@ -461,6 +468,6 @@ Essa conclusão não abrange as decisões operacionais ainda listadas abaixo.
 - política de conversão monetária;
 - agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
 - RPO, RTO, PITR e retenção detalhada;
-- estratégia final de RLS e propagação segura de contexto;
+- implementação e validação do P008 conforme D22–D25;
 - ferramenta de observabilidade, alertas e responsáveis por incidentes;
 - parâmetros operacionais de sessão e step-up além do MFA obrigatório para administradores.

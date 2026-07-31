@@ -44,6 +44,14 @@ compartilhadas exigem análise explícita, e migrations devem falhar antes de op
 Não implemente decisões de negócio ainda pendentes como se estivessem aprovadas. Consulte
 `docs/architecture.md` e a documentação funcional de origem.
 
+As decisões de segurança D22–D25 estão, cada uma, marcadas como `Decidida` desde 31/07/2026 e têm como fonte canônica o
+[`ADR-0003`](docs/adr/0003-seguranca-postgresql-e-aplicacao-p008.md). O P008 ainda não está
+implementado. Uma execução futura deve usar somente o papel `ltc_m_runtime` aprovado, preservar
+os perfis de negócio em `ltc_m.app_users`, proteger o último admin ativo, impedir acesso direto do
+runtime a `ltc_m.audit_log` e cumprir integralmente o preflight e o limite de um único push da D25.
+O registro documental não autoriza atalhos, credenciais no repositório ou alterações fora de
+`ltc_m`, exceto a criação global expressamente aprovada de `ltc_m_runtime`.
+
 ## Qualidade
 
 Antes de concluir uma alteração, execute:

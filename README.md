@@ -133,6 +133,10 @@ O desenho P007 de timestamps, versionamento otimista, contexto do ator, auditori
 em
 [`docs/database/versioning-audit-workflow-p007.md`](docs/database/versioning-audit-workflow-p007.md).
 
+As decisões D22–D25 de segurança PostgreSQL e aplicação controlada do P008 estão no
+[`ADR-0003`](docs/adr/0003-seguranca-postgresql-e-aplicacao-p008.md). Elas estão decididas desde
+31/07/2026, mas o P008 ainda não foi implementado.
+
 ## Estrutura
 
 ```text

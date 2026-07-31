@@ -80,6 +80,14 @@ fingerprint externo permaneceu idêntico. Não houve dados residuais nem altera�
 e do histórico de migrations. O P007 foi concluído; o projeto continua sendo apenas
 desenvolvimento remoto temporário e compartilhado.
 
+Em 31/07/2026, a D25 autorizou especificamente a futura aplicação remota do P008 sem backup
+recuperável, sob os gates do
+[`ADR-0003`](adr/0003-seguranca-postgresql-e-aplicacao-p008.md): preflight, dry-run, somente
+migrations P008, um único `supabase db push --linked`, mudanças em `ltc_m`, grants apenas nesse
+schema e criação de `ltc_m_runtime` como único delta global. `repair`, reset, pull, migration
+down, SQL Editor, DDL manual e segundo push após falha permanecem proibidos. A tarefa P008-PRE
+somente registra a decisão; não implementa nem aplica o P008.
+
 ## 1. Responsabilidades dos ambientes
 
 ### Desenvolvimento remoto
