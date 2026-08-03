@@ -139,20 +139,22 @@ begin
             'financial_plan_lines',
             'financial_actual_events',
             'import_batches',
+            'import_batch_sheets',
+            'import_staging_rows',
             'import_row_errors',
             'audit_log'
         )
         and pg_class.relrowsecurity
         and pg_class.relforcerowsecurity;
-    if v_count <> 13 then
-        raise exception 'P008 falhou: RLS e FORCE RLS não cobrem as 13 tabelas.';
+    if v_count <> 15 then
+        raise exception 'P008 falhou: RLS e FORCE RLS não cobrem as 15 tabelas.';
     end if;
 
     select count(*)
     into v_count
     from pg_catalog.pg_policies
     where pg_policies.schemaname = 'ltc_m';
-    if v_count <> 35 then
+    if v_count <> 41 then
         raise exception 'P008 falhou: inventário de policies divergente (%).', v_count;
     end if;
 
@@ -384,7 +386,7 @@ insert into ltc_m.import_batches (
 )
 values (
     '00000000-0000-4000-8000-000000008801',
-    'p008-synthetic.xlsx', 'P008-SYNTHETIC-HASH',
+    'p008-synthetic.xlsx', repeat('8', 64),
     '00000000-0000-4000-8000-000000008002'
 );
 
@@ -875,6 +877,8 @@ select
         and (select count(*) from ltc_m.financial_plan_lines) = 0
         and (select count(*) from ltc_m.financial_actual_events) = 0
         and (select count(*) from ltc_m.import_batches) = 0
+        and (select count(*) from ltc_m.import_batch_sheets) = 0
+        and (select count(*) from ltc_m.import_staging_rows) = 0
         and (select count(*) from ltc_m.import_row_errors) = 0
         and (select count(*) from ltc_m.audit_log) = 0
         and nullif(

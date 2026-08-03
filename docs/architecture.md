@@ -14,9 +14,12 @@ Esta página descreve a arquitetura vigente. A especificação funcional, as mé
 projeto estão em [`project-specification.md`](project-specification.md). O ADR-0001 foi preservado
 como histórico, mas não deve orientar novas implementações.
 
-As decisões documentais não implementam migrations, tabelas, Auth0, backend, tenant, pipeline ou
-infraestrutura real. D22–D27 estão decididas; as migrations P008 foram aplicadas e a validação
-dinâmica D27 foi concluída após a correção ACL D28, conforme o relatório versionado.
+As decisões documentais não implementam Auth0, backend, tenant ou infraestrutura real. D22–D33
+estão decididas; P008 e P009 foram aplicados. A validação D27/P008 foi concluída; a validação
+final P009/D33 de 03/08/2026 foi concluída com envelope íntegro, cleanup e fingerprints
+preservados. D30–D32 registram as falhas anteriores de fixture, auditoria e transporte. D33
+encerrou a validação funcional em duas fases sem migration, DDL ou persistência. Todas as
+autorizações remotas D29–D33 estão consumidas.
 
 ## Princípios
 
@@ -264,10 +267,9 @@ P007 e não consumirá JWTs ou roles do Auth0 diretamente.
 O banco preservará ao menos um administrador ativo por proteção transacional independente do
 backend e da RLS. O runtime não terá `SELECT` direto em `ltc_m.audit_log`; somente admin ativo
 poderá consultar dados sanitizados por função controlada, e o próprio acesso será auditado. Essas
-regras estão aplicadas pelas migrations P008. A validação dinâmica confirmou preflight, prova de
-reversibilidade, Viewer e limpeza; Editor/Admin/workflow permanecem incompletos por uma lacuna de
-EXECUTE em helper interno do trigger P007, que exige nova alteração de banco fora do escopo desta
-continuação.
+regras estão aplicadas pelas migrations P008. A correção ACL D28 resolveu a dependência de
+`current_actor_id(boolean)`, e a validação dinâmica confirmou Viewer, Editor, Admin, workflow,
+concorrência, reversibilidade e limpeza.
 
 Funções transacionais PostgreSQL podem existir futuramente, mas serão chamadas pelo backend, não
 expostas diretamente ao navegador. Credenciais privilegiadas nunca entram em código cliente,
@@ -475,7 +477,5 @@ Essa conclusão não abrange as decisões operacionais ainda listadas abaixo.
 - política de conversão monetária;
 - agenda, monitoramento e tratamento de falhas dos Extracts do Tableau;
 - RPO, RTO, PITR e retenção detalhada;
-- correção da lacuna de EXECUTE de `current_actor_id`/`maintain_row_metadata` e conclusão da
-  validação dinâmica D27 (a aplicação das migrations P008 já foi concluída);
 - ferramenta de observabilidade, alertas e responsáveis por incidentes;
 - parâmetros operacionais de sessão e step-up além do MFA obrigatório para administradores.

@@ -58,6 +58,48 @@ migration, grant manual, login persistente de teste ou alteração de policy/tab
 Preserve os perfis em `ltc_m.app_users`, proteja o último admin ativo e impeça acesso direto do
 runtime a `ltc_m.audit_log`.
 
+A D29 foi decidida em 31/07/2026 e a migration P009 foi aplicada remotamente uma única vez; nunca
+repita o push. Na revalidação de 03/08/2026, P007/P008, cleanup, D26 e fingerprints passaram, mas
+a etapa P009 não executou por erro sintático do renderizador local. O estado é parcialmente
+concluído. A D30 foi decidida e aprovada pelo responsável do projeto em 03/08/2026 e autoriza
+exatamente uma reexecução remota do harness P009 corrigido, sem repetição automática. Ela não
+autoriza migration, `db push`, DDL, SQL Editor, alteração persistente de ACL/policies/roles/
+memberships, seeds ou dados permanentes. A execução D30 `r20260803132652-ada2b257` já consumiu
+essa autorização: P007/P008 e o cleanup passaram, mas a suíte P009 parou em outro erro local de
+aridade de `VALUES`; `rollback_clean=true` e os fingerprints permaneceram intactos. A fixture foi
+corrigida somente localmente, e qualquer nova execução remota exige outra decisão explícita. O
+staging permanece genérico em `ltc_m`, sem leitura de XLSX ou dados reais.
+
+A D31 foi decidida e aprovada pelo responsável do projeto em 03/08/2026. Ela autoriza exatamente
+uma nova invocação remota do harness P009 somente depois da aprovação do gate local integral do
+SQL renderizado. A invocação deve executar a Fase A transacional com `ROLLBACK` e iniciar a Fase B
+somente com `phase_a_passed=true`. Não há autorização para repetição automática, migration,
+`db push`, DDL, SQL Editor, correção remota, ACL/policy/role/membership persistente, seed ou dado
+permanente. Toda fixture, trava e concessão D27 deve ser limpa em `finally`, preservando D26.
+
+A única invocação D31 `r20260803141344-e3356875` já consumiu a autorização. A Fase A passou; a
+Fase B falhou na assertion de auditoria P009 antes da matriz RLS específica. P007/P008, D23,
+cleanup, D26 e fingerprints passaram, `rollback_clean=true`, contagens e locks ficaram zerados.
+Não reexecute o harness sem nova decisão explícita.
+
+A D32 foi decidida e aprovada pelo responsÃ¡vel do projeto em 03/08/2026. O contrato canÃ´nico Ã©
+`audit_log.request_id = request_id` do contexto transacional ativo no instante do DML auditado;
+o campo homÃ´nimo da entidade nÃ£o substitui o contexto. D32 autoriza somente a correÃ§Ã£o local do
+harness, renderer, fixtures sintÃ©ticas, scanners e testes, seguida de exatamente uma invocaÃ§Ã£o
+remota final. Trigger, funÃ§Ã£o, schema e migrations permanecem inalterados. NÃ£o repita a
+invocaÃ§Ã£o D32, mesmo em falha.
+
+A única invocação D32 `r20260803151221-2d4f91ba` já foi consumida. Fase A, SQL P009, P007/P008,
+D23 e cleanup executaram sem erro SQL, mas o orquestrador não capturou o marcador intermediário
+P009 e retornou código 1. O estado é parcialmente concluído, `rollback_clean=true`, D26 e
+fingerprints foram preservados. Não reexecute o harness sem nova decisão explícita.
+
+A D33 foi decidida e aprovada pelo responsável do projeto em 03/08/2026. Ela autorizou somente o
+launcher, a captura, o protocolo de evidência e uma única invocação remota final. A invocação
+`r20260803173036-ddabb07d` terminou com código 0, envelope `P009_RESULT_V1` íntegro após `close`,
+Fases A/B, P009, P007/P008, cleanup e fingerprints aprovados. D33 foi consumida: não reexecute o
+harness sem nova decisão explícita.
+
 ## Qualidade
 
 Antes de concluir uma alteração, execute:

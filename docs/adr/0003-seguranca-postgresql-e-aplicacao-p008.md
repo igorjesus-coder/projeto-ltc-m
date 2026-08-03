@@ -2,10 +2,10 @@
 
 - Estado: Aceita
 - Data: 31/07/2026
-- Tarefa: P008-PRE/P008 — decisões D22–D28 e validação dinâmica controlada
+- Tarefa: P008-PRE/P008/P009 — decisões D22–D33 e validação controlada
 - Decisão base: complementa o
   [ADR-0002](0002-arquitetura-render-supabase-database-auth0.md)
-- Implementação: migrations P008 e D28 aplicadas; validação dinâmica remota concluída
+- Implementação: migrations P008/D28/P009 aplicadas; validação funcional P009/D33 concluída
 - Escopo: autorização PostgreSQL, último administrador, consulta de auditoria e aplicação remota
 
 ## Contexto
@@ -37,6 +37,11 @@ reversível, sem nova migration ou novo push.
 | D26 | Decidida | 31/07/2026 | associação administrativa automática aceita e preservada       |
 | D27 | Decidida | 31/07/2026 | harness temporário para validação dinâmica do runtime          |
 | D28 | Decidida | 31/07/2026 | ACL forward mínima para dependência invoker do runtime         |
+| D29 | Decidida | 31/07/2026 | aplicação remota da estrutura P009 sem backup recuperável      |
+| D30 | Decidida | 03/08/2026 | reexecução única do harness funcional P009 corrigido           |
+| D31 | Decidida | 03/08/2026 | gate integral e validação P009 em duas fases                   |
+| D32 | Decidida | 03/08/2026 | request de auditoria igual ao contexto e validação final P009  |
+| D33 | Decidida | 03/08/2026 | envelope terminal e acompanhamento integral do harness P009    |
 
 ## D22 — Papel PostgreSQL do backend
 
@@ -92,7 +97,7 @@ contexto e à auditoria do P007 e testar inativação, mudança de perfil, autoa
 
 ## D24 — Consulta da auditoria
 
-**Status:** Decidida  
+**Status:** Decidida
 **Data:** 31/07/2026
 
 ### Decisão
@@ -232,6 +237,139 @@ e a auditoria que o P008 deverá reutilizar estão documentados em
 [`versioning-audit-workflow-p007.md`](../database/versioning-audit-workflow-p007.md). D23 resolve a
 regra de último admin que permanecia fora do P007; D24 restringe a leitura da trilha criada no
 P007; D22 define a identidade PostgreSQL que ficará sujeita aos grants e à RLS.
+
+## D29 — Aplicação remota do P009 sem backup recuperável
+
+**Status:** Decidida
+**Data:** 31/07/2026
+
+D29 autoriza uma única aplicação remota controlada da migration P009 no projeto `Funcionarios`,
+região `us-east-1`, sem backup recuperável, somente após preflight e dry-run conformes. O delta
+fica restrito ao schema `ltc_m`, preserva P007/P008, mantém D26, não cria roles, memberships ou
+dados e lista exclusivamente a migration P009. Em caso de falha não há nova tentativa; a
+validação pós-aplicação exige a suíte P009 e as regressões P007/P008, com limpeza confirmada.
+
+O arquivo financeiro real não é lido nem versionado. A aba `Decisões Aprovadas` é documental e
+não pode ser registrada como fonte operacional. O P010 produzirá os payloads JSON v1; nenhuma
+retenção ou purge automático é decidido por D29.
+
+A migration P009 foi aplicada uma única vez em 31/07/2026. Na continuação de 03/08/2026, o
+harness confirmou D26, limpeza, fingerprints e as regressões P007/P008, mas a etapa P009 abortou
+antes dos cenários por erro sintático do renderizador local. A limpeza foi comprovada e, conforme
+D29, outra execução remota da suíte depende de nova decisão explícita.
+
+## D30 — Reexecução única do harness funcional P009 corrigido
+
+**Status:** Decidida
+
+**Data:** 03/08/2026
+
+**Aprovação:** responsável do projeto
+
+D30 autoriza uma única reexecução remota do comando versionado do harness P009 corrigido, somente
+para fixtures sintéticas temporárias, a concessão temporária D27 estritamente necessária ao
+`SET ROLE`, a matriz funcional P009, as regressões P007/P008 e a limpeza em `finally`. Antes da
+execução devem ser comprovados o hash imutável da migration P009, as dez migrations alinhadas,
+D26 exata, contagens zeradas, ausência de drift e o fingerprint externo aprovado.
+
+A decisão não autoriza migration nova ou alteração da migration aplicada, `db push`, DDL, SQL
+Editor, `repair`, `reset`, `pull`, migration down, correção manual, alteração persistente de ACL,
+policies, roles, memberships, seeds ou dados permanentes. Não há repetição automática diante de
+falha. Com limpeza e estado final comprovados, mas cenário incompleto, o resultado permanece
+parcial e uma nova tentativa depende de outra decisão explícita; qualquer resíduo ou delta
+estrutural é falha crítica.
+
+A autorização D30 foi consumida uma única vez pela execução `r20260803132652-ada2b257`, iniciada
+em `2026-08-03T13:26:52.151Z` e encerrada em `2026-08-03T13:30:46.597Z`. O alias corrigido deixou
+de causar erro, mas a suíte P009 parou antes das fixtures com SQLSTATE `42601` porque o INSERT de
+usuários sintéticos declarava quatro colunas e trazia cinco valores na linha inativa. P007/P008,
+D23, cleanup D27, estado final e fingerprints passaram; `rollback_clean=true`. A fixture e o
+scanner foram corrigidos somente localmente após a execução. D30 não autoriza nova tentativa.
+
+## D31 — Gate integral e validação remota P009 em duas fases
+
+**Status:** Decidida
+
+**Data:** 03/08/2026
+
+**Aprovação:** responsável do projeto
+
+D31 autoriza uma única nova invocação remota do harness P009, condicionada à aprovação prévia de
+um gate local determinístico sobre todo o SQL já renderizado. O gate deve usar dois formatos de
+run ID, validar a estrutura léxica, a invariância dos identificadores e aliases, todos os INSERTs,
+a aridade de cada tupla e as fixtures `app_users` com `active` explícito. Seu manifesto e os hashes
+dos SQLs renderizados devem ser registrados antes da conexão remota.
+
+A invocação remota será dividida em Fase A e Fase B. A Fase A executa o bootstrap completo em uma
+transação dedicada e termina obrigatoriamente em `ROLLBACK`; a Fase B só pode começar com
+`phase_a_passed=true` e ausência de persistência ou trava residual. A Fase B cobre integralmente
+P009, a matriz RLS Viewer/Editor/Admin e as regressões P007/P008. A concessão D27, quando
+necessária ao `SET ROLE`, continua temporária, seletivamente revogada em `finally` e não pode
+alterar a associação D26.
+
+D31 não autoriza segunda invocação, repetição automática, migration nova ou alterada, `db push`,
+DDL, SQL Editor, correção manual remota, `repair`, `reset`, `pull`, migration down, ACL, policy,
+role ou membership persistente, seed ou dado permanente. Falha funcional com limpeza comprovada
+é resultado parcial; resíduo ou delta estrutural é falha crítica.
+
+A autorização D31 foi consumida uma única vez por `r20260803141344-e3356875`, de
+`2026-08-03T14:13:45.010Z` a `2026-08-03T14:17:49.674Z`. A Fase A passou e liberou a Fase B. A
+suíte P009 avançou até a auditoria, onde uma assertion confundiu o request do contexto com o
+campo request da aba; a matriz RLS específica P009 não foi alcançada. P007/P008, D23, cleanup,
+D26, contagens, locks e fingerprints passaram, com `rollback_clean=true`. O resultado é
+parcialmente concluído e D31 não permite nova execução.
+
+## D32 — Contrato de request da auditoria e validação final P009
+
+**Status:** Decidida
+
+**Data:** 03/08/2026
+
+**Aprovação:** responsável do projeto
+
+D32 decide que `audit_log.request_id` deve ser exatamente o request configurado no contexto
+transacional ativo no momento do DML. O trigger e o contrato do banco permanecem inalterados.
+Cada cenário P009 deve configurar request único e determinístico na mesma conexão/transação,
+confirmá-lo antes do DML e comparar a auditoria ao mesmo valor. Contexto de setup não pode ser
+reutilizado implicitamente.
+
+D32 autoriza somente correções locais no harness, renderizador, fixtures, scanners e testes,
+seguidas de uma única invocação remota final com gate, Fase A, matriz P009, P007/P008 e cleanup em
+`finally`. Não autoriza segunda invocação, migration, `db push`, DDL, SQL Editor, correção manual,
+alteração de trigger/função/schema, ACL, policy, role ou membership persistente, seed ou dado
+permanente. Necessidade de alterar o banco bloqueia D32.
+
+A única invocação D32 foi consumida por `r20260803151221-2d4f91ba`, de
+`2026-08-03T15:12:21.173Z` a `2026-08-03T15:16:26.506Z`. Fase A, P007/P008, D23, cleanup,
+estado final e fingerprints passaram. O SQL P009 retornou sucesso após executar as assertions de
+request, auditoria e RLS, mas o orquestrador não encontrou no stdout o result set intermediário
+`p009_rejection_partial_integrity`; encerrou com código 1 e sem capturar a matriz estruturada.
+`rollback_clean=true`, D26 e os 1.625 objetos pré/pós foram preservados. D32 não autoriza nova
+invocação.
+
+## D33 — Envelope terminal e acompanhamento integral do harness P009
+
+**Status:** Decidida
+
+**Data:** 03/08/2026
+
+**Aprovação:** responsável do projeto
+
+D33 autoriza exclusivamente alterações no launcher, runner de processos, protocolo de saída,
+parser, projeções de evidência e testes de observabilidade. O SQL funcional, suas assertions,
+migrations e objetos do banco permanecem inalterados. O resultado remoto deve emitir exatamente
+um envelope terminal `P009_RESULT_V1`, validado somente após `close`, com JSON compacto em
+Base64url e SHA-256 dos bytes UTF-8.
+
+Timeout deve encerrar a árvore inteira e classificar falha; não pode haver subprocesso órfão,
+retry automático ou segunda invocação. Após gates e preflight, D33 autoriza exatamente uma
+invocação remota final para repetir as fases e capturar a evidência estruturada.
+
+A autorização D33 foi consumida uma única vez por `r20260803173036-ddabb07d`, de
+`2026-08-03T17:30:36.232Z` a `2026-08-03T17:34:47.994Z`. O launcher aguardou `close`, recebeu um
+único envelope íntegro e terminou com código 0. Fases A/B, matriz P009, oito requests auditados,
+P007/P008, D23 e D24 passaram. Cleanup, D26, contagens, locks e fingerprints também passaram com
+`rollback_clean=true`. D33 está concluída e não autoriza nova invocação.
 
 ## Consequências e riscos
 

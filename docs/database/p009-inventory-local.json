@@ -1,0 +1,19 @@
+{
+  "formatVersion": 1,
+  "task": "P009 / 1.09",
+  "phase": "local-pre-application",
+  "target": "Funcionarios",
+  "region": "us-east-1",
+  "appliedMigrations": 10,
+  "pendingMigration": null,
+  "newTables": ["ltc_m.import_batch_sheets", "ltc_m.import_staging_rows"],
+  "preservedTables": ["ltc_m.import_batches", "ltc_m.import_row_errors"],
+  "expectedRlsTables": 15,
+  "expectedPolicies": 41,
+  "expectedRuntimeFunctions": 9,
+  "remoteWrites": true,
+  "realDataImported": false,
+  "xlsxRead": false,
+  "d29": "Decidida",
+  "migrationSha256": "C0CDBC2F020A9D727D0E353A31EA7E91DF715E5B96BEB343E79407DECD940A22"
+}

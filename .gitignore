@@ -23,3 +23,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# SQL renderizado e locks temporários dos harnesses locais
+.tmp/

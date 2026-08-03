@@ -7,32 +7,37 @@ insert into ltc_m.app_users (
     id,
     auth_subject,
     full_name,
-    role
+    role,
+    active
 )
 values
     (
         '00000000-0000-4000-8000-000000007001',
         'p007|viewer',
         'P007 Viewer',
-        'viewer'
+        'viewer',
+        true
     ),
     (
         '00000000-0000-4000-8000-000000007002',
         'p007|editor',
         'P007 Editor',
-        'editor'
+        'editor',
+        true
     ),
     (
         '00000000-0000-4000-8000-000000007003',
         'p007|admin-one',
         'P007 Admin One',
-        'admin'
+        'admin',
+        true
     ),
     (
         '00000000-0000-4000-8000-000000007004',
         'p007|admin-two',
         'P007 Admin Two',
-        'admin'
+        'admin',
+        true
     );
 
 select ltc_m.set_actor_context(
@@ -191,7 +196,7 @@ insert into ltc_m.import_batches (
 values (
     '00000000-0000-4000-8000-000000007801',
     'p007-synthetic.xlsx',
-    'P007-SENSITIVE-HASH',
+    repeat('7', 64),
     date '2026-07-30',
     1,
     '00000000-0000-4000-8000-000000007002'
@@ -402,8 +407,8 @@ begin
                 like '%P007-SECRET-MUST-NOT-APPEAR%'
             or audit_log.new_data::text
                 like '%P007-SECRET-MUST-NOT-APPEAR%'
-            or audit_log.old_data::text like '%P007-SENSITIVE-HASH%'
-            or audit_log.new_data::text like '%P007-SENSITIVE-HASH%'
+            or audit_log.old_data::text like '%' || repeat('7', 64) || '%'
+            or audit_log.new_data::text like '%' || repeat('7', 64) || '%'
             or audit_log.old_data::text
                 like '%P007-DOCUMENT-SENSITIVE%'
             or audit_log.new_data::text

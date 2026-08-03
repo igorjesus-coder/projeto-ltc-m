@@ -90,6 +90,25 @@ documentado
 no [`database/p008-runtime-validation-report.md`](database/p008-runtime-validation-report.md).
 Não houve segundo push, repair, SQL manual ou rollback.
 
+A D29 foi decidida em 31/07/2026. O preflight e o dry-run listaram somente
+`20260731130000_add_ltcm_import_staging.sql`, e a migration P009 foi aplicada em um único push,
+sem seed ou arquivo de roles. Em 03/08/2026, a revalidação confirmou limpeza, D26, P007/P008 e
+fingerprints, mas a etapa P009 não executou por erro sintático do renderizador; nova execução
+remota dependia de decisão explícita. A D30 autorizou e consumiu exatamente uma reexecução,
+`r20260803132652-ada2b257`: P007/P008 e cleanup passaram, porém a etapa P009 parou em outro erro
+de aridade local. A D31, decidida em 03/08/2026, permite uma única invocação adicional somente
+após gate integral aprovado, com bootstrap revertido na Fase A e Fase B condicional.
+Na D30, `rollback_clean=true`, zero resíduos e fingerprints idênticos; a fixture foi corrigida
+apenas localmente.
+A invocação D31 `r20260803141344-e3356875` aprovou a Fase A e falhou na assertion de auditoria da
+Fase B. O cleanup restaurou D26, zerou contagens e locks e preservou os três fingerprints; D31 não
+autoriza repetição.
+A D32 comprovou funcionalmente as assertions P009, mas falhou ao transportar um result set
+intermediário. A D33 corrigiu somente o launcher/protocolo e consumiu a única invocação final
+`r20260803173036-ddabb07d`: código 0, envelope `P009_RESULT_V1` íntegro, Fases A/B, P009,
+P007/P008 e cleanup aprovados, inventários/fingerprints idênticos. D29–D33 estão consumidas; nova
+execução remota exige decisão explícita.
+
 O registro histórico de 31/07/2026 da D25 autorizou especificamente a aplicação remota do P008 sem backup
 recuperável, sob os gates do
 [`ADR-0003`](adr/0003-seguranca-postgresql-e-aplicacao-p008.md): preflight, dry-run, somente

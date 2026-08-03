@@ -38,6 +38,7 @@ const APPROVED_SUCCESSORS = new Set([
   '20260731103000_add_ltcm_audit_read_event.sql',
   '20260731103001_add_ltcm_runtime_rls_security.sql',
   '20260731120000_fix_ltcm_runtime_function_acl.sql',
+  '20260731130000_add_ltcm_import_staging.sql',
 ]);
 const EXPECTED_FUNCTION = 'ltc_m.enforce_admin_inactivation';
 

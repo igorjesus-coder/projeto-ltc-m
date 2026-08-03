@@ -5,6 +5,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const MIGRATION_NAME = /^(\d{14})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$/;
+const P009_MIGRATION_NAME = '20260731130000_add_ltcm_import_staging.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -58,6 +59,41 @@ const P007_COLUMNS = new Map([
   ],
 ]);
 
+const P009_COLUMNS = new Map([
+  [
+    'import_batches',
+    new Set([
+      'source_size_bytes',
+      'source_mime_type',
+      'payload_schema_version',
+      'idempotency_key',
+      'request_id',
+      'started_at',
+      'sheet_count',
+      'staged_rows',
+      'valid_rows',
+      'error_count',
+      'technical_message',
+      'metadata',
+      'updated_by_user_id',
+    ]),
+  ],
+  [
+    'import_row_errors',
+    new Set([
+      'import_batch_sheet_id',
+      'import_staging_row_id',
+      'severity',
+      'field_path',
+      'raw_value',
+      'technical_detail',
+      'error_key',
+      'request_id',
+      'created_by_user_id',
+    ]),
+  ],
+]);
+
 const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.audit_row_change',
   'ltc_m.submit_plan_version',
@@ -105,6 +141,10 @@ const APPLIED_MIGRATION_HASHES = new Map([
     '20260731103001_add_ltcm_runtime_rls_security.sql',
     '485DB38DE4194F2564C6A22D22B145ECA49710A2340B5EBD39C91990EA5CC14A',
   ],
+  [
+    '20260731120000_fix_ltcm_runtime_function_acl.sql',
+    'E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8',
+  ],
 ]);
 
 const P008_RLS_TABLES = new Set([
@@ -122,6 +162,8 @@ const P008_RLS_TABLES = new Set([
   'import_row_errors',
   'audit_log',
 ]);
+
+const P009_RLS_TABLES = new Set([...P008_RLS_TABLES, 'import_batch_sheets', 'import_staging_rows']);
 
 function consumeDollarTag(sql, index) {
   const match = sql.slice(index).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/);
@@ -239,7 +281,7 @@ function requireQualifiedObjects(sql, issues) {
   }
 }
 
-function requireAdditiveAlterTables(sql, issues) {
+function requireAdditiveAlterTables(sql, issues, scope) {
   const alterPattern = /\balter\s+table\b[\s\S]*?;/gi;
   const statements = [...sql.matchAll(alterPattern)];
 
@@ -252,39 +294,51 @@ function requireAdditiveAlterTables(sql, issues) {
     }
 
     const tableName = tableMatch[1].toLowerCase();
+    const allowedColumns =
+      scope === 'p009' ? P009_COLUMNS.get(tableName) : P007_COLUMNS.get(tableName);
     if (/\b(?:enable|force)\s+row\s+level\s+security\s*;/i.test(statement)) {
       if (
-        !P008_RLS_TABLES.has(tableName) ||
+        !(scope === 'p009' ? P009_RLS_TABLES : P008_RLS_TABLES).has(tableName) ||
         !/^\s*alter\s+table\s+ltc_m\.[a-z_][a-z0-9_]*\s+(?:enable|force)\s+row\s+level\s+security\s*;/i.test(
           statement,
         )
       ) {
-        issues.push('RLS permitida somente nas 13 tabelas ltc_m aprovadas');
+        issues.push(
+          `RLS permitida somente nas tabelas ltc_m aprovadas para ${scope.toUpperCase()}`,
+        );
       }
       continue;
     }
 
     for (const columnMatch of statement.matchAll(/\badd\s+column\s+([a-z_][a-z0-9_]*)\b/gi)) {
-      const allowedColumns = P007_COLUMNS.get(tableName);
       if (!allowedColumns?.has(columnMatch[1].toLowerCase())) {
-        issues.push(`ADD COLUMN fora do escopo P007: ltc_m.${tableName}.${columnMatch[1]}`);
+        issues.push(
+          `ADD COLUMN fora do escopo ${scope.toUpperCase()}: ltc_m.${tableName}.${columnMatch[1]}`,
+        );
       }
     }
 
     if (
       /\bdrop\s+constraint\b/i.test(statement) &&
-      !/^\s*alter\s+table\s+ltc_m\.plan_versions\b[\s\S]*?\bdrop\s+constraint\s+ck_plan_versions_approval\b/i.test(
-        statement,
+      !(
+        (scope === 'p007' &&
+          /^\s*alter\s+table\s+ltc_m\.plan_versions\b[\s\S]*?\bdrop\s+constraint\s+ck_plan_versions_approval\b/i.test(
+            statement,
+          )) ||
+        (scope === 'p009' &&
+          /^\s*alter\s+table\s+ltc_m\.import_batches\b[\s\S]*?\bdrop\s+constraint\s+ck_import_batches_source_hash\b/i.test(
+            statement,
+          ))
       )
     ) {
-      issues.push('DROP CONSTRAINT fora do escopo P007');
+      issues.push(`DROP CONSTRAINT fora do escopo ${scope.toUpperCase()}`);
     }
 
     if (
       /\b(?:rename|alter\s+column|drop\s+column|drop\s+table)\b/i.test(statement) ||
       !/\b(?:add\s+column|add\s+constraint|drop\s+constraint)\b/i.test(statement)
     ) {
-      issues.push('ALTER TABLE não aditivo ou fora do escopo P007');
+      issues.push(`ALTER TABLE não aditivo ou fora do escopo ${scope.toUpperCase()}`);
     }
   }
 
@@ -383,7 +437,7 @@ function requireSafeFunctions(sql, issues) {
   }
 }
 
-function requireP008Security(sql, stripped, issues) {
+function requireP008Security(sql, stripped, issues, scope) {
   const approvedRoleCreate =
     'create role ltc_m_runtime nologin nosuperuser nocreatedb nocreaterole noreplication nobypassrls';
   const doCount = (stripped.match(/\bdo\b/gi) ?? []).length;
@@ -428,7 +482,10 @@ function requireP008Security(sql, stripped, issues) {
     const [, , tableNameRaw, commandRaw] = header;
     const tableName = tableNameRaw.toLowerCase();
     const command = commandRaw.toLowerCase();
-    if (!P008_RLS_TABLES.has(tableName)) issues.push('policy fora das 13 tabelas ltc_m');
+    const allowedRlsTables = scope === 'p009' ? P009_RLS_TABLES : P008_RLS_TABLES;
+    if (!allowedRlsTables.has(tableName)) {
+      issues.push(`policy fora das tabelas ltc_m aprovadas para ${scope.toUpperCase()}`);
+    }
     if (command === 'delete' || command === 'all')
       issues.push('policy de DELETE ou FOR ALL proibida');
     if ((command === 'select' || command === 'update') && !/\busing\s*\(/i.test(statement)) {
@@ -469,7 +526,11 @@ function requireP008Security(sql, stripped, issues) {
     if (!/\bfrom\s+(?:public|ltc_m_runtime)\s*;/i.test(statement)) {
       issues.push('REVOKE permitido somente de PUBLIC ou ltc_m_runtime');
     }
-    if (!/\b(?:schema\s+ltc_m|in\s+schema\s+ltc_m|function\s+ltc_m\.)/i.test(statement)) {
+    if (
+      !/\b(?:schema\s+ltc_m|in\s+schema\s+ltc_m|(?:table|sequence|function)\s+ltc_m\.)/i.test(
+        statement,
+      )
+    ) {
       issues.push('REVOKE permitido somente em objetos ltc_m');
     }
   }
@@ -499,8 +560,9 @@ export function extractNamedObjects(sql) {
   };
 }
 
-export function scanMigrationText(sql) {
+export function scanMigrationText(sql, options = {}) {
   const issues = [];
+  const scope = options.migrationName === P009_MIGRATION_NAME ? 'p009' : 'p007';
   const stripped = stripSqlNoise(sql);
   const semanticSql = stripped.replace(/\b(?:begin|commit|rollback)\b/gi, '').replace(/[;\s]/g, '');
 
@@ -511,10 +573,10 @@ export function scanMigrationText(sql) {
   }
 
   requireQualifiedObjects(stripped, issues);
-  requireAdditiveAlterTables(stripped, issues);
+  requireAdditiveAlterTables(stripped, issues, scope);
   requireApprovedAlterTypes(sql, issues);
   requireSafeFunctions(sql, issues);
-  requireP008Security(sql, stripped, issues);
+  requireP008Security(sql, stripped, issues, scope);
 
   if (/--project-ref\b/i.test(sql) || /\b[a-z0-9]{20}\.supabase\.co\b/i.test(sql)) {
     issues.push('project ref ou endpoint remoto versionado');
@@ -569,7 +631,7 @@ export function checkMigrations(directory) {
     ) {
       issues.push(`${filename}: migration aplicada foi alterada`);
     }
-    for (const issue of scanMigrationText(sql)) {
+    for (const issue of scanMigrationText(sql, { migrationName: filename })) {
       issues.push(`${filename}: ${issue}`);
     }
 
@@ -579,7 +641,11 @@ export function checkMigrations(directory) {
         const replacesApprovedConstraint =
           name === 'ck_plan_versions_approval' &&
           /\bdrop\s+constraint\s+ck_plan_versions_approval\b/i.test(stripSqlNoise(sql));
-        if (!replacesApprovedConstraint) {
+        const replacesP009Constraint =
+          filename === P009_MIGRATION_NAME &&
+          name === 'ck_import_batches_source_hash' &&
+          /\bdrop\s+constraint\s+ck_import_batches_source_hash\b/i.test(stripSqlNoise(sql));
+        if (!replacesApprovedConstraint && !replacesP009Constraint) {
           issues.push(`${filename}: nome de constraint duplicado: ${name}`);
         }
       }

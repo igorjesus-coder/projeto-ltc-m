@@ -44,7 +44,7 @@ test('aceita os artefatos RLS P008 versionados', () => {
   const result = checkMigrations(migrationsDirectory);
 
   assert.deepEqual(result.issues, []);
-  assert.equal(result.files.length, 9);
+  assert.equal(result.files.length, 10);
 });
 
 test('rejeita desvios de role, policy e grants do modelo P008', () => {

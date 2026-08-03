@@ -1,5 +1,19 @@
 # Relatório de validação dinâmica P008 / 1.08
 
+> Continuação P009 (03/08/2026): a execução `r20260803124900-7372310e` manteve P008 aprovada. As
+> regressões P007/P008, D23, cleanup D27, D26 e fingerprints passaram com dez migrations, 15
+> tabelas RLS/FORCE e 41 policies. Somente a etapa P009 ficou incompleta por erro sintático do
+> renderizador local; consulte o relatório P009 e o resultado estruturado atual.
+
+> D30 (03/08/2026): a única reexecução `r20260803132652-ada2b257` confirmou novamente P008,
+> P007, D23, cleanup D27, D26 e fingerprints. A etapa P009 ainda ficou incompleta por um segundo
+> erro local, agora na aridade do INSERT de fixtures. `rollback_clean=true`; nenhuma regressão
+> P008 foi observada.
+
+> D33 (03/08/2026): a única validação final `r20260803173036-ddabb07d` confirmou P008, P007, D23,
+> D24, cleanup D27, D26 e fingerprints no envelope terminal íntegro. Código 0,
+> `rollback_clean=true` e nenhuma regressão P008.
+
 **Status: Concluída**  
 **Execução final:** `r20260731-d28-final`  
 **Ambiente:** projeto Supabase `Funcionarios`, `us-east-1`, PostgreSQL 17.4
@@ -34,6 +48,7 @@ locks residuais foram eliminados.
 - BRL/US: `1/1`; tabelas operacionais, `app_users` e `audit_log`: vazias;
 - fingerprint externo preservado: `7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95`.
 
-O resultado estruturado e o histórico das tentativas anteriores estão em
+O resultado estruturado atual, incluindo a continuação P009, e o histórico das tentativas
+anteriores estão em
 [`p008-runtime-validation-result.json`](p008-runtime-validation-result.json). A matriz completa do
 grafo está em [`p008-d28-function-audit.md`](p008-d28-function-audit.md).

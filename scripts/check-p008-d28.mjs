@@ -7,6 +7,7 @@ import { stripSqlNoise } from './check-migrations.mjs';
 
 export const D28_FILENAME = '20260731120000_fix_ltcm_runtime_function_acl.sql';
 const P008_LAST_TIMESTAMP = '20260731103001';
+const APPROVED_SUCCESSORS = new Set(['20260731130000_add_ltcm_import_staging.sql']);
 
 // D28 is intentionally a one-function corrective ACL.  The trigger path is
 // SECURITY INVOKER and calls this SECURITY DEFINER helper; no other function
@@ -129,9 +130,13 @@ export function checkD28Migrations(directory) {
     const timestamp = filename.match(/^(\d{14})_/i)?.[1];
     return timestamp && timestamp > P008_LAST_TIMESTAMP;
   });
-  if (postP008.length !== 1) {
+  const d28Migrations = postP008.filter((filename) => filename === D28_FILENAME);
+  const unexpectedSuccessors = postP008.filter(
+    (filename) => filename !== D28_FILENAME && !APPROVED_SUCCESSORS.has(filename),
+  );
+  if (d28Migrations.length !== 1 || unexpectedSuccessors.length > 0) {
     issues.push(
-      `deve existir exatamente uma migration D28 posterior ao P008 (encontradas: ${postP008.length})`,
+      `deve existir exatamente uma migration D28 posterior ao P008 (encontradas: ${d28Migrations.length})`,
     );
   }
   if (!postP008.includes(D28_FILENAME)) {

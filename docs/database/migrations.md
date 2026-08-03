@@ -229,3 +229,41 @@ concede somente `EXECUTE` em `ltc_m.current_actor_id(boolean)` ao runtime, mante
 revogado e sem alterar corpos, policies, tabelas, roles ou memberships. O dry-run e o push D28
 foram executados uma única vez após preflight; o hash é
 `E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8`.
+
+## P009 / 1.09 — staging genérico de importação
+
+A migration
+D32 foi decidida e aprovada pelo responsável do projeto em 03/08/2026. O harness deve exigir
+igualdade exata entre `audit_log.request_id` e o request do contexto transacional ativo. A
+correção limita-se a harness, renderer, fixtures sintéticas, scanners, testes e documentação; a
+migration P009 e os objetos do banco permanecem inalterados. D32 autoriza uma única invocação
+remota final após gate local integral.
+
+A invocação D32 `r20260803151221-2d4f91ba` foi consumida sem migration ou `db push`. O SQL P009
+concluiu suas assertions e ROLLBACK, mas o orquestrador não capturou um result set intermediário e
+retornou código 1. O cleanup e os fingerprints passaram; D32 não autoriza repetição.
+
+D33 foi decidida e aprovada pelo responsável do projeto em 03/08/2026 para corrigir somente
+captura, transporte e integridade da evidência. A única invocação
+`r20260803173036-ddabb07d` terminou com código 0 e envelope `P009_RESULT_V1` íntegro após `close`.
+Todas as fases/regressões e o cleanup passaram, dez migrations permaneceram alinhadas e os
+fingerprints pré/pós foram idênticos. Não houve migration, `db push` ou DDL; D33 não autoriza
+repetição.
+
+[`20260731130000_add_ltcm_import_staging.sql`](../../supabase/migrations/20260731130000_add_ltcm_import_staging.sql)
+prepara `import_batch_sheets` e `import_staging_rows`, estende somente os metadados necessários de
+`import_batches`/`import_row_errors`, aplica constraints, índices, triggers, RLS, policies e grants
+qualificados em `ltc_m`. O hash de arquivo deixa de ser globalmente único para permitir novas
+tentativas; `idempotency_key` permanece única quando informada.
+
+P009 não lê XLSX, não insere dados e não importa dados reais. O contrato JSON v1 será produzido
+pelo P010; o rollback manual está em
+[`rollback-ltcm-p009-staging.sql`](../../database/rollback/rollback-ltcm-p009-staging.sql) e não
+foi executado. A D29 foi decidida em 31/07/2026, e o preflight/dry-run precederam um único push
+remoto bem-sucedido. A revalidação de 03/08/2026 terminou parcialmente concluída: P007/P008,
+cleanup, D26 e fingerprints passaram, mas a etapa P009 abortou antes dos cenários por erro do
+renderizador local. A D30 autorizou e consumiu uma única reexecução
+`r20260803132652-ada2b257`; o alias corrigido passou, porém outro SQLSTATE `42601` revelou aridade
+divergente no INSERT de usuários sintéticos. P007/P008 e cleanup passaram novamente, sem delta.
+A fixture foi corrigida somente localmente. Não houve segundo push; nova execução remota da suíte
+depende de outra decisão explícita.

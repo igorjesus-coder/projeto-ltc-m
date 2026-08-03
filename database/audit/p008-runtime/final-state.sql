@@ -48,6 +48,8 @@ begin
         or (select count(*) from ltc_m.financial_plan_lines) <> 0
         or (select count(*) from ltc_m.financial_actual_events) <> 0
         or (select count(*) from ltc_m.import_batches) <> 0
+        or (select count(*) from ltc_m.import_batch_sheets) <> 0
+        or (select count(*) from ltc_m.import_staging_rows) <> 0
         or (select count(*) from ltc_m.import_row_errors) <> 0
         or (select count(*) from ltc_m.audit_log) <> 0
     then
@@ -72,6 +74,8 @@ select pg_catalog.jsonb_build_object(
         + (select count(*) from ltc_m.financial_plan_lines)
         + (select count(*) from ltc_m.financial_actual_events)
         + (select count(*) from ltc_m.import_batches)
+        + (select count(*) from ltc_m.import_batch_sheets)
+        + (select count(*) from ltc_m.import_staging_rows)
         + (select count(*) from ltc_m.import_row_errors)
         + (select count(*) from ltc_m.audit_log)
 ) as p008_runtime_result;

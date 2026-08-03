@@ -1,0 +1,354 @@
+{
+  "protocol_version": "P009_RESULT_V1",
+  "run_id": "r20260803173036-ddabb07d",
+  "status": "passed",
+  "started_at": "2026-08-03T17:30:36.232Z",
+  "finished_at": "2026-08-03T17:34:47.994Z",
+  "duration_ms": 251762,
+  "phase_a": {
+    "passed": true,
+    "rolled_back": true
+  },
+  "phase_b": {
+    "started": true,
+    "passed": true
+  },
+  "p009": {
+    "batches": true,
+    "sheets": true,
+    "staging": true,
+    "errors": true,
+    "partial_rejection": true,
+    "immutability": true,
+    "audit_sanitized": true,
+    "rls_viewer": true,
+    "rls_editor": true,
+    "rls_admin": true,
+    "invalid_context": true
+  },
+  "audit_requests": [
+    {
+      "scenario": "setup_users",
+      "configured": "r20260803173036-ddabb07d:p009:setup:users",
+      "audited": "r20260803173036-ddabb07d:p009:setup:users",
+      "passed": true
+    },
+    {
+      "scenario": "batch_create",
+      "configured": "r20260803173036-ddabb07d:p009:batch:create",
+      "audited": "r20260803173036-ddabb07d:p009:batch:create",
+      "passed": true
+    },
+    {
+      "scenario": "batch_update",
+      "configured": "r20260803173036-ddabb07d:p009:batch:update",
+      "audited": "r20260803173036-ddabb07d:p009:batch:update",
+      "passed": true
+    },
+    {
+      "scenario": "sheet_create",
+      "configured": "r20260803173036-ddabb07d:p009:sheet:create",
+      "audited": "r20260803173036-ddabb07d:p009:sheet:create",
+      "passed": true
+    },
+    {
+      "scenario": "sheet_update",
+      "configured": "r20260803173036-ddabb07d:p009:sheet:update",
+      "audited": "r20260803173036-ddabb07d:p009:sheet:update",
+      "passed": true
+    },
+    {
+      "scenario": "error_append",
+      "configured": "r20260803173036-ddabb07d:p009:error:append",
+      "audited": "r20260803173036-ddabb07d:p009:error:append",
+      "passed": true
+    },
+    {
+      "scenario": "rls_editor",
+      "configured": "r20260803173036-ddabb07d:p009:rls:editor",
+      "audited": "r20260803173036-ddabb07d:p009:rls:editor",
+      "passed": true
+    },
+    {
+      "scenario": "rls_admin",
+      "configured": "r20260803173036-ddabb07d:p009:rls:admin",
+      "audited": "r20260803173036-ddabb07d:p009:rls:admin",
+      "passed": true
+    }
+  ],
+  "regressions": {
+    "p007": true,
+    "p008": true,
+    "d23_concurrency": true,
+    "d24": true
+  },
+  "cleanup": {
+    "finally_completed": true,
+    "rollback_clean": true,
+    "d26_exact": true,
+    "grantor_postgres_count": 0,
+    "locks_remaining": 0
+  },
+  "final_state": {
+    "brl_count": 1,
+    "us_count": 1,
+    "app_users": 0,
+    "audit_log": 0,
+    "import_batches": 0,
+    "import_batch_sheets": 0,
+    "import_staging_rows": 0,
+    "import_row_errors": 0
+  },
+  "fingerprints": {
+    "external": "7afcc9d9a3d590585a6e864e877df28d4bbfa3c09a38847bb9fc704162552d95",
+    "ltc_m": "0a39eedacac670e25ec46589f8774a13088c136453672c41a38a2ea948a891cb",
+    "migrations": "8d0a1ab4be73312a653ea1f6e677044e6fb609a37bc752ca588f5aa4025789ea"
+  },
+  "artifacts": {
+    "stdout_sha256": "2e5d956ab073e8eeb03d441c7d4c5790ca65629ebbef080b02c2f799dd5c0f26",
+    "stderr_sha256": "786708e309e2c4b7c7e46fe2a4bc55f333751799d943a086a444ef8668e39b44",
+    "manifest_sha256": "bb338e54535ca4f61e57481768c1905c1c3ac7b8646a11312c3f494e983eec42",
+    "pre_inventory_sha256": "01ed54d839f0bfeac40cb31624c61cd3cb82e2af3db553589ae67b2a7ad76a9f",
+    "post_inventory_sha256": "01ed54d839f0bfeac40cb31624c61cd3cb82e2af3db553589ae67b2a7ad76a9f"
+  },
+  "first_error": null,
+  "details": {
+    "task": "P009 / D33 — validação remota final de evidência",
+    "command": "npm run p009:runtime:validate",
+    "stages": [
+      {
+        "name": "fingerprint_pre",
+        "ok": true,
+        "durationMs": 0,
+        "connection": "inventory-pre"
+      },
+      {
+        "name": "d26_preflight",
+        "ok": true,
+        "durationMs": 8664,
+        "connection": "connection-01"
+      },
+      {
+        "name": "migration_alignment_pre",
+        "ok": true,
+        "durationMs": 10926,
+        "connection": "migration-list"
+      },
+      {
+        "name": "d27_reversibility_proof",
+        "ok": true,
+        "durationMs": 9673,
+        "connection": "connection-02"
+      },
+      {
+        "name": "d27_temporary_grant",
+        "ok": true,
+        "durationMs": 9438,
+        "connection": "connection-03"
+      },
+      {
+        "name": "p009_phase_a_bootstrap",
+        "ok": true,
+        "durationMs": 9042,
+        "connection": "connection-phase-a"
+      },
+      {
+        "name": "invalid_context",
+        "ok": true,
+        "durationMs": 10019,
+        "connection": "connection-04"
+      },
+      {
+        "name": "viewer",
+        "ok": true,
+        "durationMs": 8427,
+        "connection": "connection-05"
+      },
+      {
+        "name": "editor_workflow_p007",
+        "ok": true,
+        "durationMs": 9903,
+        "connection": "connection-06"
+      },
+      {
+        "name": "editor_dml",
+        "ok": true,
+        "durationMs": 8653,
+        "connection": "connection-07"
+      },
+      {
+        "name": "admin_d24",
+        "ok": true,
+        "durationMs": 9895,
+        "connection": "connection-08"
+      },
+      {
+        "name": "admin_d23_sequential",
+        "ok": true,
+        "durationMs": 8309,
+        "connection": "connection-09"
+      },
+      {
+        "name": "p009_full_validation",
+        "ok": true,
+        "durationMs": 10257,
+        "connection": "connection-10"
+      },
+      {
+        "name": "p007_full_regression",
+        "ok": true,
+        "durationMs": 8807,
+        "connection": "connection-11"
+      },
+      {
+        "name": "p008_comprehensive_runtime",
+        "ok": true,
+        "durationMs": 10465,
+        "connection": "connection-12"
+      },
+      {
+        "name": "d23_concurrency",
+        "ok": true,
+        "durationMs": 70144,
+        "connection": "connections-13-and-14"
+      },
+      {
+        "name": "d27_cleanup_finally",
+        "ok": true,
+        "durationMs": 8697,
+        "connection": "connection-finally-01"
+      },
+      {
+        "name": "final_state",
+        "ok": true,
+        "durationMs": 9783,
+        "connection": "connection-finally-02"
+      },
+      {
+        "name": "structural_postcheck",
+        "ok": true,
+        "durationMs": 8995,
+        "connection": "connection-finally-03"
+      },
+      {
+        "name": "fingerprint_post",
+        "ok": true,
+        "durationMs": 0,
+        "connection": "inventory-post"
+      }
+    ],
+    "gate": {
+      "manifestSha256": "BB338E54535CA4F61E57481768C1905C1C3AC7B8646A11312C3F494E983EEC42",
+      "sourceHash": "5AC7DE31776EA27D66D68286C80896005D18ED61011A02CA22F82BD701AE26BA",
+      "runIds": ["r20991231-gate-a1b2c3d4", "r20000101_gate_00000000"],
+      "actualRunId": "r20260803173036-ddabb07d",
+      "actualRenderedSha256": "2C950F679D56DB924739FB58C7CD1B2CE678605B061C39B8DD1CCDA25CD4B712",
+      "actualCanonicalSha256": "FAD0BC7041C51EF47D42F437BF1297260C085AD495DB635866E0063426ECB406",
+      "actualMetrics": {
+        "statements": 1172,
+        "statementTypeCounts": {
+          "begin": 165,
+          "commit": 2,
+          "declare": 20,
+          "do": 90,
+          "end": 329,
+          "exception": 81,
+          "format_type": 1,
+          "get": 4,
+          "grant": 2,
+          "if": 105,
+          "insert": 59,
+          "perform": 12,
+          "pg_attribute": 1,
+          "pg_get_userbyid": 1,
+          "pg_index": 1,
+          "pg_policy": 1,
+          "pg_proc": 1,
+          "pg_type": 1,
+          "raise": 81,
+          "reset": 7,
+          "revoke": 2,
+          "rollback": 12,
+          "select": 126,
+          "set": 12,
+          "update": 40,
+          "v_actual_count_after": 1,
+          "v_actual_count_before": 1,
+          "v_after_update": 1,
+          "v_batch_id": 1,
+          "v_count": 1,
+          "v_d23_lock_key": 1,
+          "v_item_id": 1,
+          "v_new_plan_id": 1,
+          "v_plan_id": 1,
+          "v_previous_version": 1,
+          "v_project_id": 1,
+          "v_row_count": 1,
+          "v_rows": 2,
+          "v_updated_at": 1,
+          "with": 1
+        },
+        "inserts": 76,
+        "tuples": 105,
+        "aliases": 59,
+        "ctes": 2,
+        "appUsersFixtures": 20,
+        "requestContexts": 13,
+        "postDmlContextAssertions": 13,
+        "auditedRequestScenarios": 8
+      }
+    },
+    "migrations": [
+      {
+        "local": "20260729163000",
+        "remote": "20260729163000",
+        "time": "2026-07-29 16:30:00"
+      },
+      {
+        "local": "20260730103002",
+        "remote": "20260730103002",
+        "time": "2026-07-30 10:30:02"
+      },
+      {
+        "local": "20260730144303",
+        "remote": "20260730144303",
+        "time": "2026-07-30 14:43:03"
+      },
+      {
+        "local": "20260730144304",
+        "remote": "20260730144304",
+        "time": "2026-07-30 14:43:04"
+      },
+      {
+        "local": "20260730155749",
+        "remote": "20260730155749",
+        "time": "2026-07-30 15:57:49"
+      },
+      {
+        "local": "20260730163419",
+        "remote": "20260730163419",
+        "time": "2026-07-30 16:34:19"
+      },
+      {
+        "local": "20260731103000",
+        "remote": "20260731103000",
+        "time": "2026-07-31 10:30:00"
+      },
+      {
+        "local": "20260731103001",
+        "remote": "20260731103001",
+        "time": "2026-07-31 10:30:01"
+      },
+      {
+        "local": "20260731120000",
+        "remote": "20260731120000",
+        "time": "2026-07-31 12:00:00"
+      },
+      {
+        "local": "20260731130000",
+        "remote": "20260731130000",
+        "time": "2026-07-31 13:00:00"
+      }
+    ]
+  }
+}

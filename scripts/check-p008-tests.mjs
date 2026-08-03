@@ -22,7 +22,7 @@ const REQUIRED_SCENARIOS = [
   ['atributos da runtime', /atributos seguros da role runtime ausentes/i],
   ['runtime sem ownership', /runtime recebeu ownership/i],
   ['runtime sem grants externos', /runtime recebeu grant direto em objeto externo/i],
-  ['RLS e FORCE RLS', /RLS e FORCE RLS não cobrem as 13 tabelas/i],
+  ['RLS e FORCE RLS', /RLS e FORCE RLS não cobrem as 15 tabelas/i],
   ['policies exatas', /inventário de policies divergente/i],
   ['sem DELETE', /runtime recebeu privilégio de tabela proibido/i],
   ['allowlist de funções', /allowlist executável contém/i],

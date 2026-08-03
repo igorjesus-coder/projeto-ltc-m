@@ -1,0 +1,13 @@
+{
+  "protocol": "P009_RESULT_V1",
+  "envelope_sha256": "ba032adb806a41c4c46b0d12a9e180f9163d0253d8878b420332bb830ac0a659",
+  "worker_exit_code": 0,
+  "worker_close_observed": true,
+  "worker_exit_observed_at": 1785778488010,
+  "worker_close_observed_at": 1785778488010,
+  "worker_stdout_sha256": "5ace41fee6172b97ff62ec3d61709729da6a3783aad0a6b1474de43f9f056a3a",
+  "worker_stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "worker_stdout_bytes": 9085,
+  "worker_stderr_bytes": 0,
+  "timed_out": false
+}

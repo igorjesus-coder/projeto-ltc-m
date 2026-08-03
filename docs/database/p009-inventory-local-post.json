@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "task": "P009 / 1.09",
+  "phase": "local-post-migration-static",
+  "target": "Funcionarios",
+  "region": "us-east-1",
+  "migration": "20260731130000_add_ltcm_import_staging.sql",
+  "migrationSha256": "C0CDBC2F020A9D727D0E353A31EA7E91DF715E5B96BEB343E79407DECD940A22",
+  "tables": {
+    "ltc_m.import_batches": "preserved_and_extended",
+    "ltc_m.import_row_errors": "preserved_and_extended",
+    "ltc_m.import_batch_sheets": "created",
+    "ltc_m.import_staging_rows": "created"
+  },
+  "expected": {
+    "rlsForceTables": 15,
+    "policies": 41,
+    "runtimeFunctions": 9,
+    "publicExecute": 0,
+    "deletePolicies": 0,
+    "forAllPolicies": 0,
+    "runtimeExternalGrants": 0
+  },
+  "remoteApplied": true,
+  "d29": "Decidida"
+}

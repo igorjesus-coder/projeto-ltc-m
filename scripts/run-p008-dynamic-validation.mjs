@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,13 +8,35 @@ import {
   fingerprintExternalRows,
   fingerprintLtcmRows,
   fingerprintMigrationRows,
+  normalizeInventoryRows,
   runInventoryQuery,
 } from './collect-db-inventory.mjs';
+import {
+  createP009TerminalEnvelope,
+  runCapturedProcess,
+  sha256File as sha256EvidenceFile,
+} from './p009-evidence-protocol.mjs';
+import {
+  assertValidP009Aliases,
+  renderComprehensiveP008,
+  renderComprehensiveP009,
+  renderScenario,
+  validateP009ScenarioSource,
+} from './sql-rendering.mjs';
+import { buildGateManifest, validateSqlBundle } from './p009-rendered-sql-gate.mjs';
+
+export {
+  assertValidP009Aliases,
+  renderComprehensiveP008,
+  renderComprehensiveP009,
+  renderScenario,
+  validateP009ScenarioSource,
+} from './sql-rendering.mjs';
 
 const EXPECTED_FINGERPRINTS = Object.freeze({
   external: '7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95',
-  ltcm: 'F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154',
-  migrations: 'A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3',
+  ltcm: '0A39EEDACAC670E25EC46589F8774A13088C136453672C41A38A2EA948A891CB',
+  migrations: '8D0A1AB4BE73312A653EA1F6E677044E6FB609A37BC752CA588F5AA4025789EA',
 });
 
 const EXPECTED_MIGRATIONS = Object.freeze({
@@ -37,6 +58,8 @@ const EXPECTED_MIGRATIONS = Object.freeze({
     '485DB38DE4194F2564C6A22D22B145ECA49710A2340B5EBD39C91990EA5CC14A',
   '20260731120000_fix_ltcm_runtime_function_acl.sql':
     'E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8',
+  '20260731130000_add_ltcm_import_staging.sql':
+    'C0CDBC2F020A9D727D0E353A31EA7E91DF715E5B96BEB343E79407DECD940A22',
 });
 
 const SQL_DIRECTORY = path.join('database', 'audit', 'p008-runtime');
@@ -55,16 +78,20 @@ const SQL_FILES = Object.freeze({
   final: path.join(SQL_DIRECTORY, 'final-state.sql'),
   p007: path.join('database', 'audit', 'ltcm-p007-tests.sql'),
   p008: path.join('database', 'audit', 'ltcm-p008-rls-tests.sql'),
-  postcheck: path.join('database', 'audit', 'ltcm-p008-postcheck.sql'),
+  p009Bootstrap: path.join('database', 'audit', 'ltcm-p009-bootstrap.sql'),
+  p009: path.join('database', 'audit', 'ltcm-p009-staging-tests.sql'),
+  postcheck: path.join('database', 'audit', 'ltcm-p009-postcheck.sql'),
 });
 
 const STATUS = Object.freeze({
   complete: 'Concluída',
-  preflight: 'Bloqueada — preflight D26 divergente',
-  reversibility: 'Bloqueada — reversibilidade da concessão temporária não comprovada',
-  partial: 'Parcialmente concluída — harness executado, validação dinâmica incompleta',
-  critical: 'Falha crítica — concessão temporária ou delta não autorizado permaneceu',
+  preflight: 'Bloqueada — preflight D33 divergente',
+  phaseA: 'Parcialmente concluída — validação final P009 falhou, estado remoto limpo',
+  phaseB: 'Parcialmente concluída — validação final P009 falhou, estado remoto limpo',
+  critical: 'Falha crítica — resíduo ou delta após D33',
 });
+
+let activeArtifactCapture = null;
 
 function sha256File(filePath) {
   return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toUpperCase();
@@ -75,14 +102,24 @@ function assertCondition(condition, message) {
 }
 
 export function parseOptions(argv) {
-  const options = { check: false, dryRun: false, runId: null };
+  const options = {
+    check: false,
+    dryRun: false,
+    worker: false,
+    runId: null,
+    artifactDirectory: null,
+  };
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--check') options.check = true;
     else if (argument === '--dry-run') options.dryRun = true;
+    else if (argument === '--worker') options.worker = true;
     else if (argument === '--run-id') {
       options.runId = argv.at(index + 1) ?? null;
+      index += 1;
+    } else if (argument === '--artifact-directory') {
+      options.artifactDirectory = argv.at(index + 1) ?? null;
       index += 1;
     } else throw new Error(`argumento desconhecido: ${argument}`);
   }
@@ -90,6 +127,9 @@ export function parseOptions(argv) {
   if (options.check && options.dryRun) throw new Error('--check e --dry-run são exclusivos');
   if (options.runId && !/^[a-z0-9][a-z0-9-]{5,39}$/.test(options.runId)) {
     throw new Error('--run-id deve conter de 6 a 40 caracteres minúsculos, numéricos ou hífen');
+  }
+  if (options.worker !== Boolean(options.artifactDirectory)) {
+    throw new Error('--worker exige --artifact-directory e vice-versa');
   }
   return options;
 }
@@ -189,25 +229,29 @@ export function validateHarnessSources(rootDirectory) {
     issues.push('pós-check final não comprova a liberação das travas');
   }
 
+  if (
+    !/begin\s*;/iu.test(sources.p009) ||
+    !/rollback\s*;/iu.test(sources.p009) ||
+    !/set\s+local\s+role\s+ltc_m_runtime/iu.test(sources.p009)
+  ) {
+    issues.push('suite P009 deve ser transacional e assumir ltc_m_runtime');
+  }
+  if (
+    !/begin\s*;/iu.test(sources.p009Bootstrap) ||
+    !/rollback\s*;/iu.test(sources.p009Bootstrap) ||
+    !/phase_a_passed/iu.test(sources.p009Bootstrap) ||
+    !/set\s+local\s+role\s+ltc_m_runtime/iu.test(sources.p009Bootstrap)
+  ) {
+    issues.push('Fase A P009 deve ser transacional, revertida e assumir ltc_m_runtime');
+  }
+
+  try {
+    validateP009ScenarioSource(sources.p009);
+  } catch (error) {
+    issues.push(`fluxo D32 inválido: ${error.message}`);
+  }
+
   return [...new Set(issues)];
-}
-
-function uuidPrefixFor(runId) {
-  const hex = createHash('sha256').update(runId, 'utf8').digest('hex');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(12, 15)}-8${hex.slice(15, 18)}-${hex.slice(18, 27)}`;
-}
-
-export function renderScenario(source, runId) {
-  const uuidPrefix = uuidPrefixFor(runId);
-  return source.replaceAll('{{RUN_TOKEN}}', runId).replaceAll('{{UUID_PREFIX}}', uuidPrefix);
-}
-
-export function renderComprehensiveP008(source, runId) {
-  const uuidPrefix = uuidPrefixFor(runId);
-  return source
-    .replaceAll('00000000-0000-4000-8000-000000008', uuidPrefix)
-    .replaceAll('p008', `p008-${runId}`)
-    .replaceAll('P008', `P008-${runId}`);
 }
 
 export function parseMigrationList(stdout) {
@@ -221,55 +265,17 @@ export function parseMigrationList(stdout) {
 }
 
 function runProcess(command, args, options = {}) {
-  return new Promise((resolve) => {
-    const startedAt = Date.now();
-    const timeoutMs = options.timeoutMs ?? 120_000;
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-    let settled = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, timeoutMs);
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk;
-    });
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk;
-    });
-    child.on('error', (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      resolve({
-        ok: false,
-        code: null,
-        stdout,
-        stderr: error.message,
-        durationMs: Date.now() - startedAt,
-      });
-    });
-    child.on('close', (code) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      resolve({
-        ok: code === 0 && !timedOut,
-        code,
-        stdout,
-        stderr: timedOut ? `${stderr}\nsubprocesso excedeu o timeout de ${timeoutMs} ms` : stderr,
-        durationMs: Date.now() - startedAt,
-      });
-    });
-  });
+  return runCapturedProcess(command, args, {
+    ...options,
+    stdoutPath: options.stdoutPath ?? activeArtifactCapture?.stdoutPath,
+    stderrPath: options.stderrPath ?? activeArtifactCapture?.stderrPath,
+    append: options.append ?? Boolean(activeArtifactCapture),
+  }).then((result) => ({
+    ...result,
+    stderr: result.timedOut
+      ? `${result.stderr}\nsubprocesso excedeu o timeout de ${options.timeoutMs ?? 120_000} ms`
+      : result.stderr,
+  }));
 }
 
 function sanitizedFailure(result) {
@@ -298,11 +304,24 @@ async function runSql(rootDirectory, relativeFile, expectedFragments = [], optio
       throw new Error(`resposta do gate não contém ${fragment}`);
     }
   }
-  return result.durationMs;
+  return options.capture
+    ? { durationMs: result.durationMs, stdout: result.stdout }
+    : result.durationMs;
 }
 
-function inventoryFingerprints(rootDirectory) {
+function parseQueryRows(stdout) {
+  const start = stdout.indexOf('{');
+  assertCondition(start >= 0, 'consulta D32 não retornou JSON');
+  const payload = JSON.parse(stdout.slice(start));
+  assertCondition(Array.isArray(payload.rows), 'consulta D32 não retornou rows');
+  return payload.rows;
+}
+
+function inventoryFingerprints(rootDirectory, evidencePath = null) {
   const rows = runInventoryQuery(rootDirectory);
+  if (evidencePath) {
+    fs.writeFileSync(evidencePath, JSON.stringify(normalizeInventoryRows(rows)), 'utf8');
+  }
   return {
     external: fingerprintExternalRows(rows),
     ltcm: fingerprintLtcmRows(rows),
@@ -324,6 +343,13 @@ function writeReport(rootDirectory, report) {
     'p008-runtime-validation-result.json',
   );
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  const p009ReportPath = path.join(
+    rootDirectory,
+    'docs',
+    'database',
+    'p009-runtime-validation-result.json',
+  );
+  fs.writeFileSync(p009ReportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 }
 
 function previousAttempts(rootDirectory) {
@@ -388,6 +414,22 @@ function prepareRenderedFiles(rootDirectory, tempDirectory, runId) {
     'utf8',
   );
   rendered.p008 = path.relative(rootDirectory, p008Target);
+
+  const p009Target = path.join(tempDirectory, 'comprehensive-p009.sql');
+  fs.writeFileSync(
+    p009Target,
+    renderComprehensiveP009(readSource(rootDirectory, SQL_FILES.p009), runId),
+    'utf8',
+  );
+  rendered.p009 = path.relative(rootDirectory, p009Target);
+
+  const p009BootstrapTarget = path.join(tempDirectory, 'p009-bootstrap.sql');
+  fs.writeFileSync(
+    p009BootstrapTarget,
+    renderComprehensiveP009(readSource(rootDirectory, SQL_FILES.p009Bootstrap), runId),
+    'utf8',
+  );
+  rendered.p009Bootstrap = path.relative(rootDirectory, p009BootstrapTarget);
   return rendered;
 }
 
@@ -406,20 +448,44 @@ async function executeStage(report, name, connection, action) {
   }
 }
 
-async function runLive(rootDirectory, runId) {
+async function runLive(rootDirectory, runId, gateManifest, actualGate, artifactDirectory) {
   const report = {
     formatVersion: 1,
-    task: 'P008 / 1.08 — validação dinâmica ltc_m_runtime',
+    task: 'P009 / D33 — validação remota final de evidência',
     runId,
     target: { project: 'Funcionarios', region: 'us-east-1' },
-    decisions: ['D26', 'D27', 'D28'],
+    command: 'npm run p009:runtime:validate',
+    decisions: ['D26', 'D27', 'D28', 'D29', 'D30', 'D31', 'D32', 'D33'],
     startedAtUtc: new Date().toISOString(),
-    status: STATUS.partial,
+    status: STATUS.phaseA,
+    gate: {
+      manifestSha256: gateManifest.manifestSha256,
+      sourceHash: gateManifest.sourceHash,
+      runIds: gateManifest.runIds,
+      actualRunId: runId,
+      actualRenderedSha256: actualGate.renderedHash,
+      actualCanonicalSha256: actualGate.canonicalHash,
+      actualMetrics: actualGate.metrics,
+    },
+    phases: {
+      phaseA: { startedAtUtc: null, finishedAtUtc: null, passed: false },
+      phaseB: { startedAtUtc: null, finishedAtUtc: null, started: false, passed: false },
+    },
     stages: [],
     fingerprints: { expected: EXPECTED_FINGERPRINTS, before: null, after: null },
     migrationHashes: EXPECTED_MIGRATIONS,
-    cleanup: { attempted: false, succeeded: null, localLockRemoved: false },
+    cleanup: {
+      attempted: false,
+      startedAtUtc: null,
+      finishedAtUtc: null,
+      succeeded: null,
+      localLockRemoved: false,
+    },
     previousAttempts: previousAttempts(rootDirectory),
+    requestIdMatrix: null,
+    p009Evidence: null,
+    finalStateEvidence: null,
+    postcheckEvidence: null,
   };
 
   const tempRoot = path.join(rootDirectory, '.tmp');
@@ -434,7 +500,20 @@ async function runLive(rootDirectory, runId) {
   let cleanupSucceeded = null;
   let finalStateSucceeded = false;
   let failurePhase = null;
-  let preflightDiverged = false;
+  let phaseAPassed = false;
+  let phaseBStarted = false;
+
+  fs.mkdirSync(artifactDirectory, { recursive: true });
+  const subprocessStdoutPath = path.join(artifactDirectory, 'subprocess.stdout');
+  const subprocessStderrPath = path.join(artifactDirectory, 'subprocess.stderr');
+  const preInventoryPath = path.join(artifactDirectory, 'inventory.pre.json');
+  const postInventoryPath = path.join(artifactDirectory, 'inventory.post.json');
+  fs.writeFileSync(subprocessStdoutPath, Buffer.alloc(0));
+  fs.writeFileSync(subprocessStderrPath, Buffer.alloc(0));
+  activeArtifactCapture = {
+    stdoutPath: subprocessStdoutPath,
+    stderrPath: subprocessStderrPath,
+  };
 
   try {
     fs.mkdirSync(tempRoot, { recursive: true });
@@ -446,18 +525,13 @@ async function runLive(rootDirectory, runId) {
     tempDirectory = fs.mkdtempSync(path.join(tempRoot, 'p008-runtime-'));
     const rendered = prepareRenderedFiles(rootDirectory, tempDirectory, runId);
 
-    report.fingerprints.before = inventoryFingerprints(rootDirectory);
+    report.fingerprints.before = inventoryFingerprints(rootDirectory, preInventoryPath);
     assertExpectedBaseline(report.fingerprints.before);
     recordStage(report, 'fingerprint_pre', true, 0, 'inventory-pre');
 
-    try {
-      await executeStage(report, 'd26_preflight', 'connection-01', () =>
-        runSql(rootDirectory, SQL_FILES.preflight, ['"ok": true', '"set": false']),
-      );
-    } catch (error) {
-      preflightDiverged = /D26|associação automática|membership/i.test(error.message);
-      throw error;
-    }
+    await executeStage(report, 'd26_preflight', 'connection-01', () =>
+      runSql(rootDirectory, SQL_FILES.preflight, ['"ok": true', '"set": false']),
+    );
     preflightPassed = true;
 
     await executeStage(report, 'migration_alignment_pre', 'migration-list', async () => {
@@ -493,6 +567,28 @@ async function runLive(rootDirectory, runId) {
       runSql(rootDirectory, SQL_FILES.grant, ['"membership_count": 2', '"set": true']),
     );
 
+    report.phases.phaseA.startedAtUtc = new Date().toISOString();
+    try {
+      await executeStage(report, 'p009_phase_a_bootstrap', 'connection-phase-a', () =>
+        runSql(rootDirectory, rendered.p009Bootstrap, [
+          '"phase_a_passed": true',
+          '"rollback_clean": true',
+          '"operational_rows": 0',
+          '"relevant_advisory_locks": 0',
+        ]),
+      );
+      phaseAPassed = true;
+      report.phases.phaseA.passed = true;
+    } finally {
+      report.phases.phaseA.finishedAtUtc = new Date().toISOString();
+    }
+
+    assertCondition(phaseAPassed, 'Fase A não produziu phase_a_passed=true');
+    report.phaseAPassed = phaseAPassed;
+    report.phases.phaseB.started = true;
+    report.phases.phaseB.startedAtUtc = new Date().toISOString();
+    phaseBStarted = true;
+
     const continueStage = async (name, connection, action) => {
       try {
         await executeStage(report, name, connection, action);
@@ -520,14 +616,32 @@ async function runLive(rootDirectory, runId) {
     await continueStage('admin_d23_sequential', 'connection-09', () =>
       runSql(rootDirectory, rendered.admin, ['"rollback_clean": true']),
     );
-    await continueStage('p007_full_regression', 'connection-10', () =>
+    await continueStage('p009_full_validation', 'connection-10', async () => {
+      const result = await runSql(rootDirectory, rendered.p009, ['"rollback_clean": true'], {
+        capture: true,
+      });
+      const evidenceRow = parseQueryRows(result.stdout).find((row) => row.p009_terminal_evidence);
+      assertCondition(evidenceRow, 'evidencia terminal P009 D33 ausente da resposta');
+      assertCondition(
+        evidenceRow.p009_terminal_evidence.rollback_clean === true,
+        'rollback P009 D33 divergente',
+      );
+      assertCondition(
+        evidenceRow.p009_terminal_evidence.request_contract === true,
+        'contrato de request P009 D33 divergente',
+      );
+      report.p009Evidence = evidenceRow.p009_terminal_evidence;
+      report.requestIdMatrix = evidenceRow.p009_terminal_evidence.audit_requests;
+      return result.durationMs;
+    });
+    await continueStage('p007_full_regression', 'connection-11', () =>
       runSql(rootDirectory, SQL_FILES.p007, ['"rollback_clean": true']),
     );
-    await continueStage('p008_comprehensive_runtime', 'connection-11', () =>
+    await continueStage('p008_comprehensive_runtime', 'connection-12', () =>
       runSql(rootDirectory, rendered.p008, ['"rollback_clean": true']),
     );
 
-    await continueStage('d23_concurrency', 'connections-12-and-13', async () => {
+    await continueStage('d23_concurrency', 'connections-13-and-14', async () => {
       const concurrencyStartedAt = Date.now();
       const firstConnection = runSql(
         rootDirectory,
@@ -560,14 +674,20 @@ async function runLive(rootDirectory, runId) {
       return concurrencyDuration;
     });
     functionalComplete = functionalFailures === 0;
+    report.phases.phaseB.passed = functionalComplete;
+    report.phases.phaseB.finishedAtUtc = new Date().toISOString();
   } catch (error) {
     failurePhase = report.stages.at(-1)?.name ?? (preflightPassed ? 'harness' : 'preflight');
     if (report.stages.at(-1)?.ok !== false) {
       recordStage(report, failurePhase, false, 0, 'orchestrator', error.message);
     }
+    if (phaseBStarted && report.phases.phaseB.finishedAtUtc === null) {
+      report.phases.phaseB.finishedAtUtc = new Date().toISOString();
+    }
   } finally {
     if (grantAttempted) {
       report.cleanup.attempted = true;
+      report.cleanup.startedAtUtc = new Date().toISOString();
       try {
         await executeStage(report, 'd27_cleanup_finally', 'connection-finally-01', () =>
           runSql(rootDirectory, SQL_FILES.cleanup, ['"d26_restored": true', '"set": false']),
@@ -579,28 +699,44 @@ async function runLive(rootDirectory, runId) {
       report.cleanup.succeeded = cleanupSucceeded;
 
       try {
-        await executeStage(report, 'final_state', 'connection-finally-02', () =>
-          runSql(rootDirectory, SQL_FILES.final, [
-            '"d26_restored": true',
-            '"set": false',
-            '"operational_rows": 0',
-          ]),
-        );
-        await executeStage(report, 'structural_postcheck', 'connection-finally-03', () =>
-          runSql(rootDirectory, SQL_FILES.postcheck, [
-            '"policy_count": 35',
-            '"rls_force_tables": 13',
-            '"runtime_function_count": 9',
-            '"unsafe_policy_count": 0',
-          ]),
-        );
+        await executeStage(report, 'final_state', 'connection-finally-02', async () => {
+          const result = await runSql(
+            rootDirectory,
+            SQL_FILES.final,
+            ['"d26_restored": true', '"set": false', '"operational_rows": 0'],
+            { capture: true },
+          );
+          report.finalStateEvidence = parseQueryRows(result.stdout).find(
+            (row) => row.p008_runtime_result,
+          )?.p008_runtime_result;
+          assertCondition(report.finalStateEvidence, 'evidencia de estado final ausente');
+          return result.durationMs;
+        });
+        await executeStage(report, 'structural_postcheck', 'connection-finally-03', async () => {
+          const result = await runSql(
+            rootDirectory,
+            SQL_FILES.postcheck,
+            [
+              '"policy_count": 41',
+              '"rls_force_table_count": 15',
+              '"runtime_function_count": 9',
+              '"unsafe_policy_count": 0',
+            ],
+            { capture: true },
+          );
+          report.postcheckEvidence = parseQueryRows(result.stdout).find(
+            (row) => row.p009_postcheck,
+          )?.p009_postcheck;
+          assertCondition(report.postcheckEvidence, 'evidencia estrutural P009 ausente');
+          return result.durationMs;
+        });
         finalStateSucceeded = true;
       } catch {
         finalStateSucceeded = false;
       }
 
       try {
-        report.fingerprints.after = inventoryFingerprints(rootDirectory);
+        report.fingerprints.after = inventoryFingerprints(rootDirectory, postInventoryPath);
         for (const name of Object.keys(EXPECTED_FINGERPRINTS)) {
           assertCondition(
             report.fingerprints.after[name] === report.fingerprints.before[name],
@@ -612,6 +748,7 @@ async function runLive(rootDirectory, runId) {
         recordStage(report, 'fingerprint_post', false, 0, 'inventory-post', error.message);
         finalStateSucceeded = false;
       }
+      report.cleanup.finishedAtUtc = new Date().toISOString();
     }
 
     if (tempDirectory) fs.rmSync(tempDirectory, { recursive: true, force: true });
@@ -619,18 +756,152 @@ async function runLive(rootDirectory, runId) {
     if (fs.existsSync(lockPath)) fs.unlinkSync(lockPath);
     report.cleanup.localLockRemoved = !fs.existsSync(lockPath);
 
-    if (!preflightPassed) report.status = preflightDiverged ? STATUS.preflight : STATUS.partial;
-    else if (!proofPassed && !grantAttempted) report.status = STATUS.reversibility;
+    if (!preflightPassed) report.status = STATUS.preflight;
+    else if (!proofPassed && !grantAttempted) report.status = STATUS.preflight;
     else if (cleanupSucceeded === false || !finalStateSucceeded) report.status = STATUS.critical;
+    else if (!phaseAPassed) report.status = STATUS.phaseA;
     else if (functionalComplete) report.status = STATUS.complete;
-    else report.status = STATUS.partial;
+    else report.status = STATUS.phaseB;
 
+    report.rollbackClean =
+      cleanupSucceeded === true && finalStateSucceeded && report.cleanup.localLockRemoved;
     report.failurePhase = failurePhase;
+    report.phaseAPassed = phaseAPassed;
+    report.phaseBStarted = phaseBStarted;
     report.finishedAtUtc = new Date().toISOString();
+    report.exitCode = report.status === STATUS.complete ? 0 : 1;
+    for (const evidencePath of [
+      subprocessStdoutPath,
+      subprocessStderrPath,
+      preInventoryPath,
+      postInventoryPath,
+    ]) {
+      if (!fs.existsSync(evidencePath)) fs.writeFileSync(evidencePath, '[]', 'utf8');
+    }
+    report.artifactHashes = {
+      stdout: sha256EvidenceFile(subprocessStdoutPath),
+      stderr: sha256EvidenceFile(subprocessStderrPath),
+      preInventory: sha256EvidenceFile(preInventoryPath),
+      postInventory: sha256EvidenceFile(postInventoryPath),
+    };
+    activeArtifactCapture = null;
     writeReport(rootDirectory, report);
   }
 
   return report;
+}
+
+function stagePassed(report, name) {
+  return report.stages.some((stage) => stage.name === name && stage.ok === true);
+}
+
+function d26IsExact(postcheck) {
+  const memberships = postcheck?.d26_membership;
+  return (
+    Array.isArray(memberships) &&
+    memberships.length === 1 &&
+    memberships[0].granted_role === 'ltc_m_runtime' &&
+    memberships[0].member_role === 'postgres' &&
+    memberships[0].grantor === 'supabase_admin' &&
+    memberships[0].admin_option === true &&
+    memberships[0].inherit_option === false &&
+    memberships[0].set_option === false
+  );
+}
+
+export function buildP009TerminalPayload(report) {
+  const postcheck = report.postcheckEvidence ?? {};
+  const counts = postcheck.counts ?? {};
+  const p009 = report.p009Evidence ?? {};
+  const firstFailure = report.stages.find((stage) => stage.ok === false);
+  const status =
+    report.status === STATUS.complete
+      ? 'passed'
+      : report.status === STATUS.critical
+        ? 'critical'
+        : 'failed';
+  return {
+    protocol_version: 'P009_RESULT_V1',
+    run_id: report.runId,
+    status,
+    started_at: report.startedAtUtc,
+    finished_at: report.finishedAtUtc,
+    duration_ms: Math.max(0, Date.parse(report.finishedAtUtc) - Date.parse(report.startedAtUtc)),
+    phase_a: {
+      passed: report.phaseAPassed === true,
+      rolled_back: stagePassed(report, 'p009_phase_a_bootstrap'),
+    },
+    phase_b: {
+      started: report.phaseBStarted === true,
+      passed: report.phases.phaseB.passed === true,
+    },
+    p009: {
+      batches: p009.batches === true,
+      sheets: p009.sheets === true,
+      staging: p009.staging === true,
+      errors: p009.errors === true,
+      partial_rejection: p009.partial_rejection === true,
+      immutability: p009.immutability === true,
+      audit_sanitized: p009.audit_sanitized === true,
+      rls_viewer: p009.rls_viewer === true,
+      rls_editor: p009.rls_editor === true,
+      rls_admin: p009.rls_admin === true,
+      invalid_context: p009.invalid_context === true && stagePassed(report, 'invalid_context'),
+    },
+    audit_requests: (p009.audit_requests ?? []).map((item) => ({
+      scenario: item.scenario.replaceAll(':', '_').replaceAll('-', '_'),
+      configured: item.configured,
+      audited: item.audited,
+      passed: item.configured === item.audited,
+    })),
+    regressions: {
+      p007: stagePassed(report, 'p007_full_regression'),
+      p008: stagePassed(report, 'p008_comprehensive_runtime'),
+      d23_concurrency: stagePassed(report, 'd23_concurrency'),
+      d24: stagePassed(report, 'admin_d24'),
+    },
+    cleanup: {
+      finally_completed: report.cleanup.succeeded === true,
+      rollback_clean: report.rollbackClean === true,
+      d26_exact: d26IsExact(postcheck),
+      grantor_postgres_count: postcheck.postgres_grantor_memberships ?? -1,
+      locks_remaining: postcheck.relevant_advisory_locks ?? -1,
+    },
+    final_state: {
+      brl_count: postcheck.reference_data?.BRL ?? -1,
+      us_count: postcheck.reference_data?.US ?? -1,
+      app_users: counts.app_users ?? -1,
+      audit_log: counts.audit_log ?? -1,
+      import_batches: counts.import_batches ?? -1,
+      import_batch_sheets: counts.import_batch_sheets ?? -1,
+      import_staging_rows: counts.import_staging_rows ?? -1,
+      import_row_errors: counts.import_row_errors ?? -1,
+    },
+    fingerprints: {
+      external: (
+        report.fingerprints.after?.external ?? EXPECTED_FINGERPRINTS.external
+      ).toLowerCase(),
+      ltc_m: (report.fingerprints.after?.ltcm ?? EXPECTED_FINGERPRINTS.ltcm).toLowerCase(),
+      migrations: (
+        report.fingerprints.after?.migrations ?? EXPECTED_FINGERPRINTS.migrations
+      ).toLowerCase(),
+    },
+    artifacts: {
+      stdout_sha256: report.artifactHashes.stdout,
+      stderr_sha256: report.artifactHashes.stderr,
+      manifest_sha256: report.gate.manifestSha256.toLowerCase(),
+      pre_inventory_sha256: report.artifactHashes.preInventory,
+      post_inventory_sha256: report.artifactHashes.postInventory,
+    },
+    first_error: firstFailure?.detail ?? null,
+    details: {
+      task: report.task,
+      command: report.command,
+      stages: report.stages,
+      gate: report.gate,
+      migrations: report.migrations,
+    },
+  };
 }
 
 async function main() {
@@ -640,8 +911,28 @@ async function main() {
     options = parseOptions(process.argv.slice(2));
     const issues = validateHarnessSources(rootDirectory);
     if (issues.length > 0) throw new Error(issues.join('; '));
+    const gateResult = buildGateManifest(rootDirectory);
+    if (gateResult.manifest.status !== 'approved') {
+      throw new Error(
+        `gate local do SQL renderizado falhou: ${gateResult.manifest.issues
+          .map((item) => `${item.artifact ?? 'bundle'}:${item.line}:${item.column} ${item.message}`)
+          .join('; ')}`,
+      );
+    }
+    const manifestPath = path.join(
+      rootDirectory,
+      'docs',
+      'database',
+      'p009-rendered-sql-gate-manifest.json',
+    );
+    if (!fs.existsSync(manifestPath)) throw new Error('manifesto D33 versionado ausente');
+    const storedManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (storedManifest.manifestSha256 !== gateResult.manifest.manifestSha256) {
+      throw new Error('manifesto D33 versionado diverge do gate local atual');
+    }
+    options.gateManifest = gateResult.manifest;
   } catch (error) {
-    console.error(`Falha de uso/validação do harness P008: ${error.message}`);
+    console.error(`Bloqueada — gate local D33 falhou: ${error.message}`);
     process.exitCode = 2;
     return;
   }
@@ -665,7 +956,10 @@ async function main() {
             'migration_alignment_pre',
             'd27_reversibility_proof_rolled_back',
             'd27_temporary_grant',
+            'p009_phase_a_bootstrap_rolled_back',
+            'phase_a_gate',
             'isolated_runtime_scenarios',
+            'p009_full_validation',
             'p007_full_regression',
             'p008_comprehensive_runtime',
             'd23_concurrency',
@@ -680,11 +974,42 @@ async function main() {
     return;
   }
 
-  const report = await runLive(rootDirectory, runId);
-  console.log(
-    JSON.stringify({ runId: report.runId, status: report.status, stages: report.stages }, null, 2),
+  if (!options.worker) {
+    console.error('Bloqueada — execução remota D33 exige o launcher versionado');
+    process.exitCode = 2;
+    return;
+  }
+
+  const actualGate = validateSqlBundle(rootDirectory, runId);
+  if (!actualGate.ok) {
+    console.error(
+      `Bloqueada — gate local D33 falhou: ${actualGate.issues
+        .map((item) => `${item.artifact}:${item.line}:${item.column} ${item.message}`)
+        .join('; ')}`,
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const resolvedArtifactDirectory = path.resolve(options.artifactDirectory);
+  const relativeArtifactDirectory = path.relative(
+    path.resolve(rootDirectory, '.tmp'),
+    resolvedArtifactDirectory,
   );
-  if (report.status !== STATUS.complete) process.exitCode = 1;
+  if (relativeArtifactDirectory.startsWith('..') || path.isAbsolute(relativeArtifactDirectory)) {
+    console.error('Bloqueada — diretório de evidência D33 deve permanecer em .tmp');
+    process.exitCode = 2;
+    return;
+  }
+  const report = await runLive(
+    rootDirectory,
+    runId,
+    options.gateManifest,
+    actualGate,
+    resolvedArtifactDirectory,
+  );
+  const payload = buildP009TerminalPayload(report);
+  process.stdout.write(`${createP009TerminalEnvelope(payload)}\n`);
+  if (payload.status !== 'passed') process.exitCode = 1;
 }
 
 const currentFile = fileURLToPath(import.meta.url);

@@ -1,14 +1,89 @@
 {
   "formatVersion": 1,
-  "task": "P008 / 1.08 — validação dinâmica ltc_m_runtime",
-  "runId": "r20260731-d28-final",
+  "task": "P009 / D33 — validação remota final de evidência",
+  "runId": "r20260803173036-ddabb07d",
   "target": {
     "project": "Funcionarios",
     "region": "us-east-1"
   },
-  "decisions": ["D26", "D27", "D28"],
-  "startedAtUtc": "2026-07-31T18:32:36.476Z",
+  "command": "npm run p009:runtime:validate",
+  "decisions": ["D26", "D27", "D28", "D29", "D30", "D31", "D32", "D33"],
+  "startedAtUtc": "2026-08-03T17:30:36.232Z",
   "status": "Concluída",
+  "gate": {
+    "manifestSha256": "BB338E54535CA4F61E57481768C1905C1C3AC7B8646A11312C3F494E983EEC42",
+    "sourceHash": "5AC7DE31776EA27D66D68286C80896005D18ED61011A02CA22F82BD701AE26BA",
+    "runIds": ["r20991231-gate-a1b2c3d4", "r20000101_gate_00000000"],
+    "actualRunId": "r20260803173036-ddabb07d",
+    "actualRenderedSha256": "2C950F679D56DB924739FB58C7CD1B2CE678605B061C39B8DD1CCDA25CD4B712",
+    "actualCanonicalSha256": "FAD0BC7041C51EF47D42F437BF1297260C085AD495DB635866E0063426ECB406",
+    "actualMetrics": {
+      "statements": 1172,
+      "statementTypeCounts": {
+        "begin": 165,
+        "commit": 2,
+        "declare": 20,
+        "do": 90,
+        "end": 329,
+        "exception": 81,
+        "format_type": 1,
+        "get": 4,
+        "grant": 2,
+        "if": 105,
+        "insert": 59,
+        "perform": 12,
+        "pg_attribute": 1,
+        "pg_get_userbyid": 1,
+        "pg_index": 1,
+        "pg_policy": 1,
+        "pg_proc": 1,
+        "pg_type": 1,
+        "raise": 81,
+        "reset": 7,
+        "revoke": 2,
+        "rollback": 12,
+        "select": 126,
+        "set": 12,
+        "update": 40,
+        "v_actual_count_after": 1,
+        "v_actual_count_before": 1,
+        "v_after_update": 1,
+        "v_batch_id": 1,
+        "v_count": 1,
+        "v_d23_lock_key": 1,
+        "v_item_id": 1,
+        "v_new_plan_id": 1,
+        "v_plan_id": 1,
+        "v_previous_version": 1,
+        "v_project_id": 1,
+        "v_row_count": 1,
+        "v_rows": 2,
+        "v_updated_at": 1,
+        "with": 1
+      },
+      "inserts": 76,
+      "tuples": 105,
+      "aliases": 59,
+      "ctes": 2,
+      "appUsersFixtures": 20,
+      "requestContexts": 13,
+      "postDmlContextAssertions": 13,
+      "auditedRequestScenarios": 8
+    }
+  },
+  "phases": {
+    "phaseA": {
+      "startedAtUtc": "2026-08-03T17:31:26.408Z",
+      "finishedAtUtc": "2026-08-03T17:31:35.450Z",
+      "passed": true
+    },
+    "phaseB": {
+      "startedAtUtc": "2026-08-03T17:31:35.450Z",
+      "finishedAtUtc": "2026-08-03T17:34:10.330Z",
+      "started": true,
+      "passed": true
+    }
+  },
   "stages": [
     {
       "name": "fingerprint_pre",
@@ -19,97 +94,109 @@
     {
       "name": "d26_preflight",
       "ok": true,
-      "durationMs": 9692,
+      "durationMs": 8664,
       "connection": "connection-01"
     },
     {
       "name": "migration_alignment_pre",
       "ok": true,
-      "durationMs": 10410,
+      "durationMs": 10926,
       "connection": "migration-list"
     },
     {
       "name": "d27_reversibility_proof",
       "ok": true,
-      "durationMs": 9161,
+      "durationMs": 9673,
       "connection": "connection-02"
     },
     {
       "name": "d27_temporary_grant",
       "ok": true,
-      "durationMs": 9042,
+      "durationMs": 9438,
       "connection": "connection-03"
+    },
+    {
+      "name": "p009_phase_a_bootstrap",
+      "ok": true,
+      "durationMs": 9042,
+      "connection": "connection-phase-a"
     },
     {
       "name": "invalid_context",
       "ok": true,
-      "durationMs": 9191,
+      "durationMs": 10019,
       "connection": "connection-04"
     },
     {
       "name": "viewer",
       "ok": true,
-      "durationMs": 9070,
+      "durationMs": 8427,
       "connection": "connection-05"
     },
     {
       "name": "editor_workflow_p007",
       "ok": true,
-      "durationMs": 9604,
+      "durationMs": 9903,
       "connection": "connection-06"
     },
     {
       "name": "editor_dml",
       "ok": true,
-      "durationMs": 9038,
+      "durationMs": 8653,
       "connection": "connection-07"
     },
     {
       "name": "admin_d24",
       "ok": true,
-      "durationMs": 9896,
+      "durationMs": 9895,
       "connection": "connection-08"
     },
     {
       "name": "admin_d23_sequential",
       "ok": true,
-      "durationMs": 9331,
+      "durationMs": 8309,
       "connection": "connection-09"
+    },
+    {
+      "name": "p009_full_validation",
+      "ok": true,
+      "durationMs": 10257,
+      "connection": "connection-10"
     },
     {
       "name": "p007_full_regression",
       "ok": true,
-      "durationMs": 9317,
-      "connection": "connection-10"
+      "durationMs": 8807,
+      "connection": "connection-11"
     },
     {
       "name": "p008_comprehensive_runtime",
       "ok": true,
-      "durationMs": 9631,
-      "connection": "connection-11"
+      "durationMs": 10465,
+      "connection": "connection-12"
     },
     {
       "name": "d23_concurrency",
       "ok": true,
-      "durationMs": 70072,
-      "connection": "connections-12-and-13"
+      "durationMs": 70144,
+      "connection": "connections-13-and-14"
     },
     {
       "name": "d27_cleanup_finally",
       "ok": true,
-      "durationMs": 9826,
+      "durationMs": 8697,
       "connection": "connection-finally-01"
     },
     {
       "name": "final_state",
       "ok": true,
-      "durationMs": 9090,
+      "durationMs": 9783,
       "connection": "connection-finally-02"
     },
     {
       "name": "structural_postcheck",
       "ok": true,
-      "durationMs": 9690,
+      "durationMs": 8995,
       "connection": "connection-finally-03"
     },
     {
@@ -122,18 +209,18 @@
   "fingerprints": {
     "expected": {
       "external": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95",
-      "ltcm": "F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154",
-      "migrations": "A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3"
+      "ltcm": "0A39EEDACAC670E25EC46589F8774A13088C136453672C41A38A2EA948A891CB",
+      "migrations": "8D0A1AB4BE73312A653EA1F6E677044E6FB609A37BC752CA588F5AA4025789EA"
     },
     "before": {
       "external": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95",
-      "ltcm": "F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154",
-      "migrations": "A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3"
+      "ltcm": "0A39EEDACAC670E25EC46589F8774A13088C136453672C41A38A2EA948A891CB",
+      "migrations": "8D0A1AB4BE73312A653EA1F6E677044E6FB609A37BC752CA588F5AA4025789EA"
     },
     "after": {
       "external": "7AFCC9D9A3D590585A6E864E877DF28D4BBFA3C09A38847BB9FC704162552D95",
-      "ltcm": "F4A1681530F50790B97250F1BDF4C3577AE808376821B8A00E74A90A70019154",
-      "migrations": "A4DD8FF011E5AD3AB56247437D61EBC5C87BE7930830F213F3B821BD430BBFC3"
+      "ltcm": "0A39EEDACAC670E25EC46589F8774A13088C136453672C41A38A2EA948A891CB",
+      "migrations": "8D0A1AB4BE73312A653EA1F6E677044E6FB609A37BC752CA588F5AA4025789EA"
     }
   },
   "migrationHashes": {
@@ -145,10 +232,13 @@
     "20260730163419_fix_ltcm_admin_inactivation_columns.sql": "04DBB1184E86394B4301766749A9CD16F79C84B7ABBC0531CFBB6B038E70A90F",
     "20260731103000_add_ltcm_audit_read_event.sql": "B2722B5695786191A40A39745DC7B36DCDF28623DDA0A1E29FFC2A3C4B1661F8",
     "20260731103001_add_ltcm_runtime_rls_security.sql": "485DB38DE4194F2564C6A22D22B145ECA49710A2340B5EBD39C91990EA5CC14A",
-    "20260731120000_fix_ltcm_runtime_function_acl.sql": "E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8"
+    "20260731120000_fix_ltcm_runtime_function_acl.sql": "E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8",
+    "20260731130000_add_ltcm_import_staging.sql": "C0CDBC2F020A9D727D0E353A31EA7E91DF715E5B96BEB343E79407DECD940A22"
   },
   "cleanup": {
     "attempted": true,
+    "startedAtUtc": "2026-08-03T17:34:10.330Z",
+    "finishedAtUtc": "2026-08-03T17:34:47.991Z",
     "succeeded": true,
     "localLockRemoved": true
   },
@@ -400,8 +490,1152 @@
           "detail": "a consulta remota read-only falhou"
         }
       ]
+    },
+    {
+      "runId": "r20260731-d28-final",
+      "status": "Concluída",
+      "startedAtUtc": "2026-07-31T18:32:36.476Z",
+      "finishedAtUtc": "2026-07-31T18:36:27.526Z",
+      "failurePhase": null,
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 9692,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 10410,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 9161,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 9042,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 9191,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 9070,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 9604,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 9038,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 9896,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 9331,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 9317,
+          "connection": "connection-10"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": true,
+          "durationMs": 9631,
+          "connection": "connection-11"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 70072,
+          "connection": "connections-12-and-13"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 9826,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 9090,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 9690,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260731194054-38502787",
+      "status": "Falha crítica — concessão temporária ou delta não autorizado permaneceu",
+      "startedAtUtc": "2026-07-31T19:40:54.714Z",
+      "finishedAtUtc": "2026-07-31T19:44:44.464Z",
+      "failurePhase": "p007_full_regression",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 10196,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 10165,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 8772,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 9854,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 9237,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 9794,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 9143,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 9423,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 9168,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 9586,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": false,
+          "durationMs": 9125,
+          "connection": "connection-10",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  23514: new row for relation \\\\\\\"import_batches\\\\\\\" violates check constraint \\\\\\\"ck_import_batches_source_hash_"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": false,
+          "durationMs": 9241,
+          "connection": "connection-11",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  P0001: P008-r20260731194054-38502787 falhou: inventário de policies divergente (41).\\\\nCONTEXT:  PL/pgSQL funct"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 69536,
+          "connection": "connections-12-and-13"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 9826,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 8842,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": false,
+          "durationMs": 10327,
+          "connection": "connection-finally-03",
+          "detail": "resposta do gate não contém \"policy_count\": 35"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260731194524-0e87220c",
+      "status": "Parcialmente concluída — harness executado, validação dinâmica incompleta",
+      "startedAtUtc": "2026-07-31T19:45:24.410Z",
+      "finishedAtUtc": "2026-07-31T19:49:14.528Z",
+      "failurePhase": "p008_comprehensive_runtime",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 8617,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 9863,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 10021,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 9051,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 10583,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 9900,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 9096,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 9658,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 9069,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 9592,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 9140,
+          "connection": "connection-10"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": false,
+          "durationMs": 9524,
+          "connection": "connection-11",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  P0001: P008-r20260731194524-0e87220c falhou: RLS e FORCE RLS não cobrem as 15 tabelas.\\\\nCONTEXT:  PL/pgSQL fun"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 69999,
+          "connection": "connections-12-and-13"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 9166,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 9242,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 9729,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260731194932-33cdbe3d",
+      "status": "Concluída",
+      "startedAtUtc": "2026-07-31T19:49:32.137Z",
+      "finishedAtUtc": "2026-07-31T19:53:14.913Z",
+      "failurePhase": null,
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 10635,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 10060,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 8565,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 8270,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 8479,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 8022,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 9301,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 9724,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 9032,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 9144,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 9397,
+          "connection": "connection-10"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": true,
+          "durationMs": 8492,
+          "connection": "connection-11"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 70366,
+          "connection": "connections-12-and-13"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 8652,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 8979,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 8092,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260803124900-7372310e",
+      "status": "Parcialmente concluída — migration P009 aplicada, validação pós-aplicação incompleta",
+      "startedAtUtc": "2026-08-03T12:49:00.633Z",
+      "finishedAtUtc": "2026-08-03T12:52:56.491Z",
+      "failurePhase": "p009_full_validation",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 8167,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 12539,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 8176,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 9070,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 8556,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 8656,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 9153,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 9081,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 9388,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 8874,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p009_full_validation",
+          "ok": false,
+          "durationMs": 10885,
+          "connection": "connection-10",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  42601: syntax error at or near \\\\\\\"-\\\\\\\"\\\\nLINE 954: ) as p009-r20260803124900-7372310e_rejection_partial_integ"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 9333,
+          "connection": "connection-11"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": true,
+          "durationMs": 8701,
+          "connection": "connection-12"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 69625,
+          "connection": "connections-13-and-14"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 7964,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 8991,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 9270,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260803132652-ada2b257",
+      "status": "Parcialmente concluída — harness corrigido executado, validação funcional ainda incompleta",
+      "startedAtUtc": "2026-08-03T13:26:52.151Z",
+      "finishedAtUtc": "2026-08-03T13:30:46.597Z",
+      "failurePhase": "p009_full_validation",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 10411,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 9417,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 9022,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 8532,
+          "connection": "connection-03"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 8396,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 8213,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 8752,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 8551,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 9455,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 9828,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p009_full_validation",
+          "ok": false,
+          "durationMs": 8621,
+          "connection": "connection-10",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  42601: VALUES lists must all be the same length\\\\nLINE 11:     ('21604faa-d7b1-4a17-80d0-0bd74ba1f004', 'p009-r"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 9989,
+          "connection": "connection-11"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": true,
+          "durationMs": 9546,
+          "connection": "connection-12"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 70576,
+          "connection": "connections-13-and-14"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 8292,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 10132,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 8676,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260803141344-e3356875",
+      "status": "Parcialmente concluída — Fase B funcional falhou, estado remoto limpo",
+      "startedAtUtc": "2026-08-03T14:13:45.010Z",
+      "finishedAtUtc": "2026-08-03T14:17:49.674Z",
+      "failurePhase": "p009_full_validation",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 9170,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 10058,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 9738,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 8051,
+          "connection": "connection-03"
+        },
+        {
+          "name": "p009_phase_a_bootstrap",
+          "ok": true,
+          "durationMs": 10319,
+          "connection": "connection-phase-a"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 8159,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 9614,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 8049,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 9603,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 8571,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 8831,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p009_full_validation",
+          "ok": false,
+          "durationMs": 9966,
+          "connection": "connection-10",
+          "detail": "error\":{\"code\":\"LegacyDbQueryUnexpectedStatusError\",\"message\":\"unexpected status 400: {\\\"message\\\":\\\"Failed to run sql query: ERROR:  P0001: P009-r20260803141344-e3356875 falhou: lifecycle de aba nao foi auditado com ator/request.\\\\nCONTEXT:  PL"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 9107,
+          "connection": "connection-11"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": true,
+          "durationMs": 9973,
+          "connection": "connection-12"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 69247,
+          "connection": "connections-13-and-14"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 9938,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 8510,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 9179,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
+    },
+    {
+      "runId": "r20260803151221-2d4f91ba",
+      "status": "Parcialmente concluída — validação final P009 falhou, estado remoto limpo",
+      "startedAtUtc": "2026-08-03T15:12:21.173Z",
+      "finishedAtUtc": "2026-08-03T15:16:26.506Z",
+      "failurePhase": "p009_full_validation",
+      "stages": [
+        {
+          "name": "fingerprint_pre",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-pre"
+        },
+        {
+          "name": "d26_preflight",
+          "ok": true,
+          "durationMs": 9769,
+          "connection": "connection-01"
+        },
+        {
+          "name": "migration_alignment_pre",
+          "ok": true,
+          "durationMs": 10533,
+          "connection": "migration-list"
+        },
+        {
+          "name": "d27_reversibility_proof",
+          "ok": true,
+          "durationMs": 9093,
+          "connection": "connection-02"
+        },
+        {
+          "name": "d27_temporary_grant",
+          "ok": true,
+          "durationMs": 8798,
+          "connection": "connection-03"
+        },
+        {
+          "name": "p009_phase_a_bootstrap",
+          "ok": true,
+          "durationMs": 10398,
+          "connection": "connection-phase-a"
+        },
+        {
+          "name": "invalid_context",
+          "ok": true,
+          "durationMs": 8181,
+          "connection": "connection-04"
+        },
+        {
+          "name": "viewer",
+          "ok": true,
+          "durationMs": 9839,
+          "connection": "connection-05"
+        },
+        {
+          "name": "editor_workflow_p007",
+          "ok": true,
+          "durationMs": 8305,
+          "connection": "connection-06"
+        },
+        {
+          "name": "editor_dml",
+          "ok": true,
+          "durationMs": 8684,
+          "connection": "connection-07"
+        },
+        {
+          "name": "admin_d24",
+          "ok": true,
+          "durationMs": 8543,
+          "connection": "connection-08"
+        },
+        {
+          "name": "admin_d23_sequential",
+          "ok": true,
+          "durationMs": 9531,
+          "connection": "connection-09"
+        },
+        {
+          "name": "p009_full_validation",
+          "ok": false,
+          "durationMs": 9666,
+          "connection": "connection-10",
+          "detail": "resposta do gate não contém \"p009_rejection_partial_integrity\": true"
+        },
+        {
+          "name": "p007_full_regression",
+          "ok": true,
+          "durationMs": 8849,
+          "connection": "connection-11"
+        },
+        {
+          "name": "p008_comprehensive_runtime",
+          "ok": true,
+          "durationMs": 9016,
+          "connection": "connection-12"
+        },
+        {
+          "name": "d23_concurrency",
+          "ok": true,
+          "durationMs": 69798,
+          "connection": "connections-13-and-14"
+        },
+        {
+          "name": "d27_cleanup_finally",
+          "ok": true,
+          "durationMs": 9857,
+          "connection": "connection-finally-01"
+        },
+        {
+          "name": "final_state",
+          "ok": true,
+          "durationMs": 9060,
+          "connection": "connection-finally-02"
+        },
+        {
+          "name": "structural_postcheck",
+          "ok": true,
+          "durationMs": 8287,
+          "connection": "connection-finally-03"
+        },
+        {
+          "name": "fingerprint_post",
+          "ok": true,
+          "durationMs": 0,
+          "connection": "inventory-post"
+        }
+      ]
     }
   ],
+  "requestIdMatrix": [
+    {
+      "audited": "r20260803173036-ddabb07d:p009:setup:users",
+      "configured": "r20260803173036-ddabb07d:p009:setup:users",
+      "scenario": "setup:users"
+    },
+    {
+      "audited": "r20260803173036-ddabb07d:p009:batch:create",
+      "configured": "r20260803173036-ddabb07d:p009:batch:create",
+      "scenario": "batch:create"
+    },
+    {
+      "audited": "r20260803173036-ddabb07d:p009:batch:update",
+      "configured": "r20260803173036-ddabb07d:p009:batch:update",
+      "scenario": "batch:update"
+    },
+    {
+      "audited": "r20260803173036-ddabb07d:p009:sheet:create",
+      "configured": "r20260803173036-ddabb07d:p009:sheet:create",
+      "scenario": "sheet:create"
+    },
+    {
+      "audited": "r20260803173036-ddabb07d:p009:sheet:update",
+      "configured": "r20260803173036-ddabb07d:p009:sheet:update",
+      "scenario": "sheet:update"
+    },
+    {
+      "audited": "r20260803173036-ddabb07d:p009:error:append",
+      "configured": "r20260803173036-ddabb07d:p009:error:append",
+      "scenario": "error:append"
+    },
+    {
+      "audited": "r20260803173036-ddabb07d:p009:rls:editor",
+      "configured": "r20260803173036-ddabb07d:p009:rls:editor",
+      "scenario": "rls:editor"
+    },
+    {
+      "audited": "r20260803173036-ddabb07d:p009:rls:admin",
+      "configured": "r20260803173036-ddabb07d:p009:rls:admin",
+      "scenario": "rls:admin"
+    }
+  ],
+  "p009Evidence": {
+    "audit_requests": [
+      {
+        "audited": "r20260803173036-ddabb07d:p009:setup:users",
+        "configured": "r20260803173036-ddabb07d:p009:setup:users",
+        "scenario": "setup:users"
+      },
+      {
+        "audited": "r20260803173036-ddabb07d:p009:batch:create",
+        "configured": "r20260803173036-ddabb07d:p009:batch:create",
+        "scenario": "batch:create"
+      },
+      {
+        "audited": "r20260803173036-ddabb07d:p009:batch:update",
+        "configured": "r20260803173036-ddabb07d:p009:batch:update",
+        "scenario": "batch:update"
+      },
+      {
+        "audited": "r20260803173036-ddabb07d:p009:sheet:create",
+        "configured": "r20260803173036-ddabb07d:p009:sheet:create",
+        "scenario": "sheet:create"
+      },
+      {
+        "audited": "r20260803173036-ddabb07d:p009:sheet:update",
+        "configured": "r20260803173036-ddabb07d:p009:sheet:update",
+        "scenario": "sheet:update"
+      },
+      {
+        "audited": "r20260803173036-ddabb07d:p009:error:append",
+        "configured": "r20260803173036-ddabb07d:p009:error:append",
+        "scenario": "error:append"
+      },
+      {
+        "audited": "r20260803173036-ddabb07d:p009:rls:editor",
+        "configured": "r20260803173036-ddabb07d:p009:rls:editor",
+        "scenario": "rls:editor"
+      },
+      {
+        "audited": "r20260803173036-ddabb07d:p009:rls:admin",
+        "configured": "r20260803173036-ddabb07d:p009:rls:admin",
+        "scenario": "rls:admin"
+      }
+    ],
+    "audit_sanitized": true,
+    "batches": true,
+    "errors": true,
+    "immutability": true,
+    "invalid_context": true,
+    "partial_rejection": true,
+    "request_contract": true,
+    "rls_admin": true,
+    "rls_editor": true,
+    "rls_viewer": true,
+    "rollback_clean": true,
+    "sheets": true,
+    "staging": true
+  },
+  "finalStateEvidence": {
+    "brl": 1,
+    "d26_restored": true,
+    "gate": "final_state",
+    "operational_rows": 0,
+    "set": false,
+    "us": 1
+  },
+  "postcheckEvidence": {
+    "counts": {
+      "app_users": 0,
+      "audit_log": 0,
+      "clients": 0,
+      "financial_actual_events": 0,
+      "financial_plan_lines": 0,
+      "financial_plan_scopes": 0,
+      "import_batch_sheets": 0,
+      "import_batches": 0,
+      "import_row_errors": 0,
+      "import_staging_rows": 0,
+      "plan_versions": 0,
+      "project_items": 0,
+      "projects": 0
+    },
+    "d26_membership": [
+      {
+        "admin_option": true,
+        "granted_role": "ltc_m_runtime",
+        "grantor": "supabase_admin",
+        "inherit_option": false,
+        "member_role": "postgres",
+        "set_option": false
+      }
+    ],
+    "delete_policy_count": 0,
+    "for_all_policy_count": 0,
+    "force_rls_table_count": 15,
+    "ltcm_table_count": 15,
+    "p009_constraint_count": 32,
+    "p009_index_count": 14,
+    "p009_table_count": 2,
+    "p009_trigger_count": 6,
+    "policy_count": 41,
+    "postgres_grantor_memberships": 0,
+    "public_function_count": 0,
+    "reference_data": {
+      "BRL": 1,
+      "US": 1,
+      "US_name": "Unidade e Serviço"
+    },
+    "relevant_advisory_locks": 0,
+    "rls_force_table_count": 15,
+    "rls_table_count": 15,
+    "runtime_external_direct_grants": 0,
+    "runtime_forbidden_table_privileges": 0,
+    "runtime_function_count": 9,
+    "runtime_owns_objects": 0,
+    "runtime_role": {
+      "bypass_rls": false,
+      "login": false,
+      "name": "ltc_m_runtime"
+    },
+    "server_version": "17.4",
+    "unsafe_policy_count": 0
+  },
   "migrations": [
     {
       "local": "20260729163000",
@@ -447,13 +1681,28 @@
       "local": "20260731120000",
       "remote": "20260731120000",
       "time": "2026-07-31 12:00:00"
+    },
+    {
+      "local": "20260731130000",
+      "remote": "20260731130000",
+      "time": "2026-07-31 13:00:00"
     }
   ],
+  "phaseAPassed": true,
   "concurrency": {
-    "individualDurationMs": [39240, 55056],
+    "individualDurationMs": [38361, 55127],
     "staggerMs": 15000,
-    "durationDeltaMs": 15816
+    "durationDeltaMs": 16766
   },
+  "rollbackClean": true,
   "failurePhase": null,
-  "finishedAtUtc": "2026-07-31T18:36:27.526Z"
+  "phaseBStarted": true,
+  "finishedAtUtc": "2026-08-03T17:34:47.994Z",
+  "exitCode": 0,
+  "artifactHashes": {
+    "stdout": "2e5d956ab073e8eeb03d441c7d4c5790ca65629ebbef080b02c2f799dd5c0f26",
+    "stderr": "786708e309e2c4b7c7e46fe2a4bc55f333751799d943a086a444ef8668e39b44",
+    "preInventory": "01ed54d839f0bfeac40cb31624c61cd3cb82e2af3db553589ae67b2a7ad76a9f",
+    "postInventory": "01ed54d839f0bfeac40cb31624c61cd3cb82e2af3db553589ae67b2a7ad76a9f"
+  }
 }

@@ -84,6 +84,7 @@ npm run integrity:check
 npm run p007:check
 npm run p008:check
 npm run d28:check
+npm run p009:check
 npm run pw902:check
 npm run d21:check
 ```
@@ -141,6 +142,41 @@ As decisões D22–D28 de segurança PostgreSQL e aplicação controlada do P008
 concluída com sucesso. O desenho de role runtime, grants, RLS e policies está em
 [`authorization-rls-p008.md`](docs/database/authorization-rls-p008.md); o login real do backend e
 qualquer credencial permanecem fora das migrations e do repositório.
+
+A P009 prepara o staging genérico de importação e o contrato JSON v1 sem ler o XLSX real. A D29
+foi decidida em 31/07/2026 e a migration foi aplicada remotamente uma única vez. A validação
+estrutural, P007/P008, cleanup e fingerprints passaram; a revalidação funcional P009 de 03/08/2026
+ficou incompleta por erro do renderizador do harness. A D30, aprovada em 03/08/2026, autoriza
+exatamente uma reexecução remota do harness corrigido, sem nova migration, `db push`, DDL ou
+repetição automática. Essa execução ocorreu como `r20260803132652-ada2b257`: o alias corrigido
+passou, mas a suíte P009 parou em uma fixture local com aridade de `VALUES` divergente. P007/P008,
+cleanup e estado final passaram com `rollback_clean=true`; a fixture foi corrigida apenas
+localmente, e outra execução remota exige nova decisão.
+
+A D31, decidida e aprovada em 03/08/2026, condiciona uma única nova validação remota P009 a um
+gate local integral do SQL renderizado. O gate usa dois run IDs, valida lexer, identificadores,
+todos os INSERTs e fixtures `app_users`, e gera manifesto com hashes. A execução autorizada ocorre
+em uma única invocação: Fase A transacional com `ROLLBACK`, seguida da Fase B somente se
+`phase_a_passed=true`, sempre com limpeza D27 e das fixtures em `finally`.
+A única invocação D31 `r20260803141344-e3356875` aprovou a Fase A, mas a Fase B parou na assertion
+de request da auditoria antes da matriz RLS P009. P007/P008, cleanup e fingerprints passaram com
+`rollback_clean=true`; D31 foi consumida e não autoriza repetição.
+A D32, decidida e aprovada em 03/08/2026, corrige exclusivamente o harness: cada cenÃ¡rio P009
+configura um request determinÃ­stico derivado do run ID, confirma o contexto antes e depois do DML
+e exige o mesmo valor em `audit_log.request_id`. O trigger e o schema nÃ£o mudam. O gate D32
+protege 13 contextos, as assertions pÃ³s-DML e a matriz configuradoâ†’auditado; somente uma
+invocaÃ§Ã£o remota final do comando versionado estÃ¡ autorizada, sem repetiÃ§Ã£o automÃ¡tica.
+A única invocação D32 `r20260803151221-2d4f91ba` aprovou Fase A, assertions SQL P009,
+P007/P008, D23 e cleanup, mas o orquestrador não capturou um result set intermediário e terminou
+com código 1. O estado remoto ficou limpo e sem delta (`rollback_clean=true`); D32 foi consumida e
+não autoriza repetição.
+A D33, decidida e aprovada em 03/08/2026, endureceu exclusivamente o launcher e o protocolo de
+evidência. A única invocação `r20260803173036-ddabb07d` terminou com código 0 depois de `close` e
+um único envelope `P009_RESULT_V1` íntegro. Fases A/B, P009, oito requests auditados, P007/P008,
+D23/D24, cleanup, D26, contagens, locks e fingerprints passaram com `rollback_clean=true`. A D33
+foi consumida e não autoriza repetição.
+Consulte [`p009-staging-contract.md`](docs/database/p009-staging-contract.md) e o
+[`relatório pós-aplicação`](docs/database/p009-post-application-report.md).
 
 ## Estrutura
 
