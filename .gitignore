@@ -26,3 +26,10 @@ npm-debug.log*
 
 # SQL renderizado e locks temporários dos harnesses locais
 .tmp/
+
+# Artefatos locais do extrator P010 (podem conter dados financeiros da planilha)
+.artifacts/
+
+# Entradas reais locais; fixtures sintéticas versionadas permanecem permitidas
+planilha/
+data/input/*.xlsx

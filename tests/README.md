@@ -17,3 +17,8 @@ matriz RLS P009 posterior não foi alcançada. Cleanup, P007/P008 e fingerprints
 A D33 adiciona testes locais do protocolo para saída grande, chunks, CRLF/LF, stderr intercalado,
 atraso, códigos 0/1, envelope ausente/duplicado/truncado/corrompido, aceitação somente após
 `close` e encerramento da árvore sintética no Windows. A única execução D33 passou integralmente.
+
+Os testes P010 ficam próximos ao código em `tools/ltcm-extractor/test`. Eles constroem workbooks
+XLSX inteiramente sintéticos e verificam contrato v1, hashes canônicos, datas como seriais,
+fórmula e resultado em cache separados, formatos, vazios, mesclagens, rejeição parcial, proteção
+do diretório de saída e repetibilidade byte a byte. Execute-os com `npm run test:p010`.

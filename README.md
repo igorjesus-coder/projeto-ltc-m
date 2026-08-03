@@ -87,6 +87,7 @@ npm run d28:check
 npm run p009:check
 npm run pw902:check
 npm run d21:check
+npm run test:p010
 ```
 
 Execute tudo em sequência com:
@@ -178,6 +179,31 @@ foi consumida e não autoriza repetição.
 Consulte [`p009-staging-contract.md`](docs/database/p009-staging-contract.md) e o
 [`relatório pós-aplicação`](docs/database/p009-post-application-report.md).
 
+## Extração local do XLSX (P010)
+
+O extrator P010 lê exclusivamente as três abas operacionais e produz arquivos locais aderentes ao
+contrato JSON v1 do P009. Ele não se conecta ao Supabase, não importa dados e não normaliza
+entidades de negócio.
+
+```powershell
+npm run ltcm:extract -- --input "C:\caminho\arquivo.xlsx" --output-dir ".artifacts\p010" --strict
+```
+
+Quando `npm.cmd` reescapar um caminho com espaços no Windows, use a forma equivalente:
+
+```powershell
+npm run ltcm:extract -- "--input=C:\caminho com espaço\arquivo.xlsx" "--output-dir=.artifacts\p010" --strict
+```
+
+O diretório de saída recebe manifesto, relatório de validação, lista de erros e um JSONL por aba.
+Ele contém dados brutos potencialmente sensíveis, é ignorado pelo Git e só pode ser substituído
+quando possui o marcador do próprio extrator. O modo `--strict` transforma desvios estruturais em
+erro e código de saída 1, mas ainda grava as linhas extraíveis e os diagnósticos, conforme a
+rejeição parcial definida no P009. O formato completo e os códigos de saída estão em
+[`p010-local-extractor.md`](docs/import/p010-local-extractor.md).
+A validação sanitizada do workbook de referência está em
+[`p010-validation-report.md`](docs/import/p010-validation-report.md).
+
 ## Estrutura
 
 ```text
@@ -188,6 +214,8 @@ Consulte [`p009-staging-contract.md`](docs/database/p009-staging-contract.md) e 
 |   `-- design/           # desenhos SQL não executáveis como migration
 |-- docs/                 # arquitetura e convenções
 |-- scripts/              # automações do projeto
+|-- tools/
+|   `-- ltcm-extractor/   # extrator XLSX local e determinístico P010
 |-- supabase/
 |   |-- migrations/       # alterações incrementais do banco
 |   |-- tests/            # testes SQL
