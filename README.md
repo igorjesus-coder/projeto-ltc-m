@@ -204,6 +204,24 @@ rejeição parcial definida no P009. O formato completo e os códigos de saída 
 A validação sanitizada do workbook de referência está em
 [`p010-validation-report.md`](docs/import/p010-validation-report.md).
 
+## Normalização local e dry-run (P011)
+
+O P011 consome somente os artefatos P010, extrai candidatos de clientes/projetos e produz um plano
+local determinístico. Ele não lê o XLSX, não acessa banco ou rede e não importa itens.
+
+```powershell
+npm run ltcm:normalize-projects -- `
+  --input-dir ".artifacts\p010-real-run-a" `
+  --output-dir ".artifacts\p011-dry-run" `
+  --strict
+```
+
+Use `--existing-snapshot` apenas com snapshot JSON sintético/controlado e `--generated-at` para
+fixar um instante ISO UTC nos artefatos. `--apply` sempre retorna
+`REMOTE_APPLY_NOT_AUTHORIZED`. Contrato, regras, diagnósticos e riscos estão em
+[`p011-normalizer.md`](docs/import/p011-normalizer.md); o dry-run real sanitizado está em
+[`p011-validation-report.md`](docs/import/p011-validation-report.md).
+
 ## Estrutura
 
 ```text
@@ -215,7 +233,8 @@ A validação sanitizada do workbook de referência está em
 |-- docs/                 # arquitetura e convenções
 |-- scripts/              # automações do projeto
 |-- tools/
-|   `-- ltcm-extractor/   # extrator XLSX local e determinístico P010
+|   |-- ltcm-extractor/   # extrator XLSX local e determinístico P010
+|   `-- ltcm-normalizer/  # normalização e dry-run local P011
 |-- supabase/
 |   |-- migrations/       # alterações incrementais do banco
 |   |-- tests/            # testes SQL
