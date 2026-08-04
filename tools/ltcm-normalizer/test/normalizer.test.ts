@@ -8,6 +8,11 @@ import { writeP011Artifacts } from '../src/artifact-writer.js';
 import { canonicalJson, prettyCanonicalJson, sha256Canonical } from '../src/canonical-json.js';
 import { parseArguments } from '../src/cli.js';
 import {
+  assertLegacyImportBatchReference,
+  parseExistingSnapshot,
+  plannedLegacyImportBatchReference,
+} from '../src/contracts.js';
+import {
   applyExistingSnapshot,
   clientMatchKey,
   normalizeClientName,
@@ -262,8 +267,29 @@ test('fonte sintética v1 gera nove projetos, D02/D03/D04 e fronteira P012', asy
     assert.equal(result.validationSummary['competency_operations'], 0);
     assert.equal(result.validationSummary['curve_s_operations'], 0);
     assert.equal(result.validationSummary['p012_executed'], false);
-    assert.equal(result.validationSummary['d05_inferred'], false);
-    assert.equal(result.validationSummary['d06_inferred'], false);
+    assert.equal(result.validationSummary['d05_contract_total_mapped'], true);
+    assert.equal(result.validationSummary['d06_classification_mapped'], true);
+    assert.equal(result.validationSummary['d38_legacy_lineage_planned'], true);
+    assert.equal(result.validationSummary['d39_official_name_mapped'], true);
+    assert.ok(
+      result.projects.every(
+        (project) =>
+          project.data_reference_date === null &&
+          project.legacy_import_batch_reference?.kind === 'planned',
+      ),
+    );
+    assert.equal(
+      result.projects.find((project) => project.project_code === '2024-02-10990')?.classification,
+      'opening_balance',
+    );
+    assert.equal(
+      result.projects.find((project) => project.project_code === '2026-01-15797')?.classification,
+      'demand',
+    );
+    assert.equal(
+      result.projects.find((project) => project.project_code === '2025-12-15568')?.classification,
+      'full_contract',
+    );
     assert.ok(result.clients.some((client) => client.status === 'ambiguous'));
   });
 });
@@ -330,7 +356,7 @@ test('snapshot classifica cliente existente e projeto idêntico/conflitante', as
     project.data_reference_date = '2026-07-21';
     project.action = 'insert';
     const snapshot: ExistingSnapshot = {
-      contract: 'ltcm.p011.existing-snapshot.v1',
+      contract: 'ltcm.p011.existing-snapshot.v2',
       currencies: [{ code: 'BRL', active: true }],
       clients: [
         {
@@ -354,6 +380,7 @@ test('snapshot classifica cliente existente e projeto idêntico/conflitante', as
           base_currency: 'BRL',
           contract_value: '1000',
           data_reference_date: '2026-07-21',
+          legacy_import_batch_id: null,
           deleted_at: null,
           version: 1,
         },
@@ -435,7 +462,127 @@ test('saída exige subdiretório gerenciado sob .artifacts e rejeita traversal',
   );
 });
 
-test('fronteira de persistência usa transação, clientes antes de projetos e resultados por registro', async () => {
+test('contratos v2 validam snapshot e referência de lote sem inferir data artificial', () => {
+  const batchId = '00000000-0000-4000-8000-000000000010';
+  const project = {
+    id: '00000000-0000-4000-8000-000000000002',
+    project_code: 'SYNTHETIC-001',
+    project_name: 'Projeto sintético',
+    client_id: '00000000-0000-4000-8000-000000000001',
+    classification: 'full_contract' as const,
+    status: 'active' as const,
+    base_currency: 'BRL',
+    contract_value: '1000',
+    deleted_at: null,
+    version: 1,
+  };
+  const v1 = parseExistingSnapshot({
+    contract: 'ltcm.p011.existing-snapshot.v1',
+    currencies: [],
+    clients: [],
+    projects: [{ ...project, data_reference_date: '2026-07-21' }],
+  });
+  assert.equal(v1.contract, 'ltcm.p011.existing-snapshot.v2');
+  assert.equal(v1.projects[0]?.legacy_import_batch_id, null);
+  const v2 = parseExistingSnapshot({
+    contract: 'ltcm.p011.existing-snapshot.v2',
+    currencies: [],
+    clients: [],
+    projects: [{ ...project, data_reference_date: null, legacy_import_batch_id: batchId }],
+  });
+  assert.equal(v2.projects[0]?.legacy_import_batch_id, batchId);
+  assert.throws(
+    () =>
+      parseExistingSnapshot({
+        contract: 'ltcm.p011.existing-snapshot.v2',
+        currencies: [],
+        clients: [],
+        projects: [{ ...project, data_reference_date: null, legacy_import_batch_id: null }],
+      }),
+    /linhagem obrigatória/u,
+  );
+  assert.throws(
+    () =>
+      parseExistingSnapshot({
+        contract: 'ltcm.p011.existing-snapshot.v1',
+        currencies: [],
+        clients: [],
+        projects: [{ ...project, data_reference_date: null }],
+      }),
+    /Snapshot v1/u,
+  );
+  assert.throws(
+    () => assertLegacyImportBatchReference({ kind: 'existing', import_batch_id: 'invalid' }),
+    /UUID inválido/u,
+  );
+  const planned = plannedLegacyImportBatchReference('a'.repeat(64), 'b'.repeat(64));
+  assert.deepEqual(planned, plannedLegacyImportBatchReference('a'.repeat(64), 'b'.repeat(64)));
+  assert.throws(
+    () => assertLegacyImportBatchReference({ ...planned, planned_key: '' }),
+    /chave determinística/u,
+  );
+});
+
+test('fronteira de persistência resolve lote antes de clientes e projetos na mesma transação', async () => {
+  await withFixture(async (root) => {
+    const normalized = normalizeP011(
+      await loadP010Source(root),
+      emptySnapshot(),
+      '1970-01-01T00:00:00.000Z',
+    );
+    const client = normalized.clients.find((candidate) => candidate.status === 'valid');
+    const project = normalized.projects.find(
+      (candidate) => candidate.client_candidate_id === client?.candidate_id,
+    );
+    assert.ok(client && project);
+    project.action = 'insert';
+    project.project_name_mapping_status = 'mapped';
+    project.classification = 'full_contract';
+    project.operational_status = 'active';
+    project.contract_value = '1000';
+    project.data_reference_date = null;
+    const batch = preparePersistenceBatch(normalized.clients, normalized.projects);
+    assert.equal(batch.isolation, 'serializable');
+    assert.equal(batch.physicalDeletes, false);
+    assert.equal(batch.bypassRls, false);
+    assert.equal(batch.importBatches.length, 1);
+    const calls: string[] = [];
+    const batchId = '00000000-0000-4000-8000-000000000010';
+    const port: LtcmPersistencePort = {
+      async serializableTransaction(work) {
+        calls.push('transaction');
+        return work({
+          async insertImportBatch(input) {
+            calls.push(`batch:${input.plannedKey}`);
+            return { candidateId: input.plannedKey, outcome: 'inserted', targetId: batchId };
+          },
+          async insertClient(input) {
+            calls.push(`client:${input.candidateId}`);
+            return { candidateId: input.candidateId, outcome: 'inserted', targetId: 'client-id' };
+          },
+          async insertProject(input, resolvedClientId, resolvedLegacyImportBatchId) {
+            calls.push(
+              `project:${input.candidateId}:${resolvedClientId}:${resolvedLegacyImportBatchId}`,
+            );
+            return { candidateId: input.candidateId, outcome: 'inserted', targetId: 'project-id' };
+          },
+        });
+      },
+    };
+    const results = await executePreparedBatch(port, batch);
+    assert.equal(calls[0], 'transaction');
+    assert.ok(
+      calls.findIndex((call) => call.startsWith('batch:')) <
+        calls.findIndex((call) => call.startsWith('client:')) &&
+        calls.findIndex((call) => call.startsWith('client:')) <
+          calls.findIndex((call) => call.startsWith('project:')),
+    );
+    assert.ok(calls.some((call) => call.endsWith(`:${batchId}`)));
+    assert.equal(results.at(-1)?.outcome, 'inserted');
+  });
+});
+
+test('persistência aceita data conhecida sem lote e rejeita data nula sem linhagem', async () => {
   await withFixture(async (root) => {
     const normalized = normalizeP011(
       await loadP010Source(root),
@@ -453,33 +600,36 @@ test('fronteira de persistência usa transação, clientes antes de projetos e r
     project.operational_status = 'active';
     project.contract_value = '1000';
     project.data_reference_date = '2026-07-21';
-    const batch = preparePersistenceBatch(normalized.clients, normalized.projects);
-    assert.equal(batch.isolation, 'serializable');
-    assert.equal(batch.physicalDeletes, false);
-    assert.equal(batch.bypassRls, false);
-    const calls: string[] = [];
-    const port: LtcmPersistencePort = {
-      async serializableTransaction(work) {
-        calls.push('transaction');
-        return work({
-          async insertClient(input) {
-            calls.push(`client:${input.candidateId}`);
-            return { candidateId: input.candidateId, outcome: 'inserted', targetId: 'client-id' };
-          },
-          async insertProject(input, resolvedClientId) {
-            calls.push(`project:${input.candidateId}:${resolvedClientId}`);
-            return { candidateId: input.candidateId, outcome: 'inserted', targetId: 'project-id' };
-          },
-        });
-      },
-    };
-    const results = await executePreparedBatch(port, batch);
-    assert.equal(calls[0], 'transaction');
-    assert.ok(
-      calls.findIndex((call) => call.startsWith('client:')) <
-        calls.findIndex((call) => call.startsWith('project:')),
+    project.legacy_import_batch_reference = null;
+    assert.equal(
+      preparePersistenceBatch(normalized.clients, normalized.projects).importBatches.length,
+      0,
     );
-    assert.equal(results.at(-1)?.outcome, 'inserted');
+    project.data_reference_date = null;
+    assert.throws(
+      () => preparePersistenceBatch(normalized.clients, normalized.projects),
+      /Projeto não resolvido/u,
+    );
+    project.legacy_import_batch_reference = {
+      kind: 'existing',
+      import_batch_id: '00000000-0000-4000-8000-000000000010',
+    };
+    assert.equal(
+      preparePersistenceBatch(normalized.clients, normalized.projects).importBatches.length,
+      0,
+    );
+    project.legacy_import_batch_reference = { kind: 'existing', import_batch_id: 'invalid' };
+    assert.throws(
+      () => preparePersistenceBatch(normalized.clients, normalized.projects),
+      /UUID inválido/u,
+    );
+    project.matched_legacy_import_batch_id = '00000000-0000-4000-8000-000000000010';
+    project.legacy_import_batch_reference = null;
+    project.data_reference_date = '2026-07-21';
+    assert.throws(
+      () => preparePersistenceBatch(normalized.clients, normalized.projects),
+      /remover linhagem/u,
+    );
   });
 });
 

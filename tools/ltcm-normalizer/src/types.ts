@@ -1,6 +1,6 @@
 export const P010_WORKBOOK_SHA256 =
   'f805ea07155ec647eab8d7c0cb9e88bad578ceaa8674d48c5c219129023f9abf';
-export const NORMALIZER_VERSION = '1.0.0';
+export const NORMALIZER_VERSION = '2.0.0';
 export const EXPECTED_PROJECT_CODES = [
   '2024-10-12524',
   '2025-07-14416',
@@ -17,6 +17,22 @@ export type SheetKey = 'project_values' | 'monthly_revenue' | 'curve_s';
 export type DiagnosticSeverity = 'warning' | 'error';
 export type MappingStatus = 'mapped' | 'evidence_only' | 'pending_decision' | 'ambiguous';
 export type PlanAction = 'insert' | 'no_op' | 'conflict' | 'rejected' | 'pending_decision';
+
+export interface ExistingLegacyImportBatchReference {
+  kind: 'existing';
+  import_batch_id: string;
+}
+
+export interface PlannedLegacyImportBatchReference {
+  kind: 'planned';
+  planned_key: string;
+  idempotency_key: string;
+  source_manifest_hash: string;
+  source_hash: string;
+}
+
+export type LegacyImportBatchReference =
+  ExistingLegacyImportBatchReference | PlannedLegacyImportBatchReference;
 
 export interface RawCell {
   column_index: number;
@@ -128,6 +144,8 @@ export interface ProjectCandidate {
   operational_status: 'draft' | 'active' | 'on_hold' | 'completed' | 'cancelled' | null;
   contract_value: string | null;
   data_reference_date: string | null;
+  legacy_import_batch_reference: LegacyImportBatchReference | null;
+  matched_legacy_import_batch_id: string | null;
   value_evidence: FinancialEvidence[];
   receipt_forecast_evidence: FinancialEvidence[];
   action: PlanAction;
@@ -137,7 +155,7 @@ export interface ProjectCandidate {
   hash: string;
 }
 
-export interface ExistingSnapshot {
+export interface ExistingSnapshotV1 {
   contract: 'ltcm.p011.existing-snapshot.v1';
   currencies: Array<{ code: string; active: boolean }>;
   clients: Array<{
@@ -164,9 +182,29 @@ export interface ExistingSnapshot {
   }>;
 }
 
+export interface ExistingSnapshot {
+  contract: 'ltcm.p011.existing-snapshot.v2';
+  currencies: ExistingSnapshotV1['currencies'];
+  clients: ExistingSnapshotV1['clients'];
+  projects: Array<{
+    id: string;
+    project_code: string;
+    project_name: string;
+    client_id: string;
+    classification: 'full_contract' | 'demand' | 'opening_balance';
+    status: 'draft' | 'active' | 'on_hold' | 'completed' | 'cancelled';
+    base_currency: string;
+    contract_value: string;
+    data_reference_date: string | null;
+    legacy_import_batch_id: string | null;
+    deleted_at: string | null;
+    version: number;
+  }>;
+}
+
 export interface ImportPlanOperation {
   order: number;
-  entity: 'client' | 'project';
+  entity: 'import_batch' | 'client' | 'project';
   natural_key: string;
   action: PlanAction;
   dependencies: string[];

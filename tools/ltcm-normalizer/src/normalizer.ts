@@ -1,4 +1,5 @@
 import { sha256Canonical } from './canonical-json.js';
+import { plannedLegacyImportBatchReference } from './contracts.js';
 import { canonicalInputHash, type LoadedSource } from './source-reader.js';
 import {
   EXPECTED_PROJECT_CODES,
@@ -256,9 +257,9 @@ function extractCandidates(source: LoadedSource): ExtractionState {
             'Cliente',
             split.classification,
             split.classification,
-            null,
-            'pending_decision',
-            'D06 impede converter contrato/demanda/saldo em classificação canônica.',
+            'projects.classification',
+            'mapped',
+            'D06 mapeia ausência/contrato, demanda e saldo sem alterar a evidência bruta.',
             sourceOrigin,
           ),
         );
@@ -371,8 +372,9 @@ function extractCandidates(source: LoadedSource): ExtractionState {
       continue;
     }
     const labelOrigin = coordinate(source, projectHeaderRow, headerCell.address);
+    const d39OfficialName = projectCode === '2024-02-10990';
     const projectNameProposal = normalizeClientName(
-      rawLabel.slice(match[0].length).replace(/^\s*[-_]\s*/u, ''),
+      d39OfficialName ? rawLabel : rawLabel.slice(match[0].length).replace(/^\s*[-_]\s*/u, ''),
     );
     mappings.push(
       mapping(
@@ -383,8 +385,10 @@ function extractCandidates(source: LoadedSource): ExtractionState {
         rawLabel,
         projectNameProposal,
         'projects.project_name',
-        'pending_decision',
-        'O cabeçalho mistura cliente/unidade/descrição; proposta preservada sem aplicação automática.',
+        d39OfficialName ? 'mapped' : 'pending_decision',
+        d39OfficialName
+          ? 'D39 preserva como nome oficial o rótulo integral normalizado da origem privada.'
+          : 'O cabeçalho mistura cliente/unidade/descrição; proposta preservada sem aplicação automática.',
         labelOrigin,
       ),
     );
@@ -392,7 +396,7 @@ function extractCandidates(source: LoadedSource): ExtractionState {
     const clientCandidate =
       clientKeys.length === 1 ? clientsByKey.get(clientKeys[0] ?? '') : undefined;
     const currencies = [...aggregate.currencies].sort(compare);
-    const diagnostics = ['PROJECT_CLASSIFICATION_PENDING', 'PROJECT_DATA_REFERENCE_DATE_MISSING'];
+    const diagnostics = ['PROJECT_DATA_REFERENCE_DATE_MISSING'];
     let action: ProjectCandidate['action'] = 'pending_decision';
     if (clientKeys.length !== 1 || clientCandidate?.status !== 'valid') {
       diagnostics.push('PROJECT_CLIENT_UNRESOLVED');
@@ -416,12 +420,32 @@ function extractCandidates(source: LoadedSource): ExtractionState {
       diagnostics.push('PROJECT_CURRENCY_AMBIGUOUS');
       action = 'rejected';
     }
+    const rawClassifications = [...aggregate.classifications].sort(compare);
+    const mappedClassifications = new Set(
+      rawClassifications.map((value) =>
+        value === 'demanda'
+          ? ('demand' as const)
+          : value === 'saldo'
+            ? ('opening_balance' as const)
+            : ('full_contract' as const),
+      ),
+    );
+    const classification =
+      mappedClassifications.size === 0
+        ? ('full_contract' as const)
+        : mappedClassifications.size === 1
+          ? ([...mappedClassifications][0] ?? null)
+          : null;
+    if (classification === null) {
+      diagnostics.push('PROJECT_CLASSIFICATION_CONFLICT');
+      action = 'rejected';
+    }
     const valueEvidence: FinancialEvidence[] = [];
     let contractValue: string | null = null;
     if (valueCell !== undefined && typeof valueCell.value === 'number') {
-      const approved = projectCode === '2026-04-16531' && valueCell.value === 164000;
+      const d02Valid = projectCode !== '2026-04-16531' || valueCell.value === 164000;
       valueEvidence.push(
-        financialEvidence(valueCell, projectValueRow, approved ? 'mapped' : 'pending_decision'),
+        financialEvidence(valueCell, projectValueRow, d02Valid ? 'mapped' : 'pending_decision'),
       );
       mappings.push(
         mapping(
@@ -431,17 +455,16 @@ function extractCandidates(source: LoadedSource): ExtractionState {
           'Valor de Venda',
           valueCell.value,
           valueCell.round_trip_text ?? valueCell.value.toString(),
-          approved ? 'projects.contract_value' : null,
-          approved ? 'mapped' : 'pending_decision',
-          approved
+          d02Valid ? 'projects.contract_value' : null,
+          d02Valid ? 'mapped' : 'pending_decision',
+          projectCode === '2026-04-16531'
             ? 'D02 aprova 164000 especificamente para 2026-04-16531.'
-            : 'D05 mantém a semântica de Valor de Venda pendente.',
+            : 'D05 define Valor de Venda como contract_total.',
           coordinate(source, projectValueRow, valueCell.address),
         ),
       );
-      if (approved) contractValue = valueCell.round_trip_text ?? valueCell.value.toString();
-      else diagnostics.push('PROJECT_VALUE_SEMANTICS_PENDING');
-      if (projectCode === '2026-04-16531' && !approved) {
+      if (d02Valid) contractValue = valueCell.round_trip_text ?? valueCell.value.toString();
+      if (projectCode === '2026-04-16531' && !d02Valid) {
         diagnostics.push('PROJECT_VALUE_CONFLICT');
         action = 'rejected';
         divergences.push(
@@ -501,32 +524,6 @@ function extractCandidates(source: LoadedSource): ExtractionState {
         );
       }
     }
-    divergences.push(
-      diagnostic(
-        'PROJECT_CLASSIFICATION_PENDING',
-        'warning',
-        'project',
-        projectCode,
-        'Classificação canônica não foi inferida.',
-        'D06',
-        labelOrigin,
-      ),
-    );
-    if (projectCode !== '2026-04-16531') {
-      divergences.push(
-        diagnostic(
-          'PROJECT_VALUE_SEMANTICS_PENDING',
-          'warning',
-          'project',
-          projectCode,
-          'Valor de Venda preservado sem mapeamento canônico.',
-          'D05',
-          valueCell === undefined
-            ? labelOrigin
-            : coordinate(source, projectValueRow, valueCell.address),
-        ),
-      );
-    }
     const operationalStatus = projectCode === '2024-02-10990' ? ('completed' as const) : null;
     const base = {
       candidate_id: `project-${sha256Canonical({ entity: 'project', project_code: projectCode }).slice(0, 24)}`,
@@ -534,16 +531,23 @@ function extractCandidates(source: LoadedSource): ExtractionState {
       project_code: projectCode,
       raw_project_label: rawLabel,
       project_name_proposal: projectNameProposal,
-      project_name_mapping_status: 'pending_decision' as const,
+      project_name_mapping_status: d39OfficialName
+        ? ('mapped' as const)
+        : ('pending_decision' as const),
       client_match_key: clientKeys.length === 1 ? (clientKeys[0] ?? null) : null,
       client_candidate_id: clientCandidate?.candidate_id ?? null,
       client_id: clientCandidate?.matched_client_id ?? null,
       currency: currencies.length === 1 ? (currencies[0] ?? null) : null,
-      raw_classifications: [...aggregate.classifications].sort(compare),
-      classification: null,
+      raw_classifications: rawClassifications,
+      classification,
       operational_status: operationalStatus,
       contract_value: contractValue,
       data_reference_date: null,
+      legacy_import_batch_reference: plannedLegacyImportBatchReference(
+        source.manifestHash,
+        source.workbookHash,
+      ),
+      matched_legacy_import_batch_id: null,
       value_evidence: valueEvidence,
       receipt_forecast_evidence: receiptEvidence,
       action,
@@ -616,13 +620,18 @@ export function applyExistingSnapshot(
       ].sort(compare);
     } else if (existing.length === 1) {
       const target = existing[0];
+      project.matched_legacy_import_batch_id = target?.legacy_import_batch_id ?? null;
+      const candidateLegacyBatchId =
+        project.legacy_import_batch_reference?.kind === 'existing'
+          ? project.legacy_import_batch_reference.import_batch_id
+          : null;
       const fullyMapped =
         project.project_name_mapping_status === 'mapped' &&
         project.client_id !== null &&
         project.classification !== null &&
         project.operational_status !== null &&
         project.contract_value !== null &&
-        project.data_reference_date !== null;
+        (project.data_reference_date !== null || project.legacy_import_batch_reference !== null);
       if (
         fullyMapped &&
         target !== undefined &&
@@ -632,7 +641,8 @@ export function applyExistingSnapshot(
         target.status === project.operational_status &&
         target.base_currency === project.currency &&
         target.contract_value === project.contract_value &&
-        target.data_reference_date === project.data_reference_date
+        target.data_reference_date === project.data_reference_date &&
+        target.legacy_import_batch_id === candidateLegacyBatchId
       ) {
         project.action = 'no_op';
       } else if (fullyMapped) {
@@ -648,6 +658,32 @@ export function applyExistingSnapshot(
 
 function buildPlan(state: ExtractionState): ImportPlanOperation[] {
   const operations: ImportPlanOperation[] = [];
+  const plannedBatches = new Map(
+    state.projects
+      .map((project) => project.legacy_import_batch_reference)
+      .filter((reference) => reference?.kind === 'planned')
+      .map((reference) => [reference.planned_key, reference]),
+  );
+  for (const reference of plannedBatches.values()) {
+    const originHashes = state.projects
+      .filter(
+        (project) =>
+          project.legacy_import_batch_reference?.kind === 'planned' &&
+          project.legacy_import_batch_reference.planned_key === reference.planned_key,
+      )
+      .flatMap((project) => project.origins.map((origin) => origin.row_hash));
+    operations.push({
+      order: 0,
+      entity: 'import_batch',
+      natural_key: reference.planned_key,
+      action: 'insert',
+      dependencies: [],
+      expected_result: 'Resolver lote idempotente antes de clientes e projetos legados.',
+      origin_hashes: [...new Set(originHashes)].sort(compare),
+      candidate_hash: sha256Canonical(reference),
+      status: 'planned',
+    });
+  }
   for (const client of state.clients) {
     operations.push({
       order: 0,
@@ -668,12 +704,20 @@ function buildPlan(state: ExtractionState): ImportPlanOperation[] {
     });
   }
   for (const project of state.projects) {
+    const dependencies = project.client_candidate_id === null ? [] : [project.client_candidate_id];
+    if (project.legacy_import_batch_reference?.kind === 'planned') {
+      dependencies.push(project.legacy_import_batch_reference.planned_key);
+    } else if (project.legacy_import_batch_reference?.kind === 'existing') {
+      dependencies.push(
+        `existing-import-batch:${project.legacy_import_batch_reference.import_batch_id}`,
+      );
+    }
     operations.push({
       order: 0,
       entity: 'project',
       natural_key: project.project_code,
       action: project.action,
-      dependencies: project.client_candidate_id === null ? [] : [project.client_candidate_id],
+      dependencies,
       expected_result:
         project.action === 'no_op'
           ? 'Preservar projeto equivalente existente.'
@@ -692,7 +736,9 @@ function buildPlan(state: ExtractionState): ImportPlanOperation[] {
   }
   operations.sort(
     (left, right) =>
-      compare(left.entity, right.entity) || compare(left.natural_key, right.natural_key),
+      ['import_batch', 'client', 'project'].indexOf(left.entity) -
+        ['import_batch', 'client', 'project'].indexOf(right.entity) ||
+      compare(left.natural_key, right.natural_key),
   );
   operations.forEach((operation, index) => {
     operation.order = index + 1;
@@ -720,7 +766,7 @@ export function normalizeP011(
   const actionCounts = countActions(operations);
   const projectCodes = state.projects.map((project) => project.project_code);
   const validationSummary = {
-    contract: 'ltcm.p011.validation-summary.v1',
+    contract: 'ltcm.p011.validation-summary.v2',
     status: 'passed_with_pending_decisions',
     client_candidates: state.clients.length,
     project_candidates: state.projects.length,
@@ -733,8 +779,14 @@ export function normalizeP011(
     d04_warning_propagated: state.divergences.some(
       (entry) => entry.code === 'RECEIPT_FORECAST_PRESENT_IN_MONTHLY_SOURCE',
     ),
-    d05_inferred: false,
-    d06_inferred: false,
+    d05_contract_total_mapped: state.projects.every((project) => project.contract_value !== null),
+    d06_classification_mapped: state.projects.every((project) => project.classification !== null),
+    d38_legacy_lineage_planned: state.projects.every(
+      (project) => project.legacy_import_batch_reference !== null,
+    ),
+    d39_official_name_mapped:
+      state.projects.find((project) => project.project_code === '2024-02-10990')
+        ?.project_name_mapping_status === 'mapped',
     item_outputs: 0,
     competency_operations: 0,
     curve_s_operations: 0,
@@ -753,7 +805,7 @@ export function normalizeP011(
   }
   const inputHash = canonicalInputHash(source.inputHashes);
   const sourceValidation = {
-    contract: 'ltcm.p011.source-validation.v1',
+    contract: 'ltcm.p011.source-validation.v2',
     p010_manifest_contract: source.manifest['artifact_contract'],
     p009_payload_schema_version: source.manifest['payload_schema_version'],
     p010_manifest_hash: source.manifestHash,
@@ -778,7 +830,7 @@ export function normalizeP011(
     `- ações simuladas: ${JSON.stringify(actionCounts)};`,
     `- warnings: ${validationSummary.warnings}; errors de candidato: ${validationSummary.errors};`,
     '- D02 validada em 164000; D03 preservada; D04 propagada somente como warning/evidência;',
-    '- D05 e D06 permanecem pendentes e não foram inferidas;',
+    '- D05/D06 aplicadas; D38 preserva nulo somente com lote planejado; D39 preservada;',
     '- zero item, competência, Curva S, P012, SQL ou acesso remoto.',
     '',
     'A correspondência de clientes ambíguos e os campos obrigatórios ainda pendentes devem ser',
@@ -789,7 +841,7 @@ export function normalizeP011(
   ].join('\n');
   return {
     manifest: {
-      artifact_contract: 'ltcm.p011.normalization-manifest.v1',
+      artifact_contract: 'ltcm.p011.normalization-manifest.v2',
       generated_at: generatedAt,
       normalizer_version: NORMALIZER_VERSION,
       p010_manifest_hash: source.manifestHash,
@@ -804,7 +856,10 @@ export function normalizeP011(
         'd02_164000',
         'd03_distinct_projects',
         'd04_receipt_evidence_only',
-        'd05_d06_pending',
+        'd05_contract_total',
+        'd06_classification_mapping',
+        'd38_legacy_batch_lineage',
+        'd39_official_project_name',
         'remote_apply_blocked',
       ],
       counts: validationSummary,
@@ -815,7 +870,7 @@ export function normalizeP011(
     projects: state.projects,
     mappings: state.mappings,
     divergences: state.divergences,
-    importPlan: { contract: 'ltcm.p011.import-plan.v1', operations },
+    importPlan: { contract: 'ltcm.p011.import-plan.v2', operations },
     validationSummary,
     report,
   };

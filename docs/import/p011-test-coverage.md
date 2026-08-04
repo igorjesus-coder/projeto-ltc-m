@@ -13,4 +13,5 @@ empresarial real integra a suíte.
 | Persistência | transação serializável, clientes antes de projetos, resultado por registro, zero delete/bypass RLS                |
 | Determinismo | objetos/hashes idênticos e artefatos A/B byte a byte                                                              |
 
-Resultado local: 14 testes/casos de topo e subtestes, todos aprovados após os gates finais.
+Resultado local D40: 16 testes/casos Node, incluindo D02–D06, D38/D39, P012 bloqueado e bytes
+canônicos, todos aprovados antes dos gates integrais.

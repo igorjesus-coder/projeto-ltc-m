@@ -7,7 +7,10 @@ import { stripSqlNoise } from './check-migrations.mjs';
 
 export const D28_FILENAME = '20260731120000_fix_ltcm_runtime_function_acl.sql';
 const P008_LAST_TIMESTAMP = '20260731103001';
-const APPROVED_SUCCESSORS = new Set(['20260731130000_add_ltcm_import_staging.sql']);
+const APPROVED_SUCCESSORS = new Set([
+  '20260731130000_add_ltcm_import_staging.sql',
+  '20260804120000_add_legacy_project_reference_date_exception.sql',
+]);
 
 // D28 is intentionally a one-function corrective ACL.  The trigger path is
 // SECURITY INVOKER and calls this SECURITY DEFINER helper; no other function

@@ -885,3 +885,16 @@ tabelas separadas. A Curva S deve ser construída com faturamento mensal normali
 calculados no banco. O CRUD deve impedir duplicidade por chaves estáveis, versionamento e
 transações; o backend deve concentrar acesso e autorização; e o Tableau Extract deve consumir views
 reconciliadas.
+
+## 22. D40 — data de referência de projeto legado
+
+`projects.data_reference_date` pode ser nula exclusivamente quando
+`legacy_import_batch_id` referencia `ltc_m.import_batches`. Criar, enriquecer ou corrigir essa
+exceção requer Admin ativo e contexto completo; remover a linhagem é proibido. Não se deriva data
+do lote, relógio, código, criação ou competências. `plan_versions.reference_date` e
+`import_batches.reference_date` permanecem inalterados.
+
+D41 bloqueia `received|validating|loaded → rejected` quando qualquer projeto referencia o lote,
+independentemente de status, `deleted_at` ou data já preenchida. Sem referências, a transição
+continua permitida. Correção de vínculo exige Admin ativo, justificativa, request ID e lote de
+destino não rejeitado.

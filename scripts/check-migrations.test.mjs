@@ -44,7 +44,101 @@ test('aceita os artefatos RLS P008 versionados', () => {
   const result = checkMigrations(migrationsDirectory);
 
   assert.deepEqual(result.issues, []);
-  assert.equal(result.files.length, 10);
+  assert.equal(result.files.length, 11);
+});
+
+test('aceita somente o contrato nominal da migration D40', () => {
+  const migrationName = '20260804120000_add_legacy_project_reference_date_exception.sql';
+  const sql = fs.readFileSync(path.resolve('supabase', 'migrations', migrationName), 'utf8');
+
+  assert.deepEqual(scanMigrationText(sql, { migrationName }), []);
+});
+
+test('D40 rejeita nullable global, is_legacy, objeto extra e SECURITY DEFINER não autorizado', () => {
+  const migrationName = '20260804120000_add_legacy_project_reference_date_exception.sql';
+  const issues = scanMigrationText(
+    `
+      alter table ltc_m.projects alter column data_reference_date drop not null;
+      alter table ltc_m.projects add column is_legacy boolean;
+      create function ltc_m.unapproved_d40()
+      returns trigger language plpgsql security definer set search_path = ''
+      as $function$ begin return new; end; $function$;
+      create trigger trg_unapproved before update on ltc_m.projects
+      for each row execute function ltc_m.unapproved_d40();
+    `,
+    { migrationName },
+  );
+
+  assert.ok(issues.some((issue) => issue.includes('allowlist nominal D40')));
+  assert.ok(issues.some((issue) => issue.includes('is_legacy')));
+  assert.ok(issues.some((issue) => issue.includes('SECURITY DEFINER')));
+  assert.ok(issues.some((issue) => issue.includes('incompleta ou divergente')));
+});
+
+test('D40 rejeita DROP NOT NULL em outra coluna e data artificial', () => {
+  const migrationName = '20260804120000_add_legacy_project_reference_date_exception.sql';
+  const issues = scanMigrationText(
+    `
+      alter table ltc_m.projects alter column start_date drop not null;
+      select current_date;
+    `,
+    { migrationName },
+  );
+
+  assert.ok(issues.some((issue) => issue.includes('allowlist nominal D40')));
+  assert.ok(issues.some((issue) => issue.includes('data artificial')));
+});
+
+test('D41 rejeita filtro histórico, alteração automática e trigger em outra tabela', () => {
+  const migrationName = '20260804120000_add_legacy_project_reference_date_exception.sql';
+  const official = fs.readFileSync(path.resolve('supabase', 'migrations', migrationName), 'utf8');
+  const filtered = official.replace(
+    'where project.legacy_import_batch_id = new.id',
+    'where project.legacy_import_batch_id = new.id and project.deleted_at is null',
+  );
+  const mutating = official.replace(
+    'if exists (\n        select 1\n        from ltc_m.projects as project',
+    'update ltc_m.projects set legacy_import_batch_id = null;\n\n    if exists (\n        select 1\n        from ltc_m.projects as project',
+  );
+  const wrongTable = official.replace(
+    'before update on ltc_m.import_batches',
+    'before update on ltc_m.projects',
+  );
+  const invoker = official.replace(
+    'create function ltc_m.enforce_import_batch_rejection_guard()\nreturns trigger\nlanguage plpgsql\nsecurity definer',
+    'create function ltc_m.enforce_import_batch_rejection_guard()\nreturns trigger\nlanguage plpgsql\nsecurity invoker',
+  );
+
+  assert.ok(
+    scanMigrationText(filtered, { migrationName }).some((issue) => issue.includes('sem filtro')),
+  );
+  assert.ok(
+    scanMigrationText(mutating, { migrationName }).some((issue) =>
+      issue.includes('alterar projetos'),
+    ),
+  );
+  assert.ok(
+    scanMigrationText(wrongTable, { migrationName }).some((issue) =>
+      issue.includes('incompleta ou divergente'),
+    ),
+  );
+  assert.ok(
+    scanMigrationText(invoker, { migrationName }).some((issue) =>
+      issue.includes('SECURITY DEFINER trigger-only'),
+    ),
+  );
+});
+
+test('D41 exige serialização do vínculo e proíbe CASCADE', () => {
+  const migrationName = '20260804120000_add_legacy_project_reference_date_exception.sql';
+  const official = fs.readFileSync(path.resolve('supabase', 'migrations', migrationName), 'utf8');
+  const unsafe = official
+    .replace('for share;', ';')
+    .replace('on delete no action', 'on delete cascade');
+  const issues = scanMigrationText(unsafe, { migrationName });
+
+  assert.ok(issues.some((issue) => issue.includes('FOR SHARE')));
+  assert.ok(issues.some((issue) => issue.includes('CASCADE')));
 });
 
 test('rejeita desvios de role, policy e grants do modelo P008', () => {

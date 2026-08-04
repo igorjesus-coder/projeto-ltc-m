@@ -225,8 +225,8 @@ export function checkP009(rootDirectory = process.cwd()) {
     const timestamp = filename.match(/^(\d{14})_/u)?.[1];
     return timestamp && timestamp > P009_LAST_TIMESTAMP;
   });
-  if (successors.length !== 1 || successors[0] !== P009_FILENAME) {
-    issues.push(`deve existir somente a migration P009 ${P009_FILENAME}`);
+  if (successors[0] !== P009_FILENAME) {
+    issues.push(`a primeira migration após P008 deve ser P009 ${P009_FILENAME}`);
   }
   const migrationPath = path.join(migrationDirectory, P009_FILENAME);
   if (fs.existsSync(migrationPath))

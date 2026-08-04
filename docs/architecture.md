@@ -479,3 +479,16 @@ Essa conclusão não abrange as decisões operacionais ainda listadas abaixo.
 - RPO, RTO, PITR e retenção detalhada;
 - ferramenta de observabilidade, alertas e responsáveis por incidentes;
 - parâmetros operacionais de sessão e step-up além do MFA obrigatório para administradores.
+
+## Exceção legada de data de referência — D40
+
+Projetos comuns continuam exigindo data. Para o legado P011, sua ausência só é válida quando
+`projects.legacy_import_batch_id` referencia lote legítimo. A exceção exige Admin ativo,
+justificativa e request ID; a linhagem não pode ser removida e seu before/after é auditado. A
+referência planejada do normalizador não é UUID e só poderá ser resolvida na futura transação.
+D34 e D36 continuam pendentes.
+
+D41 preserva a invariável nos dois sentidos: lote referenciado não pode virar `rejected`. Toda
+referência persistente conta, inclusive projeto concluído, cancelado ou soft-deleted. A liberação
+exige corrigir administrativamente todos os projetos para outro lote permitido; limpeza de
+linhagem e inativação automática não existem.

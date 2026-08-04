@@ -98,3 +98,15 @@ periodicidade/data de corte, RLS e máquina final de aprovação/bloqueio.
   com `EXPLAIN (FORMAT JSON, COSTS, VERBOSE)`, sem `ANALYZE`.
 - `npm run integrity:check`: garante escopo `ltc_m`, rollback e ausência de escrita nos valores
   controlados.
+
+## Complemento D40
+
+- `fk_projects_legacy_import_batch`: FK para `import_batches(id)`, `ON UPDATE NO ACTION` e
+  `ON DELETE NO ACTION`, impedindo perda em cascata;
+- `ck_projects_data_reference_date_legacy`: exige data ou lote e é validado antes do `DROP NOT
+NULL`;
+- `ix_projects_legacy_import_batch`: índice parcial somente para referências não nulas;
+- `trg_07_projects_legacy_reference_guard`: executa depois de `trg_05` e antes de `trg_10`/`trg_90`.
+- `trg_07_import_batches_rejection_guard`: bloqueia `rejected` quando qualquer projeto referencia o
+  lote; não filtra status ou `deleted_at` e executa antes de metadata/auditoria;
+- `FOR SHARE` durante o vínculo serializa projeto e lifecycle do lote sem alteração automática.

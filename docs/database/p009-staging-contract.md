@@ -95,3 +95,16 @@ do Ãºltimo erro podem evoluir.
 NÃ£o hÃ¡ extrator, endpoint, tela, Tableau, baseline, despivotamento, retenÃ§Ã£o ou purge automÃ¡tico.
 A D29 foi decidida e a migration foi aplicada uma única vez. A única reexecução autorizada pela
 D30 não permite nova migration, `db push`, DDL, SQL Editor ou dados permanentes.
+
+## Integração local P011/D40/D41
+
+D40 referencia a PK de `import_batches` por `projects.legacy_import_batch_id`. Para permitir lote
+e projetos na mesma transação, vínculos são aceitos em `received`, `validating` e `loaded`;
+`rejected` é recusado. O CHECK não consulta lifecycle: essa regra fica na guarda D40. A referência
+permanece depois do enriquecimento da data.
+
+D41 fecha o lifecycle inverso: `trg_07_import_batches_rejection_guard` impede a transição para
+`rejected` enquanto qualquer projeto — inclusive histórico ou soft-deleted — preservar o vínculo.
+O vínculo toma `FOR SHARE` no lote, serializando a criação/correção do projeto com a rejeição.
+Para liberar o lote antigo, Admin com contexto completo deve corrigir todos os projetos para outro
+lote permitido; a linhagem nunca pode ser limpa.
