@@ -1,0 +1,84 @@
+name: LTC-M PostgreSQL validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seed.sql'
+      - 'database/audit/**'
+      - 'tools/ltcm-normalizer/**'
+      - 'scripts/**'
+      - 'docs/database/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ltcm-postgres-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.10-bookworm@sha256:4f736ae292687621d4be0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
+        env:
+          POSTGRES_DB: ltcm_ci
+          POSTGRES_INITDB_ARGS: --encoding=UTF8
+          POSTGRES_PASSWORD: ltcm_ci_admin_only
+          POSTGRES_USER: ci_admin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_admin -d ltcm_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      CI: 'true'
+      PGDATABASE: ltcm_ci
+      PGHOST: 127.0.0.1
+      PGPASSWORD: ltcm_ci_admin_only
+      PGPORT: '5432'
+      PGUSER: ci_admin
+      LTCM_CI_POSTGRES_IMAGE: postgres:17.10-bookworm@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
+      LTCM_CI_POSTGRES_PASSWORD: ltcm_ci_postgres_only
+      LTCM_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Checkout review commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Reject remote configuration
+        run: npm run ci:env:check
+
+      - name: Run static gates
+        run: npm run check
+
+      - name: Validate ephemeral PostgreSQL
+        run: npm run ci:postgres:validate
+
+      - name: Confirm tracked files are unchanged
+        run: git diff --exit-code
+
+      - name: Upload sanitized evidence
+        if: ${{ always() && hashFiles('.tmp/ci-evidence/ltcm-postgres-validation.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ltcm-postgres-validation-${{ github.run_id }}
+          path: .tmp/ci-evidence/ltcm-postgres-validation.json
+          if-no-files-found: error
+          retention-days: 7

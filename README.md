@@ -97,6 +97,11 @@ Execute tudo em sequência com:
 npm run check
 ```
 
+O gate D43 executa as migrations e as regressões P006–P009/D40/D41 em PostgreSQL 17 efêmero no
+GitHub Actions. Ele não usa Supabase, secrets ou banco persistente. A arquitetura, os comandos e o
+JSON sanitizado estão documentados em
+[`docs/database/p011-d43-postgres-ci.md`](docs/database/p011-d43-postgres-ci.md).
+
 ## Banco local
 
 ```bash
