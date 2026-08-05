@@ -19,10 +19,12 @@ A imagem oficial foi consultada no Docker Hub `library/postgres` em
 Referência completa:
 
 ```text
-postgres:17.10-bookworm@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
+postgres@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
 ```
 
-O job registra também a versão PostgreSQL realmente iniciada, encoding, locale e timezone.
+A D45 remove a tag da referência consumida pelo service para que o Docker resolva diretamente o
+digest canônico. A tag `17.10-bookworm` acima permanece somente como metadado da consulta de
+origem. O job registra também a versão PostgreSQL realmente iniciada, encoding, locale e timezone.
 
 ## Bootstrap e ownership
 

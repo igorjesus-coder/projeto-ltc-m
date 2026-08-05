@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:17.10-bookworm@sha256:4f736ae292687621d4be0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
+        image: postgres@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
         env:
           POSTGRES_DB: ltcm_ci
           POSTGRES_INITDB_ARGS: --encoding=UTF8
@@ -44,7 +44,6 @@ jobs:
       PGPASSWORD: ltcm_ci_admin_only
       PGPORT: '5432'
       PGUSER: ci_admin
-      LTCM_CI_POSTGRES_IMAGE: postgres:17.10-bookworm@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394
       LTCM_CI_POSTGRES_PASSWORD: ltcm_ci_postgres_only
       LTCM_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 

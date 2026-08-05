@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -5,7 +6,11 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const CI_POSTGRES_IMAGE =
-  'postgres:17.10-bookworm@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394';
+  'postgres@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394';
+export const CI_PACKAGE_LOCK_SHA256 =
+  'CD69FDB04673AAE30C344735CD9A68D2983B1CD8BC84961AF113D1178E8CFD91';
+
+const WORKFLOW_PATH = '.github/workflows/ltcm-postgres-validation.yml';
 
 const FORBIDDEN_ENVIRONMENT = [
   'SUPABASE_ACCESS_TOKEN',
@@ -16,7 +21,7 @@ const FORBIDDEN_ENVIRONMENT = [
 ];
 
 const CI_EXECUTION_FILES = [
-  '.github/workflows/ltcm-postgres-validation.yml',
+  WORKFLOW_PATH,
   'scripts/run-postgres-ci-validation.mjs',
   'scripts/run-postgres-concurrency-test.mjs',
   'database/audit/ltcm-ci-bootstrap.sql',
@@ -47,10 +52,55 @@ function forbiddenRepositoryPath(filePath) {
   );
 }
 
+function occurrenceCount(source, value) {
+  return source.split(value).length - 1;
+}
+
+export function validatePostgresImageWorkflow(source) {
+  const issues = [];
+  const imageLines = source
+    .split('\n')
+    .filter((line) => /^\s*image:/u.test(line.replace(/\r$/u, '')));
+
+  if (imageLines.length !== 1) {
+    issues.push('workflow deve declarar exatamente uma imagem de service');
+    return issues;
+  }
+
+  const rawLine = imageLines[0];
+  const valueSource = rawLine.slice(rawLine.indexOf(':') + 1);
+  const value = valueSource.replace(/^ +/u, '');
+
+  if (occurrenceCount(source, CI_POSTGRES_IMAGE) !== 1) {
+    issues.push('referência PostgreSQL canônica deve ocorrer uma única vez no workflow');
+  }
+  if (value !== CI_POSTGRES_IMAGE) {
+    issues.push('imagem PostgreSQL não corresponde à referência imutável aprovada');
+  }
+  if (!/^postgres@sha256:[0-9a-f]{64}$/u.test(value)) {
+    issues.push('imagem PostgreSQL deve usar postgres@sha256 e 64 hexadecimais minúsculos');
+  }
+  if (/^postgres:[^@\s]+@/u.test(value)) {
+    issues.push('imagem PostgreSQL não pode conter tag antes do digest');
+  }
+  if (/\s|\u00a0/u.test(value) || /\p{Cc}/u.test(value)) {
+    issues.push('imagem PostgreSQL não pode conter whitespace ou caractere de controle');
+  }
+  if ([...value].some((character) => character.codePointAt(0) > 0x7f)) {
+    issues.push('imagem PostgreSQL deve conter somente ASCII');
+  }
+  if (valueSource !== valueSource.trimEnd()) {
+    issues.push('imagem PostgreSQL não pode conter whitespace final');
+  }
+
+  return [...new Set(issues)];
+}
+
 export function validateCiEnvironment({
   env = process.env,
   repositoryFiles = [],
   executionSources = {},
+  packageLockSha256 = CI_PACKAGE_LOCK_SHA256,
   requireGitHubActions = false,
 } = {}) {
   const issues = [];
@@ -71,8 +121,8 @@ export function validateCiEnvironment({
   if (!/^ltcm_ci_[a-z0-9_]+_only$/u.test(String(env.LTCM_CI_POSTGRES_PASSWORD ?? ''))) {
     issues.push('senha da role postgres deve ser sintética');
   }
-  if (String(env.LTCM_CI_POSTGRES_IMAGE ?? '') !== CI_POSTGRES_IMAGE) {
-    issues.push('imagem PostgreSQL não corresponde à referência imutável aprovada');
+  if (String(packageLockSha256).toUpperCase() !== CI_PACKAGE_LOCK_SHA256) {
+    issues.push('package-lock.json divergiu do hash aprovado');
   }
   if (requireGitHubActions && String(env.GITHUB_ACTIONS ?? '') !== 'true') {
     issues.push('execução dinâmica exige GitHub Actions');
@@ -85,6 +135,9 @@ export function validateCiEnvironment({
   }
 
   for (const [filePath, source] of Object.entries(executionSources)) {
+    if (normalizedPath(filePath) === WORKFLOW_PATH) {
+      issues.push(...validatePostgresImageWorkflow(source));
+    }
     for (const pattern of FORBIDDEN_COMMANDS) {
       if (pattern.test(source)) {
         issues.push(`operação remota proibida em ${normalizedPath(filePath)}`);
@@ -94,6 +147,10 @@ export function validateCiEnvironment({
   }
 
   return [...new Set(issues)];
+}
+
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toUpperCase();
 }
 
 function repositoryFiles(rootDirectory) {
@@ -118,6 +175,7 @@ export function checkCiEnvironment(rootDirectory = process.cwd(), options = {}) 
     env: options.env ?? process.env,
     repositoryFiles: repositoryFiles(rootDirectory),
     executionSources: executionSources(rootDirectory),
+    packageLockSha256: sha256File(path.join(rootDirectory, 'package-lock.json')),
     requireGitHubActions: options.requireGitHubActions ?? false,
   });
 }

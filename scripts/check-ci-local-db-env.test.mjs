@@ -1,7 +1,27 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
-import { CI_POSTGRES_IMAGE, validateCiEnvironment } from './check-ci-local-db-env.mjs';
+import * as prettier from 'prettier';
+
+import {
+  CI_PACKAGE_LOCK_SHA256,
+  CI_POSTGRES_IMAGE,
+  validateCiEnvironment,
+  validatePostgresImageWorkflow,
+} from './check-ci-local-db-env.mjs';
+
+const WORKFLOW_PATH = '.github/workflows/ltcm-postgres-validation.yml';
+
+function workflowSource(image = CI_POSTGRES_IMAGE, suffix = '') {
+  return `jobs:\n  validation:\n    services:\n      postgres:\n        image: ${image}\n${suffix}`;
+}
+
+function workflowExecutionSources(image = CI_POSTGRES_IMAGE, suffix = '') {
+  return { [WORKFLOW_PATH]: workflowSource(image, suffix) };
+}
 
 function validEnvironment() {
   return {
@@ -12,7 +32,6 @@ function validEnvironment() {
     PGUSER: 'ci_admin',
     PGPASSWORD: 'ltcm_ci_admin_only',
     LTCM_CI_POSTGRES_PASSWORD: 'ltcm_ci_postgres_only',
-    LTCM_CI_POSTGRES_IMAGE: CI_POSTGRES_IMAGE,
   };
 }
 
@@ -21,7 +40,7 @@ test('aceita somente configuração sintética e local do GitHub Actions', () =>
     validateCiEnvironment({
       env: validEnvironment(),
       repositoryFiles: ['.env.example', 'database/audit/test.sql'],
-      executionSources: { 'workflow.yml': 'psql --host 127.0.0.1' },
+      executionSources: workflowExecutionSources(),
       requireGitHubActions: true,
     }),
     [],
@@ -40,9 +59,12 @@ test('rejeita host externo, imagem móvel e execução fora do runner', () => {
     ...validEnvironment(),
     GITHUB_ACTIONS: 'false',
     PGHOST: 'db.example.invalid',
-    LTCM_CI_POSTGRES_IMAGE: 'postgres:17',
   };
-  const issues = validateCiEnvironment({ env, requireGitHubActions: true });
+  const issues = validateCiEnvironment({
+    env,
+    executionSources: workflowExecutionSources('postgres:17'),
+    requireGitHubActions: true,
+  });
   assert.ok(issues.some((issue) => issue.includes('PGHOST')));
   assert.ok(issues.some((issue) => issue.includes('imutável')));
   assert.ok(issues.some((issue) => issue.includes('GitHub Actions')));
@@ -60,9 +82,85 @@ test('rejeita operações remotas e pull_request_target nos executores', () => {
   const issues = validateCiEnvironment({
     env: validEnvironment(),
     executionSources: {
-      'workflow.yml': 'pull_request_target:\n  run: supabase db push --linked',
+      [WORKFLOW_PATH]: `${workflowSource()}pull_request_target:\n  run: supabase db push --linked`,
     },
   });
-  assert.equal(issues.length, 1);
-  assert.match(issues[0], /operação remota proibida/u);
+  assert.ok(issues.some((issue) => /operação remota proibida/u.test(issue)));
+});
+
+test('workflow real usa uma única referência canônica ASCII sem tag ou whitespace', () => {
+  const source = fs.readFileSync(path.join(process.cwd(), WORKFLOW_PATH), 'utf8');
+  const imageLine = source.split('\n').find((line) => /^\s*image:/u.test(line));
+  const value = imageLine.slice(imageLine.indexOf(':') + 1).trimStart();
+  const approvedDigest = '4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394';
+  const previousReference = ['postgres:17.10-bookworm@', `sha256:${approvedDigest}`].join('');
+
+  assert.deepEqual(validatePostgresImageWorkflow(source), []);
+  assert.equal(value, CI_POSTGRES_IMAGE);
+  assert.match(value, /^postgres@sha256:[0-9a-f]{64}$/u);
+  assert.equal(value, `postgres@sha256:${approvedDigest}`);
+  assert.equal(source.split(CI_POSTGRES_IMAGE).length - 1, 1);
+  assert.equal(source.includes(previousReference), false);
+  assert.equal(Buffer.from(value, 'ascii').toString('ascii'), value);
+  assert.doesNotMatch(value, /[\s\u00a0\p{Cc}]/u);
+  assert.equal(value, value.trimEnd());
+});
+
+test('scanner rejeita tag, digest móvel ou inválido, whitespace, Unicode e duplicidade', () => {
+  const digest = CI_POSTGRES_IMAGE.slice('postgres@sha256:'.length);
+  const invalidSources = [
+    workflowSource(`postgres:17.10-bookworm@sha256:${digest}`),
+    workflowSource('postgres:17'),
+    workflowSource(`postgres@sha256:${digest.slice(1)}`),
+    workflowSource(`postgres@sha256:${digest.toUpperCase()}`),
+    workflowSource(`postgres@SHA256:${digest}`),
+    workflowSource(`postgres@sha256:${'0'.repeat(64)}`),
+    workflowSource(`${CI_POSTGRES_IMAGE.slice(0, 35)} ${CI_POSTGRES_IMAGE.slice(35)}`),
+    workflowSource(`${CI_POSTGRES_IMAGE} `),
+    workflowSource(`\t${CI_POSTGRES_IMAGE}`),
+    workflowSource(`${CI_POSTGRES_IMAGE}\r`),
+    workflowSource(`${CI_POSTGRES_IMAGE}\u00a0`),
+    workflowSource(`${CI_POSTGRES_IMAGE}\u0007`),
+    workflowSource(CI_POSTGRES_IMAGE.replace('postgres', 'postgrés')),
+    'jobs:\n  validation:\n    services:\n      postgres:\n        image: >-\n          postgres@sha256:fragmented\n',
+    workflowSource(CI_POSTGRES_IMAGE, `    env:\n      DUPLICATE: ${CI_POSTGRES_IMAGE}\n`),
+  ];
+
+  for (const source of invalidSources) {
+    assert.notDeepEqual(validatePostgresImageWorkflow(source), []);
+  }
+});
+
+test('parser YAML expõe exatamente o valor canônico sem tag', async () => {
+  const source = fs.readFileSync(path.join(process.cwd(), WORKFLOW_PATH), 'utf8');
+  const parsed = await prettier.__debug.parse(source, { parser: 'yaml' });
+  const values = [];
+  const seen = new WeakSet();
+  const visit = (value) => {
+    if (typeof value === 'string') {
+      if (value.startsWith('postgres@sha256:')) values.push(value);
+      return;
+    }
+    if (!value || typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) value.forEach(visit);
+    else Object.values(value).forEach(visit);
+  };
+  visit(parsed.ast);
+  assert.deepEqual(values, [CI_POSTGRES_IMAGE]);
+});
+
+test('package-lock permanece no hash aprovado pela D45', () => {
+  const hash = crypto
+    .createHash('sha256')
+    .update(fs.readFileSync(path.join(process.cwd(), 'package-lock.json')))
+    .digest('hex')
+    .toUpperCase();
+  assert.equal(hash, CI_PACKAGE_LOCK_SHA256);
+  assert.deepEqual(validateCiEnvironment({ env: validEnvironment(), packageLockSha256: hash }), []);
+  assert.ok(
+    validateCiEnvironment({ env: validEnvironment(), packageLockSha256: '0'.repeat(64) }).some(
+      (issue) => issue.includes('package-lock.json'),
+    ),
+  );
 });
