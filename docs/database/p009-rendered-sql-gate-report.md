@@ -5,7 +5,10 @@
 - Status: aprovado.
 - Decisão: D33, `Decidida` em 03/08/2026 e aprovada pelo responsável do projeto.
 - Manifesto: [`p009-rendered-sql-gate-manifest.json`](p009-rendered-sql-gate-manifest.json).
-- SHA-256 do manifesto lógico: `BB338E54535CA4F61E57481768C1905C1C3AC7B8646A11312C3F494E983EEC42`.
+- SHA-256 do manifesto lógico: `7F424201F25930F2B187D0B4539599A79E3EFC3259E371384DD0EA2BE5AC34E2`.
+- SHA-256 da lista de fontes: `D775CA4BA224EA9EBB3F3B3BEFA4C6725B889A612D7A1E4F8C820C2F53AB91E3`.
+- Os 19 caminhos relativos das fontes usam `/` no contrato, independentemente do sistema
+  operacional; os hashes dos conteúdos SQL permanecem inalterados.
 - SQL completo temporário: `.tmp/p009-rendered-sql-gate/`, ignorado pelo Git e sem credenciais.
 
 | Run ID                    | SHA-256 do SQL renderizado                                         | Statements | INSERTs | Tuplas | Aliases | CTEs | Fixtures `app_users` | Contextos | Pós-DML | Auditados |
