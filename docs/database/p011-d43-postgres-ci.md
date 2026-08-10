@@ -28,12 +28,17 @@ origem. O job registra também a versão PostgreSQL realmente iniciada, encoding
 
 ## Bootstrap e ownership
 
-O service inicia `ci_admin` como administrador descartável. O bootstrap cria `postgres` com os
-atributos comprovados pelo harness P008, `supabase_admin` sem login e `ltc_m_runtime` sem login,
-atributos elevados ou memberships. As migrations validam e reutilizam a runtime sintética e são
-aplicadas como `postgres`; assim, as funções `SECURITY DEFINER` terminam com owner `postgres`.
-Depois das migrations, o bootstrap reproduz D26 com grantor `supabase_admin`. D27 é concedida
-apenas durante as regressões e revogada em `finally`.
+Desde D51, o service inicializa `supabase_admin` como bootstrap superuser real do cluster. O
+bootstrap cria `postgres` com os atributos comprovados pelo harness P008, `ltc_m_runtime` sem
+login, atributos elevados ou memberships, e `ci_admin` como login sintético restrito, sem
+SUPERUSER, INHERIT, CREATEDB, CREATEROLE, BYPASSRLS ou qualquer membership. Uma conexão separada
+de `ci_admin` comprova a ausência de MEMBER/USAGE/SET sobre a runtime antes das migrations.
+
+As migrations validam e reutilizam a runtime sintética e são aplicadas como `postgres`; assim, as
+funções `SECURITY DEFINER` terminam com owner `postgres`. Depois das migrations dos dois bancos e
+dos seeds, uma conexão direta de `supabase_admin` reproduz D26 com esse grantor e imediatamente
+altera a própria role para `NOLOGIN NOREPLICATION`. D27 é concedida apenas durante as regressões e
+revogada em `finally`.
 
 O estado final comprova owner, `prosecdef`, `search_path=""`, ACL sem `PUBLIC`, ausência de
 `EXECUTE` para `ltc_m_runtime`, restauração exata de D26 e zero fixture operacional.
@@ -43,7 +48,7 @@ O estado final comprova owner, `prosecdef`, `search_path=""`, ACL sem `PUBLIC`, 
 1. instalar exatamente o lockfile, sem cache na primeira execução;
 2. rejeitar configuração remota;
 3. executar `npm run check`;
-4. criar as roles sintéticas;
+4. criar as roles sintéticas uma única vez e provar `ci_admin` isolado em conexão separada;
 5. aplicar migrations timestampadas com `psql -X --no-psqlrc --set=ON_ERROR_STOP=1`;
 6. aplicar `supabase/seed.sql` no banco efêmero;
 7. executar P006 e P007;
@@ -55,6 +60,11 @@ O estado final comprova owner, `prosecdef`, `search_path=""`, ACL sem `PUBLIC`, 
     migrations;
 13. revogar D27 em `finally`, comprovar o estado final e remover temporários;
 14. exigir `git diff --exit-code`.
+
+A fase de criação das roles é intencionalmente one-shot e fail-closed. `postgres`, `ci_admin` ou
+`ltc_m_runtime` preexistente produz `42710` antes de qualquer mutação, inclusive quando as roles
+possuem D26 correta. A fase D26 também exige zero membership prévia na runtime; isso evita que uma
+segunda execução duplique grantors ou trate estado cluster-wide como se fosse database-local.
 
 O teste concorrente mantém a primeira transação aberta e inicia a operação incompatível em outra
 conexão. Ele cobre vínculo-primeiro e rejeição-primeiro, exige espera real, recusa deadlock ou

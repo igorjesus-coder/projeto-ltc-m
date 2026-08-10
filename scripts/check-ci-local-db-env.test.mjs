@@ -8,15 +8,18 @@ import * as prettier from 'prettier';
 
 import {
   CI_PACKAGE_LOCK_SHA256,
+  CI_P008_MIGRATION_SHA256,
   CI_POSTGRES_IMAGE,
   validateCiEnvironment,
+  validateD51Bootstrap,
+  validateD51Workflow,
   validatePostgresImageWorkflow,
 } from './check-ci-local-db-env.mjs';
 
 const WORKFLOW_PATH = '.github/workflows/ltcm-postgres-validation.yml';
 
 function workflowSource(image = CI_POSTGRES_IMAGE, suffix = '') {
-  return `jobs:\n  validation:\n    services:\n      postgres:\n        image: ${image}\n${suffix}`;
+  return `jobs:\n  validation:\n    services:\n      postgres:\n        image: ${image}\n        env:\n          POSTGRES_USER: supabase_admin\n        options: --health-cmd "pg_isready -U supabase_admin -d ltcm_ci"\n    env:\n      PGUSER: supabase_admin\n${suffix}`;
 }
 
 function workflowExecutionSources(image = CI_POSTGRES_IMAGE, suffix = '') {
@@ -29,8 +32,9 @@ function validEnvironment() {
     PGHOST: '127.0.0.1',
     PGPORT: '5432',
     PGDATABASE: 'ltcm_ci',
-    PGUSER: 'ci_admin',
-    PGPASSWORD: 'ltcm_ci_admin_only',
+    PGUSER: 'supabase_admin',
+    PGPASSWORD: 'ltcm_ci_bootstrap_only',
+    LTCM_CI_ADMIN_PASSWORD: 'ltcm_ci_admin_only',
     LTCM_CI_POSTGRES_PASSWORD: 'ltcm_ci_postgres_only',
   };
 }
@@ -68,6 +72,63 @@ test('rejeita host externo, imagem móvel e execução fora do runner', () => {
   assert.ok(issues.some((issue) => issue.includes('PGHOST')));
   assert.ok(issues.some((issue) => issue.includes('imutável')));
   assert.ok(issues.some((issue) => issue.includes('GitHub Actions')));
+});
+
+test('D51 exige supabase_admin como bootstrap superuser no workflow', () => {
+  const valid = workflowSource();
+  assert.deepEqual(validateD51Workflow(valid), []);
+
+  const ciBootstrap = valid
+    .replace('POSTGRES_USER: supabase_admin', 'POSTGRES_USER: ci_admin')
+    .replace('pg_isready -U supabase_admin', 'pg_isready -U ci_admin');
+  const issues = validateD51Workflow(ciBootstrap);
+  assert.ok(issues.some((issue) => issue.includes('bootstrap superuser')));
+  assert.ok(issues.some((issue) => issue.includes('ci_admin não pode')));
+});
+
+test('D51 rejeita grantor, membership e opções D26 relaxadas', () => {
+  const bootstrapPath = path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-bootstrap.sql');
+  const source = fs.readFileSync(bootstrapPath, 'utf8');
+  assert.deepEqual(validateD51Bootstrap(source), []);
+
+  const invalidSources = [
+    source.replace('grant ltc_m_runtime to postgres', 'grant ltc_m_runtime to ci_admin'),
+    source.replace(
+      "pg_catalog.pg_get_userbyid(grantor) = 'supabase_admin'",
+      "pg_catalog.pg_get_userbyid(grantor) = 'ci_admin'",
+    ),
+    source.replace(
+      'with admin true, inherit false, set false',
+      'with admin false, inherit true, set true',
+    ),
+    `${source}\ngrant ltc_m_runtime to postgres granted by supabase_admin;\n`,
+  ];
+  for (const invalid of invalidSources) assert.notDeepEqual(validateD51Bootstrap(invalid), []);
+});
+
+test('D51 exige credenciais sintéticas distintas e protege a migration P008', () => {
+  const duplicateCredentials = {
+    ...validEnvironment(),
+    LTCM_CI_ADMIN_PASSWORD: validEnvironment().PGPASSWORD,
+  };
+  assert.ok(
+    validateCiEnvironment({ env: duplicateCredentials }).some((issue) =>
+      issue.includes('devem ser distintas'),
+    ),
+  );
+  assert.ok(
+    validateCiEnvironment({
+      env: validEnvironment(),
+      p008MigrationSha256: '0'.repeat(64),
+    }).some((issue) => issue.includes('migration P008')),
+  );
+  assert.deepEqual(
+    validateCiEnvironment({
+      env: validEnvironment(),
+      p008MigrationSha256: CI_P008_MIGRATION_SHA256,
+    }),
+    [],
+  );
 });
 
 test('rejeita XLSX, artifacts e env real, preservando env example', () => {

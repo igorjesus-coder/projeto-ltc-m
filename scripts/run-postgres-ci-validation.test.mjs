@@ -51,14 +51,69 @@ test('falha sanitizada não preserva URL de banco', () => {
   assert.match(message, /redacted/u);
 });
 
-test('bootstrap prepara runtime sem memberships antes das migrations', () => {
+test('bootstrap D51 usa supabase_admin real e isola ci_admin antes das migrations', () => {
   const bootstrap = fs.readFileSync(
     path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
     'utf8',
   );
+  assert.match(bootstrap, /current_user\s*<>\s*'supabase_admin'/iu);
+  assert.match(bootstrap, /session_user\s*<>\s*'supabase_admin'/iu);
+  assert.match(bootstrap, /rolname\s*=\s*'supabase_admin'[\s\S]*oid\s*=\s*10/iu);
+  assert.match(
+    bootstrap,
+    /create role ci_admin[\s\S]*login[\s\S]*nosuperuser[\s\S]*noinherit[\s\S]*nocreatedb[\s\S]*nocreaterole[\s\S]*nobypassrls/iu,
+  );
   assert.match(bootstrap, /create role ltc_m_runtime[\s\S]*nologin[\s\S]*nobypassrls/iu);
-  assert.match(bootstrap, /revoke ltc_m_runtime from ci_admin granted by ci_admin/iu);
   assert.match(bootstrap, /pg_catalog\.pg_auth_members/iu);
+  assert.match(bootstrap, /pg_has_role\('ci_admin', 'ltc_m_runtime', 'MEMBER'\)/iu);
+  assert.match(bootstrap, /pg_has_role\('ci_admin', 'ltc_m_runtime', 'USAGE'\)/iu);
+  assert.match(bootstrap, /pg_has_role\('ci_admin', 'ltc_m_runtime', 'SET'\)/iu);
+  assert.doesNotMatch(bootstrap, /grant\s+ltc_m_runtime\s+to\s+ci_admin/iu);
+});
+
+test('bootstrap D51 preserva a assertion estrutural D26 e encerra LOGIN do bootstrap', () => {
+  const bootstrap = fs.readFileSync(
+    path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
+    'utf8',
+  );
+  assert.match(
+    bootstrap,
+    /grant ltc_m_runtime to postgres\s+with admin true, inherit false, set false/iu,
+  );
+  assert.match(bootstrap, /pg_catalog\.pg_get_userbyid\(grantor\) = 'supabase_admin'/iu);
+  assert.match(bootstrap, /alter role supabase_admin nologin noreplication/iu);
+  assert.match(bootstrap, /pg_has_role\('postgres', 'ltc_m_runtime', 'MEMBER'\)/iu);
+  assert.match(bootstrap, /pg_has_role\('postgres', 'ltc_m_runtime', 'USAGE'\)/iu);
+  assert.match(bootstrap, /pg_has_role\('postgres', 'ltc_m_runtime', 'SET'\)/iu);
+  assert.doesNotMatch(bootstrap, /granted\s+by\s+supabase_admin/iu);
+});
+
+test('fase de roles D51 é one-shot e rejeita todos os estados preexistentes', () => {
+  const bootstrap = fs.readFileSync(
+    path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
+    'utf8',
+  );
+  assert.match(
+    bootstrap,
+    /rolname in \('postgres', 'ci_admin', 'ltc_m_runtime'\)[\s\S]*errcode = '42710'/iu,
+  );
+  assert.match(bootstrap, /membership antecipada em ltc_m_runtime/iu);
+});
+
+test('runner separa bootstrap, operador e dois bancos no mesmo cluster', () => {
+  const runner = fs.readFileSync(
+    path.join(process.cwd(), 'scripts', 'run-postgres-ci-validation.mjs'),
+    'utf8',
+  );
+  assert.match(runner, /runStage\('bootstrap_roles'/u);
+  assert.match(runner, /runStage\('ci_admin_preflight'/u);
+  assert.match(runner, /user: 'ci_admin'[\s\S]*password: adminPassword/u);
+  assert.match(
+    runner,
+    /runStage\('create_concurrency_database'[\s\S]*database: 'postgres'[\s\S]*user: 'postgres'/u,
+  );
+  assert.match(runner, /database: 'ltcm_ci_concurrency'/u);
+  assert.match(runner, /ci_admin_phase: 'true'/u);
 });
 
 test('estado final lê locale do catálogo do banco PostgreSQL', () => {
@@ -80,6 +135,20 @@ test('estado final verifica as duas funções trigger-only D40 e D41', () => {
   assert.match(finalState, /enforce_import_batch_rejection_guard\(\)/u);
   assert.match(finalState, /pg_catalog\.aclexplode/iu);
   assert.match(finalState, /has_function_privilege/iu);
+});
+
+test('estado final D51 comprova roles, ownership e D26 cluster-wide', () => {
+  const finalState = fs.readFileSync(
+    path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-final-state.sql'),
+    'utf8',
+  );
+  assert.match(finalState, /pg_database\.datname = 'ltcm_ci'/iu);
+  assert.match(finalState, /pg_roles\.rolname = 'postgres'/iu);
+  assert.match(finalState, /rolname = 'supabase_admin'[\s\S]*oid = 10[\s\S]*not rolcanlogin/iu);
+  assert.match(finalState, /rolname = 'ci_admin'[\s\S]*not rolsuper[\s\S]*not rolcreaterole/iu);
+  assert.match(finalState, /pg_get_userbyid\(grantor\) = 'supabase_admin'/iu);
+  assert.match(finalState, /pg_has_role\('postgres', 'ltc_m_runtime', 'MEMBER'\)/iu);
+  assert.match(finalState, /pg_has_role\('ci_admin', 'ltc_m_runtime', 'SET'\)/iu);
 });
 
 test('runner só avança da Fase A P009 com evidência limpa', () => {

@@ -27,12 +27,12 @@ jobs:
         env:
           POSTGRES_DB: ltcm_ci
           POSTGRES_INITDB_ARGS: --encoding=UTF8
-          POSTGRES_PASSWORD: ltcm_ci_admin_only
-          POSTGRES_USER: ci_admin
+          POSTGRES_PASSWORD: ltcm_ci_bootstrap_only
+          POSTGRES_USER: supabase_admin
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ci_admin -d ltcm_ci"
+          --health-cmd "pg_isready -U supabase_admin -d ltcm_ci"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -41,9 +41,10 @@ jobs:
       CI: 'true'
       PGDATABASE: ltcm_ci
       PGHOST: 127.0.0.1
-      PGPASSWORD: ltcm_ci_admin_only
+      PGPASSWORD: ltcm_ci_bootstrap_only
       PGPORT: '5432'
-      PGUSER: ci_admin
+      PGUSER: supabase_admin
+      LTCM_CI_ADMIN_PASSWORD: ltcm_ci_admin_only
       LTCM_CI_POSTGRES_PASSWORD: ltcm_ci_postgres_only
       LTCM_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 

@@ -9,6 +9,8 @@ export const CI_POSTGRES_IMAGE =
   'postgres@sha256:4f736ae292687621d4dbe0d499ffd024a36bd2ee7d8ca6f2ccd4c800f047b394';
 export const CI_PACKAGE_LOCK_SHA256 =
   'CD69FDB04673AAE30C344735CD9A68D2983B1CD8BC84961AF113D1178E8CFD91';
+export const CI_P008_MIGRATION_SHA256 =
+  '485DB38DE4194F2564C6A22D22B145ECA49710A2340B5EBD39C91990EA5CC14A';
 
 const WORKFLOW_PATH = '.github/workflows/ltcm-postgres-validation.yml';
 
@@ -96,11 +98,72 @@ export function validatePostgresImageWorkflow(source) {
   return [...new Set(issues)];
 }
 
+export function validateD51Workflow(source) {
+  const issues = [];
+  if (!/^\s*POSTGRES_USER:\s*supabase_admin\s*$/mu.test(source)) {
+    issues.push('workflow deve inicializar supabase_admin como bootstrap superuser');
+  }
+  if (/^\s*POSTGRES_USER:\s*ci_admin\s*$/mu.test(source)) {
+    issues.push('ci_admin não pode ser bootstrap superuser');
+  }
+  if (!/^\s*PGUSER:\s*supabase_admin\s*$/mu.test(source)) {
+    issues.push('PGUSER deve ser supabase_admin no bootstrap D51');
+  }
+  if (!/pg_isready -U supabase_admin -d ltcm_ci/u.test(source)) {
+    issues.push('healthcheck deve usar o bootstrap superuser supabase_admin');
+  }
+  return issues;
+}
+
+export function validateD51Bootstrap(source) {
+  const issues = [];
+  const required = [
+    [
+      /current_user\s*<>\s*'supabase_admin'[\s\S]*session_user\s*<>\s*'supabase_admin'/iu,
+      'sessão direta de supabase_admin ausente',
+    ],
+    [
+      /create role ci_admin[\s\S]*login[\s\S]*nosuperuser[\s\S]*noinherit[\s\S]*nocreatedb[\s\S]*nocreaterole[\s\S]*nobypassrls/iu,
+      'ci_admin separado e restrito ausente',
+    ],
+    [
+      /grant\s+ltc_m_runtime\s+to\s+postgres\s+with\s+admin\s+true\s*,\s*inherit\s+false\s*,\s*set\s+false/iu,
+      'GRANT D26 exato ausente',
+    ],
+    [
+      /pg_catalog\.pg_get_userbyid\(grantor\)\s*=\s*'supabase_admin'/iu,
+      'assertion do grantor D26 ausente',
+    ],
+    [
+      /alter role supabase_admin nologin noreplication/iu,
+      'estado final NOLOGIN de supabase_admin ausente',
+    ],
+    [/oid\s*=\s*10[\s\S]*rolsuper/iu, 'prova do bootstrap superuser real ausente'],
+    [
+      /pg_has_role\('postgres',\s*'ltc_m_runtime',\s*'MEMBER'\)/iu,
+      'assertion MEMBER de postgres ausente',
+    ],
+    [
+      /pg_has_role\('ci_admin',\s*'ltc_m_runtime',\s*'SET'\)/iu,
+      'assertion SET negativa de ci_admin ausente',
+    ],
+  ];
+  for (const [pattern, message] of required) if (!pattern.test(source)) issues.push(message);
+  if (/grant\s+ltc_m_runtime\s+to\s+ci_admin/iu.test(source)) {
+    issues.push('membership ci_admin para ltc_m_runtime é proibida');
+  }
+  if (/granted\s+by\s+supabase_admin/iu.test(source)) {
+    issues.push('GRANTED BY não pode mascarar o bootstrap D51');
+  }
+  return issues;
+}
+
 export function validateCiEnvironment({
   env = process.env,
   repositoryFiles = [],
   executionSources = {},
   packageLockSha256 = CI_PACKAGE_LOCK_SHA256,
+  p008MigrationSha256 = CI_P008_MIGRATION_SHA256,
   requireGitHubActions = false,
 } = {}) {
   const issues = [];
@@ -114,15 +177,31 @@ export function validateCiEnvironment({
   }
   if (String(env.PGPORT ?? '') !== '5432') issues.push('PGPORT deve ser 5432');
   if (String(env.PGDATABASE ?? '') !== 'ltcm_ci') issues.push('PGDATABASE deve ser ltcm_ci');
-  if (String(env.PGUSER ?? '') !== 'ci_admin') issues.push('PGUSER deve ser ci_admin');
+  if (String(env.PGUSER ?? '') !== 'supabase_admin') {
+    issues.push('PGUSER deve ser supabase_admin');
+  }
   if (!/^ltcm_ci_[a-z0-9_]+_only$/u.test(String(env.PGPASSWORD ?? ''))) {
     issues.push('PGPASSWORD deve ser a credencial sintética do job');
   }
   if (!/^ltcm_ci_[a-z0-9_]+_only$/u.test(String(env.LTCM_CI_POSTGRES_PASSWORD ?? ''))) {
     issues.push('senha da role postgres deve ser sintética');
   }
+  if (!/^ltcm_ci_[a-z0-9_]+_only$/u.test(String(env.LTCM_CI_ADMIN_PASSWORD ?? ''))) {
+    issues.push('senha da role ci_admin deve ser sintética');
+  }
+  const syntheticPasswords = [
+    env.PGPASSWORD,
+    env.LTCM_CI_ADMIN_PASSWORD,
+    env.LTCM_CI_POSTGRES_PASSWORD,
+  ].map((value) => String(value ?? ''));
+  if (new Set(syntheticPasswords).size !== syntheticPasswords.length) {
+    issues.push('credenciais sintéticas das roles CI devem ser distintas');
+  }
   if (String(packageLockSha256).toUpperCase() !== CI_PACKAGE_LOCK_SHA256) {
     issues.push('package-lock.json divergiu do hash aprovado');
+  }
+  if (String(p008MigrationSha256).toUpperCase() !== CI_P008_MIGRATION_SHA256) {
+    issues.push('migration P008 divergiu do hash aprovado');
   }
   if (requireGitHubActions && String(env.GITHUB_ACTIONS ?? '') !== 'true') {
     issues.push('execução dinâmica exige GitHub Actions');
@@ -137,6 +216,10 @@ export function validateCiEnvironment({
   for (const [filePath, source] of Object.entries(executionSources)) {
     if (normalizedPath(filePath) === WORKFLOW_PATH) {
       issues.push(...validatePostgresImageWorkflow(source));
+      issues.push(...validateD51Workflow(source));
+    }
+    if (normalizedPath(filePath) === 'database/audit/ltcm-ci-bootstrap.sql') {
+      issues.push(...validateD51Bootstrap(source));
     }
     for (const pattern of FORBIDDEN_COMMANDS) {
       if (pattern.test(source)) {
@@ -176,6 +259,14 @@ export function checkCiEnvironment(rootDirectory = process.cwd(), options = {}) 
     repositoryFiles: repositoryFiles(rootDirectory),
     executionSources: executionSources(rootDirectory),
     packageLockSha256: sha256File(path.join(rootDirectory, 'package-lock.json')),
+    p008MigrationSha256: sha256File(
+      path.join(
+        rootDirectory,
+        'supabase',
+        'migrations',
+        '20260731103001_add_ltcm_runtime_rls_security.sql',
+      ),
+    ),
     requireGitHubActions: options.requireGitHubActions ?? false,
   });
 }

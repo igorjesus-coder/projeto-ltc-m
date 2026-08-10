@@ -11,6 +11,43 @@ begin
         raise exception 'Estado final CI está fora do banco ou executor sintético esperado.';
     end if;
 
+    if not exists (
+        select 1
+        from pg_catalog.pg_database
+        join pg_catalog.pg_roles on pg_roles.oid = pg_database.datdba
+        where pg_database.datname = 'ltcm_ci'
+          and pg_roles.rolname = 'postgres'
+    ) then
+        raise exception 'Estado final CI encontrou owner divergente para ltcm_ci.';
+    end if;
+
+    if not exists (
+        select 1
+        from pg_catalog.pg_roles
+        where rolname = 'supabase_admin'
+          and oid = 10
+          and rolsuper
+          and rolinherit
+          and rolcreaterole
+          and rolcreatedb
+          and not rolcanlogin
+          and not rolreplication
+          and rolbypassrls
+    ) or not exists (
+        select 1
+        from pg_catalog.pg_roles
+        where rolname = 'ci_admin'
+          and rolcanlogin
+          and not rolsuper
+          and not rolinherit
+          and not rolcreatedb
+          and not rolcreaterole
+          and not rolreplication
+          and not rolbypassrls
+    ) then
+        raise exception 'Estado final CI encontrou atributos divergentes nas roles D51.';
+    end if;
+
     if (
         select count(*)
         from pg_catalog.pg_proc
@@ -52,7 +89,7 @@ begin
         select count(*)
         from pg_catalog.pg_auth_members
         where roleid = 'ltc_m_runtime'::regrole
-          and member = 'postgres'::regrole
+           or member = 'ltc_m_runtime'::regrole
     ) <> 1
         or not exists (
             select 1
@@ -64,7 +101,12 @@ begin
               and not inherit_option
               and not set_option
         )
+        or not pg_catalog.pg_has_role('postgres', 'ltc_m_runtime', 'MEMBER')
+        or pg_catalog.pg_has_role('postgres', 'ltc_m_runtime', 'USAGE')
         or pg_catalog.pg_has_role('postgres', 'ltc_m_runtime', 'SET')
+        or pg_catalog.pg_has_role('ci_admin', 'ltc_m_runtime', 'MEMBER')
+        or pg_catalog.pg_has_role('ci_admin', 'ltc_m_runtime', 'USAGE')
+        or pg_catalog.pg_has_role('ci_admin', 'ltc_m_runtime', 'SET')
     then
         raise exception 'Estado final CI não restaurou D26 exatamente.';
     end if;

@@ -168,7 +168,8 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
 
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ltcm-ci-validation-'));
   const postgresPassword = process.env.LTCM_CI_POSTGRES_PASSWORD;
-  const adminPassword = process.env.PGPASSWORD;
+  const bootstrapPassword = process.env.PGPASSWORD;
+  const adminPassword = process.env.LTCM_CI_ADMIN_PASSWORD;
   const runStage = stageRunner(evidence);
   let d27Granted = false;
   let concurrencyDatabaseCreated = false;
@@ -187,17 +188,27 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       executePsql({
         database: process.env.PGDATABASE,
         user: process.env.PGUSER,
+        password: bootstrapPassword,
+        file: path.join(rootDirectory, 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
+        variables: { roles_phase: 'true', ci_admin_phase: 'false', d26_phase: 'false' },
+      }),
+    );
+
+    runStage('ci_admin_preflight', () =>
+      executePsql({
+        database: process.env.PGDATABASE,
+        user: 'ci_admin',
         password: adminPassword,
         file: path.join(rootDirectory, 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
-        variables: { roles_phase: 'true', d26_phase: 'false' },
+        variables: { roles_phase: 'false', ci_admin_phase: 'true', d26_phase: 'false' },
       }),
     );
 
     runStage('create_concurrency_database', () =>
       executePsql({
         database: 'postgres',
-        user: process.env.PGUSER,
-        password: adminPassword,
+        user: 'postgres',
+        password: postgresPassword,
         command: 'create database ltcm_ci_concurrency owner postgres',
       }),
     );
@@ -230,9 +241,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       executePsql({
         database: process.env.PGDATABASE,
         user: process.env.PGUSER,
-        password: adminPassword,
+        password: bootstrapPassword,
         file: path.join(rootDirectory, 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
-        variables: { roles_phase: 'false', d26_phase: 'true' },
+        variables: { roles_phase: 'false', ci_admin_phase: 'false', d26_phase: 'true' },
       }),
     );
 
@@ -352,8 +363,8 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
     if (concurrencyDatabaseCreated) {
       const dropConcurrencyDatabase = executePsql({
         database: 'postgres',
-        user: process.env.PGUSER,
-        password: adminPassword,
+        user: 'postgres',
+        password: postgresPassword,
         command: 'drop database if exists ltcm_ci_concurrency with (force)',
       });
       evidence.exit_codes.concurrency_database_cleanup = dropConcurrencyDatabase.code;
