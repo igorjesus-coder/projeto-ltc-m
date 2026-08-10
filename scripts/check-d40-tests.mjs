@@ -8,10 +8,103 @@ import { scanMigrationText, stripSqlNoise } from './check-migrations.mjs';
 export const D40_MIGRATION = '20260804120000_add_legacy_project_reference_date_exception.sql';
 export const D40_HARNESS = 'database/audit/ltcm-d40-tests.sql';
 export const SYNTHETIC_CURRENCY_CODE_PATTERN = /^[A-Z]{3}$/u;
+export const D40_STRUCTURAL_PRECONDITION_COUNT = 6;
 
 const CURRENCY_INSERT_TARGET_PATTERN = /\binsert\s+into\s+ltc_m\.currencies\b/giu;
 const CURRENCY_INSERT_PATTERN =
   /\binsert\s+into\s+ltc_m\.currencies\s*\(\s*code\s*,[^)]*\)\s*values\s*\(\s*'((?:''|[^'])*)'/giu;
+
+const STRUCTURAL_BLOCK_PATTERN = /\bdo\s+\$d40_structure\$([\s\S]*?)\$d40_structure\$\s*;/giu;
+
+const STRUCTURAL_REQUIREMENTS = [
+  ['FK: catalogo nominal', /\bfrom\s+pg_catalog\.pg_constraint\s+as\s+fk_constraint\b/iu],
+  ['FK: tipo', /\bfk_constraint\.contype\s*=\s*'f'/iu],
+  ['FK: nome', /\bfk_constraint\.conname\s*=\s*'fk_projects_legacy_import_batch'/iu],
+  ['FK: tabela origem', /\bfk_constraint\.conrelid\s*=\s*'ltc_m\.projects'::regclass/iu],
+  ['FK: tabela destino', /\bfk_constraint\.confrelid\s*=\s*'ltc_m\.import_batches'::regclass/iu],
+  [
+    'FK: cardinalidade da chave origem',
+    /\bpg_catalog\.cardinality\(fk_constraint\.conkey\)\s*=\s*1/iu,
+  ],
+  ['FK: attnum da chave origem', /\bsource_attribute\.attnum\s*=\s*fk_constraint\.conkey\[1\]/iu],
+  ['FK: coluna origem', /\bsource_attribute\.attname\s*=\s*'legacy_import_batch_id'/iu],
+  [
+    'FK: cardinalidade da chave destino',
+    /\bpg_catalog\.cardinality\(fk_constraint\.confkey\)\s*=\s*1/iu,
+  ],
+  ['FK: attnum da chave destino', /\btarget_attribute\.attnum\s*=\s*fk_constraint\.confkey\[1\]/iu],
+  ['FK: coluna destino', /\btarget_attribute\.attname\s*=\s*'id'/iu],
+  ['FK: match type', /\bfk_constraint\.confmatchtype\s*=\s*'s'/iu],
+  ['FK: ON UPDATE', /\bfk_constraint\.confupdtype\s*=\s*'a'/iu],
+  ['FK: ON DELETE', /\bfk_constraint\.confdeltype\s*=\s*'a'/iu],
+  ['FK: NOT DEFERRABLE', /\bnot\s+fk_constraint\.condeferrable\b/iu],
+  ['FK: INITIALLY IMMEDIATE', /\bnot\s+fk_constraint\.condeferred\b/iu],
+  ['FK: validada', /\band\s+fk_constraint\.convalidated\b/iu],
+  ['CHECK: catalogo nominal', /\bfrom\s+pg_catalog\.pg_constraint\s+as\s+check_constraint\b/iu],
+  ['CHECK: tipo', /\bcheck_constraint\.contype\s*=\s*'c'/iu],
+  ['CHECK: nome', /\bcheck_constraint\.conname\s*=\s*'ck_projects_data_reference_date_legacy'/iu],
+  ['CHECK: tabela', /\bcheck_constraint\.conrelid\s*=\s*'ltc_m\.projects'::regclass/iu],
+  ['CHECK: validada', /\band\s+check_constraint\.convalidated\b/iu],
+  [
+    'CHECK: expressao logica',
+    /\bpg_catalog\.pg_get_expr\(check_constraint\.conbin,\s*check_constraint\.conrelid\)[\s\S]*?=\s*'data_reference_dateisnotnullorlegacy_import_batch_idisnotnull'/iu,
+  ],
+  ['NOT NULL: tabela', /\breference_date_attribute\.attrelid\s*=\s*'ltc_m\.projects'::regclass/iu],
+  ['NOT NULL: coluna', /\breference_date_attribute\.attname\s*=\s*'data_reference_date'/iu],
+  ['NOT NULL: coluna de usuario', /\breference_date_attribute\.attnum\s*>\s*0/iu],
+  ['NOT NULL: coluna existente', /\bnot\s+reference_date_attribute\.attisdropped\b/iu],
+  ['NOT NULL: removido', /\bnot\s+reference_date_attribute\.attnotnull\b/iu],
+  ['Indice: catalogo', /\bfrom\s+pg_catalog\.pg_index\s+as\s+index_record\b/iu],
+  ['Indice: schema', /\bindex_namespace\.nspname\s*=\s*'ltc_m'/iu],
+  ['Indice: nome', /\bindex_class\.relname\s*=\s*'ix_projects_legacy_import_batch'/iu],
+  ['Indice: schema da tabela', /\btable_namespace\.nspname\s*=\s*'ltc_m'/iu],
+  ['Indice: tabela', /\btable_class\.relname\s*=\s*'projects'/iu],
+  ['Indice: uma chave', /\bindex_record\.indnatts\s*=\s*1/iu],
+  ['Indice: uma coluna-chave', /\bindex_record\.indnkeyatts\s*=\s*1/iu],
+  ['Indice: sem chave de expressao', /\bindex_record\.indexprs\s+is\s+null/iu],
+  ['Indice: attnum da coluna', /\bindexed_attribute\.attnum\s*=\s*index_record\.indkey\[0\]/iu],
+  ['Indice: coluna', /\bindexed_attribute\.attname\s*=\s*'legacy_import_batch_id'/iu],
+  ['Indice: nao unico', /\bnot\s+index_record\.indisunique\b/iu],
+  ['Indice: valido', /\band\s+index_record\.indisvalid\b/iu],
+  ['Indice: pronto', /\band\s+index_record\.indisready\b/iu],
+  ['Indice: parcial', /\bindex_record\.indpred\s+is\s+not\s+null/iu],
+  [
+    'Indice: predicado',
+    /\bpg_catalog\.pg_get_expr\(index_record\.indpred,\s*index_record\.indrelid\)[\s\S]*?=\s*'legacy_import_batch_idisnotnull'/iu,
+  ],
+  [
+    'triggers projects: conjunto normativo',
+    /v_expected_project_triggers\s+constant\s+text\[\]\s*:=\s*array\[\s*'trg_00_projects_no_delete',\s*'trg_05_projects_inactivation',\s*'trg_07_projects_legacy_reference_guard',\s*'trg_10_projects_metadata',\s*'trg_90_projects_audit'\s*\]/iu,
+  ],
+  [
+    'triggers projects: ausencia fail-closed',
+    /\bif\s+v_trigger_order\s+is\s+distinct\s+from\s+v_expected_project_triggers\s+then\b/iu,
+  ],
+  [
+    'triggers projects: catalogo ativo',
+    /\bfrom\s+pg_catalog\.pg_trigger[^;]*?tgrelid\s*=\s*'ltc_m\.projects'::regclass[^;]*?not\s+pg_trigger\.tgisinternal[^;]*?pg_trigger\.tgenabled\s*<>\s*'D'\s*;/iu,
+  ],
+  [
+    'triggers projects: ordem normativa',
+    /array_position\(v_trigger_order,\s*'trg_00_projects_no_delete'\)[\s\S]*?<\s*pg_catalog\.array_position\(v_trigger_order,\s*'trg_05_projects_inactivation'\)[\s\S]*?<\s*pg_catalog\.array_position\(v_trigger_order,\s*'trg_07_projects_legacy_reference_guard'\)[\s\S]*?<\s*pg_catalog\.array_position\(v_trigger_order,\s*'trg_10_projects_metadata'\)[\s\S]*?<\s*pg_catalog\.array_position\(v_trigger_order,\s*'trg_90_projects_audit'\)/iu,
+  ],
+  [
+    'triggers import_batches: conjunto normativo',
+    /v_expected_import_triggers\s+constant\s+text\[\]\s*:=\s*array\[\s*'trg_00_import_batches_no_delete',\s*'trg_07_import_batches_rejection_guard',\s*'trg_10_import_batches_metadata',\s*'trg_90_import_batches_audit'\s*\]/iu,
+  ],
+  [
+    'triggers import_batches: ausencia fail-closed',
+    /\bif\s+v_import_trigger_order\s+is\s+distinct\s+from\s+v_expected_import_triggers\s+then\b/iu,
+  ],
+  [
+    'triggers import_batches: catalogo ativo',
+    /\bfrom\s+pg_catalog\.pg_trigger[^;]*?tgrelid\s*=\s*'ltc_m\.import_batches'::regclass[^;]*?not\s+pg_trigger\.tgisinternal[^;]*?pg_trigger\.tgenabled\s*<>\s*'D'\s*;/iu,
+  ],
+  [
+    'triggers import_batches: ordem normativa',
+    /array_position\(v_import_trigger_order,\s*'trg_00_import_batches_no_delete'\)[\s\S]*?<\s*pg_catalog\.array_position\(v_import_trigger_order,\s*'trg_07_import_batches_rejection_guard'\)[\s\S]*?<\s*pg_catalog\.array_position\(v_import_trigger_order,\s*'trg_10_import_batches_metadata'\)[\s\S]*?<\s*pg_catalog\.array_position\(v_import_trigger_order,\s*'trg_90_import_batches_audit'\)/iu,
+  ],
+];
 
 const REQUIRED_SCENARIOS = [
   ['data sem lote', /Projeto novo com data e sem lote/iu],
@@ -94,9 +187,65 @@ export function scanSyntheticCurrencyFixtures(sql, { requireInsert = false } = {
   return [...new Set(issues)];
 }
 
+export function scanD40StructuralPreconditions(sql) {
+  const source = String(sql);
+  const blocks = [...source.matchAll(STRUCTURAL_BLOCK_PATTERN)];
+  if (blocks.length !== 1) {
+    return ['preconditions D40 devem conter exatamente um bloco estrutural'];
+  }
+
+  const block = blocks[0][1];
+  const issues = [];
+  for (const [label, pattern] of STRUCTURAL_REQUIREMENTS) {
+    if (!pattern.test(block))
+      issues.push(`precondition estrutural ausente ou divergente: ${label}`);
+  }
+
+  if (/\bpg_catalog\.pg_get_constraintdef\s*\(/iu.test(block)) {
+    issues.push('preconditions D40 nao podem depender de pg_get_constraintdef');
+  }
+  if (/\bpg_catalog\.pg_get_indexdef\s*\(/iu.test(block)) {
+    issues.push('precondition do indice nao pode depender de pg_get_indexdef');
+  }
+  if ((block.match(/\)\s*<>\s*1\s+then\b/giu) ?? []).length !== 4) {
+    issues.push('FK, CHECK, NOT NULL e indice devem falhar com contagem estrutural exatamente um');
+  }
+  if ((block.match(/\bis\s+distinct\s+from\b/giu) ?? []).length !== 2) {
+    issues.push(
+      'conjuntos de triggers devem falhar fechado inclusive quando o catalogo retorna NULL',
+    );
+  }
+  if (/\braise\s+warning\b/iu.test(block)) {
+    issues.push('precondition estrutural divergente nao pode virar warning');
+  }
+
+  const projectPresence = block.indexOf(
+    'if v_trigger_order is distinct from v_expected_project_triggers then',
+  );
+  const projectOrder = block.indexOf(
+    "array_position(v_trigger_order, 'trg_00_projects_no_delete')",
+  );
+  if (projectPresence < 0 || projectOrder < 0 || projectPresence > projectOrder) {
+    issues.push('triggers projects devem provar presenca antes da ordem');
+  }
+
+  const importPresence = block.indexOf(
+    'if v_import_trigger_order is distinct from v_expected_import_triggers then',
+  );
+  const importOrder = block.indexOf(
+    "array_position(v_import_trigger_order, 'trg_00_import_batches_no_delete')",
+  );
+  if (importPresence < 0 || importOrder < 0 || importPresence > importOrder) {
+    issues.push('triggers import_batches devem provar presenca antes da ordem');
+  }
+
+  return [...new Set(issues)];
+}
+
 export function scanD40HarnessText(sql) {
   const issues = [];
   issues.push(...scanSyntheticCurrencyFixtures(sql, { requireInsert: true }));
+  issues.push(...scanD40StructuralPreconditions(sql));
   const stripped = stripSqlNoise(sql);
   if ((stripped.match(/\bbegin\s*;/giu) ?? []).length !== 1) {
     issues.push('harness D40 deve conter um BEGIN');

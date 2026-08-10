@@ -46,44 +46,131 @@ do $d40_structure$
 declare
     v_trigger_order text[];
     v_import_trigger_order text[];
+    v_expected_project_triggers constant text[] := array[
+        'trg_00_projects_no_delete',
+        'trg_05_projects_inactivation',
+        'trg_07_projects_legacy_reference_guard',
+        'trg_10_projects_metadata',
+        'trg_90_projects_audit'
+    ];
+    v_expected_import_triggers constant text[] := array[
+        'trg_00_import_batches_no_delete',
+        'trg_07_import_batches_rejection_guard',
+        'trg_10_import_batches_metadata',
+        'trg_90_import_batches_audit'
+    ];
 begin
-    if not exists (
-        select 1 from pg_catalog.pg_constraint
-        where conrelid = 'ltc_m.projects'::regclass
-          and conname = 'fk_projects_legacy_import_batch'
-          and pg_catalog.pg_get_constraintdef(oid) like '%FOREIGN KEY (legacy_import_batch_id) REFERENCES ltc_m.import_batches(id)%ON UPDATE NO ACTION ON DELETE NO ACTION%'
-    ) then
+    if (
+        select pg_catalog.count(*)
+        from pg_catalog.pg_constraint as fk_constraint
+        join pg_catalog.pg_attribute as source_attribute
+          on source_attribute.attrelid = fk_constraint.conrelid
+         and source_attribute.attnum = fk_constraint.conkey[1]
+         and source_attribute.attnum > 0
+         and not source_attribute.attisdropped
+        join pg_catalog.pg_attribute as target_attribute
+          on target_attribute.attrelid = fk_constraint.confrelid
+         and target_attribute.attnum = fk_constraint.confkey[1]
+         and target_attribute.attnum > 0
+         and not target_attribute.attisdropped
+        where fk_constraint.contype = 'f'
+          and fk_constraint.conname = 'fk_projects_legacy_import_batch'
+          and fk_constraint.conrelid = 'ltc_m.projects'::regclass
+          and fk_constraint.confrelid = 'ltc_m.import_batches'::regclass
+          and pg_catalog.cardinality(fk_constraint.conkey) = 1
+          and source_attribute.attname = 'legacy_import_batch_id'
+          and pg_catalog.cardinality(fk_constraint.confkey) = 1
+          and target_attribute.attname = 'id'
+          and fk_constraint.confmatchtype = 's'
+          and fk_constraint.confupdtype = 'a'
+          and fk_constraint.confdeltype = 'a'
+          and not fk_constraint.condeferrable
+          and not fk_constraint.condeferred
+          and fk_constraint.convalidated
+    ) <> 1 then
         raise exception 'D40 falhou: FK final ausente ou divergente.';
     end if;
-    if not exists (
-        select 1 from pg_catalog.pg_constraint
-        where conrelid = 'ltc_m.projects'::regclass
-          and conname = 'ck_projects_data_reference_date_legacy'
-          and convalidated
-          and pg_catalog.pg_get_constraintdef(oid) like '%data_reference_date IS NOT NULL%legacy_import_batch_id IS NOT NULL%'
-    ) then
+    if (
+        select pg_catalog.count(*)
+        from pg_catalog.pg_constraint as check_constraint
+        where check_constraint.contype = 'c'
+          and check_constraint.conname = 'ck_projects_data_reference_date_legacy'
+          and check_constraint.conrelid = 'ltc_m.projects'::regclass
+          and check_constraint.convalidated
+          and pg_catalog.regexp_replace(
+              pg_catalog.lower(
+                  pg_catalog.pg_get_expr(check_constraint.conbin, check_constraint.conrelid)
+              ),
+              '[[:space:]()]',
+              '',
+              'g'
+          ) = 'data_reference_dateisnotnullorlegacy_import_batch_idisnotnull'
+    ) <> 1 then
         raise exception 'D40 falhou: CHECK final ausente, divergente ou não validado.';
     end if;
-    if exists (
-        select 1 from pg_catalog.pg_attribute
-        where attrelid = 'ltc_m.projects'::regclass
-          and attname = 'data_reference_date'
-          and attnotnull
-    ) then
+    if (
+        select pg_catalog.count(*)
+        from pg_catalog.pg_attribute as reference_date_attribute
+        where reference_date_attribute.attrelid = 'ltc_m.projects'::regclass
+          and reference_date_attribute.attname = 'data_reference_date'
+          and reference_date_attribute.attnum > 0
+          and not reference_date_attribute.attisdropped
+          and not reference_date_attribute.attnotnull
+    ) <> 1 then
         raise exception 'D40 falhou: NOT NULL físico ainda presente.';
     end if;
-    if pg_catalog.pg_get_indexdef('ltc_m.ix_projects_legacy_import_batch'::regclass)
-        not like '%(legacy_import_batch_id) WHERE (legacy_import_batch_id IS NOT NULL)'
-    then
+    if (
+        select pg_catalog.count(*)
+        from pg_catalog.pg_index as index_record
+        join pg_catalog.pg_class as index_class
+          on index_class.oid = index_record.indexrelid
+        join pg_catalog.pg_namespace as index_namespace
+          on index_namespace.oid = index_class.relnamespace
+        join pg_catalog.pg_class as table_class
+          on table_class.oid = index_record.indrelid
+        join pg_catalog.pg_namespace as table_namespace
+          on table_namespace.oid = table_class.relnamespace
+        join pg_catalog.pg_attribute as indexed_attribute
+          on indexed_attribute.attrelid = index_record.indrelid
+         and indexed_attribute.attnum = index_record.indkey[0]
+         and indexed_attribute.attnum > 0
+         and not indexed_attribute.attisdropped
+        where index_namespace.nspname = 'ltc_m'
+          and index_class.relname = 'ix_projects_legacy_import_batch'
+          and table_namespace.nspname = 'ltc_m'
+          and table_class.relname = 'projects'
+          and index_record.indnatts = 1
+          and index_record.indnkeyatts = 1
+          and index_record.indexprs is null
+          and indexed_attribute.attname = 'legacy_import_batch_id'
+          and not index_record.indisunique
+          and index_record.indisvalid
+          and index_record.indisready
+          and index_record.indpred is not null
+          and pg_catalog.regexp_replace(
+              pg_catalog.lower(
+                  pg_catalog.pg_get_expr(index_record.indpred, index_record.indrelid)
+              ),
+              '[[:space:]()]',
+              '',
+              'g'
+          ) = 'legacy_import_batch_idisnotnull'
+    ) <> 1 then
         raise exception 'D40 falhou: índice parcial divergente.';
     end if;
     select pg_catalog.array_agg(pg_trigger.tgname order by pg_trigger.tgname)
     into v_trigger_order
     from pg_catalog.pg_trigger
     where pg_trigger.tgrelid = 'ltc_m.projects'::regclass
-      and not pg_trigger.tgisinternal;
+      and not pg_trigger.tgisinternal
+      and pg_trigger.tgenabled <> 'D';
+    if v_trigger_order is distinct from v_expected_project_triggers then
+        raise exception 'D40 failed: projects trigger set is missing or divergent.';
+    end if;
     if not (
-        pg_catalog.array_position(v_trigger_order, 'trg_05_projects_inactivation')
+        pg_catalog.array_position(v_trigger_order, 'trg_00_projects_no_delete')
+        < pg_catalog.array_position(v_trigger_order, 'trg_05_projects_inactivation')
+        and pg_catalog.array_position(v_trigger_order, 'trg_05_projects_inactivation')
         < pg_catalog.array_position(v_trigger_order, 'trg_07_projects_legacy_reference_guard')
         and pg_catalog.array_position(v_trigger_order, 'trg_07_projects_legacy_reference_guard')
         < pg_catalog.array_position(v_trigger_order, 'trg_10_projects_metadata')
@@ -96,9 +183,15 @@ begin
     into v_import_trigger_order
     from pg_catalog.pg_trigger
     where pg_trigger.tgrelid = 'ltc_m.import_batches'::regclass
-      and not pg_trigger.tgisinternal;
+      and not pg_trigger.tgisinternal
+      and pg_trigger.tgenabled <> 'D';
+    if v_import_trigger_order is distinct from v_expected_import_triggers then
+        raise exception 'D41 failed: import_batches trigger set is missing or divergent.';
+    end if;
     if not (
-        pg_catalog.array_position(v_import_trigger_order, 'trg_07_import_batches_rejection_guard')
+        pg_catalog.array_position(v_import_trigger_order, 'trg_00_import_batches_no_delete')
+        < pg_catalog.array_position(v_import_trigger_order, 'trg_07_import_batches_rejection_guard')
+        and pg_catalog.array_position(v_import_trigger_order, 'trg_07_import_batches_rejection_guard')
         < pg_catalog.array_position(v_import_trigger_order, 'trg_10_import_batches_metadata')
         and pg_catalog.array_position(v_import_trigger_order, 'trg_10_import_batches_metadata')
         < pg_catalog.array_position(v_import_trigger_order, 'trg_90_import_batches_audit')
