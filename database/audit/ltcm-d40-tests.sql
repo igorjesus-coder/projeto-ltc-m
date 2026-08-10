@@ -19,7 +19,7 @@ select ltc_m.set_actor_context(
 );
 
 insert into ltc_m.currencies (code, name, decimal_places, active)
-values ('D40', 'Moeda sintética D40', 2, true);
+values ('ZZZ', 'Moeda sintética D40', 2, true);
 
 insert into ltc_m.clients (id, legal_name, display_name)
 values (
@@ -117,7 +117,7 @@ insert into ltc_m.projects (
 )
 values (
     '00000000-0000-4000-8000-000000040100', 'D40-NORMAL', 'Projeto sintético normal',
-    '00000000-0000-4000-8000-000000040010', 'D40', 100, date '2026-01-01'
+    '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, date '2026-01-01'
 );
 
 do $d40_negative_matrix$
@@ -128,7 +128,7 @@ begin
             id, project_code, project_name, client_id, base_currency, contract_value
         ) values (
             '00000000-0000-4000-8000-000000040101', 'D40-NO-LINEAGE', 'Projeto sintético inválido',
-            '00000000-0000-4000-8000-000000040010', 'D40', 100
+            '00000000-0000-4000-8000-000000040010', 'ZZZ', 100
         );
         raise exception 'D40 falhou: data nula sem lote foi aceita.';
     exception when check_violation then null;
@@ -145,7 +145,7 @@ begin
             data_reference_date, legacy_import_batch_id
         ) values (
             '00000000-0000-4000-8000-000000040102', 'D40-MISSING-BATCH', 'Projeto sintético inválido',
-            '00000000-0000-4000-8000-000000040010', 'D40', 100, null,
+            '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null,
             '00000000-0000-4000-8000-000000049999'
         );
         raise exception 'D40 falhou: lote inexistente foi aceito.';
@@ -163,7 +163,7 @@ begin
             data_reference_date, legacy_import_batch_id
         ) values (
             '00000000-0000-4000-8000-000000040103', 'D40-EDITOR', 'Projeto sintético inválido',
-            '00000000-0000-4000-8000-000000040010', 'D40', 100, null,
+            '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null,
             '00000000-0000-4000-8000-000000040020'
         );
         raise exception 'D40 falhou: Editor autorizou exceção.';
@@ -180,7 +180,7 @@ begin
             data_reference_date, legacy_import_batch_id
         ) values (
             '00000000-0000-4000-8000-000000040104', 'D40-NO-REASON', 'Projeto sintético inválido',
-            '00000000-0000-4000-8000-000000040010', 'D40', 100, null,
+            '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null,
             '00000000-0000-4000-8000-000000040020'
         );
         raise exception 'D40 falhou: Admin sem justificativa foi aceito.';
@@ -198,7 +198,7 @@ begin
             data_reference_date, legacy_import_batch_id
         ) values (
             '00000000-0000-4000-8000-000000040105', 'D40-NO-REQUEST', 'Projeto sintético inválido',
-            '00000000-0000-4000-8000-000000040010', 'D40', 100, null,
+            '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null,
             '00000000-0000-4000-8000-000000040020'
         );
         raise exception 'D40 falhou: Admin sem request ID foi aceito.';
@@ -217,7 +217,7 @@ begin
             data_reference_date, legacy_import_batch_id
         ) values (
             '00000000-0000-4000-8000-000000040106', 'D40-INACTIVE', 'Projeto sintético inválido',
-            '00000000-0000-4000-8000-000000040010', 'D40', 100, null,
+            '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null,
             '00000000-0000-4000-8000-000000040020'
         );
         raise exception 'D40 falhou: Admin inativo foi aceito.';
@@ -235,7 +235,7 @@ begin
             data_reference_date, legacy_import_batch_id
         ) values (
             '00000000-0000-4000-8000-000000040107', 'D40-REJECTED', 'Projeto sintético inválido',
-            '00000000-0000-4000-8000-000000040010', 'D40', 100, null,
+            '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null,
             '00000000-0000-4000-8000-000000040023'
         );
         raise exception 'D40 falhou: lote rejected foi aceito.';
@@ -254,15 +254,15 @@ insert into ltc_m.projects (
     data_reference_date, legacy_import_batch_id
 )
 values
-    ('00000000-0000-4000-8000-000000040110', 'D40-RECEIVED', 'Projeto sintético received', '00000000-0000-4000-8000-000000040010', 'D40', 100, null, '00000000-0000-4000-8000-000000040020'),
-    ('00000000-0000-4000-8000-000000040111', 'D40-VALIDATING', 'Projeto sintético validating', '00000000-0000-4000-8000-000000040010', 'D40', 100, null, '00000000-0000-4000-8000-000000040021'),
-    ('00000000-0000-4000-8000-000000040112', 'D40-LOADED', 'Projeto sintético loaded', '00000000-0000-4000-8000-000000040010', 'D40', 100, null, '00000000-0000-4000-8000-000000040022'),
-    ('00000000-0000-4000-8000-000000040113', 'D40-DATE-AND-BATCH', 'Projeto sintético enriquecido', '00000000-0000-4000-8000-000000040010', 'D40', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040020'),
-    ('00000000-0000-4000-8000-000000040114', 'D41-ACTIVE', 'Projeto sintético active', '00000000-0000-4000-8000-000000040010', 'D40', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040020'),
-    ('00000000-0000-4000-8000-000000040115', 'D41-COMPLETED', 'Projeto sintético completed', '00000000-0000-4000-8000-000000040010', 'D40', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040021'),
-    ('00000000-0000-4000-8000-000000040116', 'D41-SOFT-DELETED', 'Projeto sintético histórico', '00000000-0000-4000-8000-000000040010', 'D40', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040022'),
-    ('00000000-0000-4000-8000-000000040118', 'D41-MULTIPLE-A', 'Projeto sintético múltiplo A', '00000000-0000-4000-8000-000000040010', 'D40', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040028'),
-    ('00000000-0000-4000-8000-000000040119', 'D41-MULTIPLE-B', 'Projeto sintético múltiplo B', '00000000-0000-4000-8000-000000040010', 'D40', 100, null, '00000000-0000-4000-8000-000000040028');
+    ('00000000-0000-4000-8000-000000040110', 'D40-RECEIVED', 'Projeto sintético received', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null, '00000000-0000-4000-8000-000000040020'),
+    ('00000000-0000-4000-8000-000000040111', 'D40-VALIDATING', 'Projeto sintético validating', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null, '00000000-0000-4000-8000-000000040021'),
+    ('00000000-0000-4000-8000-000000040112', 'D40-LOADED', 'Projeto sintético loaded', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null, '00000000-0000-4000-8000-000000040022'),
+    ('00000000-0000-4000-8000-000000040113', 'D40-DATE-AND-BATCH', 'Projeto sintético enriquecido', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040020'),
+    ('00000000-0000-4000-8000-000000040114', 'D41-ACTIVE', 'Projeto sintético active', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040020'),
+    ('00000000-0000-4000-8000-000000040115', 'D41-COMPLETED', 'Projeto sintético completed', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040021'),
+    ('00000000-0000-4000-8000-000000040116', 'D41-SOFT-DELETED', 'Projeto sintético histórico', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040022'),
+    ('00000000-0000-4000-8000-000000040118', 'D41-MULTIPLE-A', 'Projeto sintético múltiplo A', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, date '2026-01-01', '00000000-0000-4000-8000-000000040028'),
+    ('00000000-0000-4000-8000-000000040119', 'D41-MULTIPLE-B', 'Projeto sintético múltiplo B', '00000000-0000-4000-8000-000000040010', 'ZZZ', 100, null, '00000000-0000-4000-8000-000000040028');
 
 update ltc_m.projects
 set status = case

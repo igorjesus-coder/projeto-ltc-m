@@ -7,6 +7,11 @@ import { scanMigrationText, stripSqlNoise } from './check-migrations.mjs';
 
 export const D40_MIGRATION = '20260804120000_add_legacy_project_reference_date_exception.sql';
 export const D40_HARNESS = 'database/audit/ltcm-d40-tests.sql';
+export const SYNTHETIC_CURRENCY_CODE_PATTERN = /^[A-Z]{3}$/u;
+
+const CURRENCY_INSERT_TARGET_PATTERN = /\binsert\s+into\s+ltc_m\.currencies\b/giu;
+const CURRENCY_INSERT_PATTERN =
+  /\binsert\s+into\s+ltc_m\.currencies\s*\(\s*code\s*,[^)]*\)\s*values\s*\(\s*'((?:''|[^'])*)'/giu;
 
 const REQUIRED_SCENARIOS = [
   ['data sem lote', /Projeto novo com data e sem lote/iu],
@@ -58,8 +63,40 @@ const REQUIRED_SCENARIOS = [
   ['D41 rollback', /rollback deixou fixture permanente/iu],
 ];
 
+export const D40_SCENARIO_COUNT = REQUIRED_SCENARIOS.length;
+
+export function isValidSyntheticCurrencyCode(code) {
+  return typeof code === 'string' && SYNTHETIC_CURRENCY_CODE_PATTERN.test(code);
+}
+
+export function extractSyntheticCurrencyCodes(sql) {
+  return [...String(sql).matchAll(CURRENCY_INSERT_PATTERN)].map((match) =>
+    match[1].replaceAll("''", "'"),
+  );
+}
+
+export function scanSyntheticCurrencyFixtures(sql, { requireInsert = false } = {}) {
+  const source = String(sql);
+  const insertCount = (source.match(CURRENCY_INSERT_TARGET_PATTERN) ?? []).length;
+  const codes = extractSyntheticCurrencyCodes(source);
+  const issues = [];
+  if (requireInsert && insertCount === 0) {
+    issues.push('fixture monetária sintética ausente');
+  }
+  if (codes.length !== insertCount) {
+    issues.push('INSERT de ltc_m.currencies fora do formato nominal autorizado');
+  }
+  for (const code of codes) {
+    if (!isValidSyntheticCurrencyCode(code)) {
+      issues.push(`código monetário sintético inválido: ${JSON.stringify(code)}`);
+    }
+  }
+  return [...new Set(issues)];
+}
+
 export function scanD40HarnessText(sql) {
   const issues = [];
+  issues.push(...scanSyntheticCurrencyFixtures(sql, { requireInsert: true }));
   const stripped = stripSqlNoise(sql);
   if ((stripped.match(/\bbegin\s*;/giu) ?? []).length !== 1) {
     issues.push('harness D40 deve conter um BEGIN');

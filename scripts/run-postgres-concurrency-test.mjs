@@ -97,7 +97,7 @@ insert into ltc_m.app_users (id, auth_subject, full_name, role, active)
 values ('${ADMIN_ID}', 'ci-d43|admin', 'CI D43 Admin', 'admin', true);
 ${actorContext('ci-d43-setup-data', 'Fixture sintética concorrente D43')}
 insert into ltc_m.currencies (code, name, decimal_places, active)
-values ('C43', 'Moeda sintética CI D43', 2, true);
+values ('ZZZ', 'Moeda sintética CI D43', 2, true);
 insert into ltc_m.clients (id, legal_name, display_name)
 values ('${CLIENT_ID}', 'Cliente sintético CI D43', 'Cliente sintético CI D43');
 insert into ltc_m.import_batches
@@ -117,7 +117,7 @@ insert into ltc_m.projects
      data_reference_date, legacy_import_batch_id)
 values
     ('00000000-0000-4000-8000-000000043100', 'CI-D43-FIRST',
-     'Projeto sintético concorrente D43', '${CLIENT_ID}', 'C43', 100, null,
+     'Projeto sintético concorrente D43', '${CLIENT_ID}', 'ZZZ', 100, null,
      '${FIRST_BATCH_ID}');
 select pg_catalog.pg_sleep(2);
 commit;
@@ -150,7 +150,7 @@ insert into ltc_m.projects
      data_reference_date, legacy_import_batch_id)
 values
     ('00000000-0000-4000-8000-000000043101', 'CI-D43-SECOND',
-     'Projeto sintético inverso D43', '${CLIENT_ID}', 'C43', 100, null,
+     'Projeto sintético inverso D43', '${CLIENT_ID}', 'ZZZ', 100, null,
      '${SECOND_BATCH_ID}');
 commit;
 `,
