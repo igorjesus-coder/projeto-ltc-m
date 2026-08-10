@@ -10,6 +10,27 @@ const ADMIN_ID = '00000000-0000-4000-8000-000000043001';
 const CLIENT_ID = '00000000-0000-4000-8000-000000043010';
 const FIRST_BATCH_ID = '00000000-0000-4000-8000-000000043020';
 const SECOND_BATCH_ID = '00000000-0000-4000-8000-000000043021';
+export const CONCURRENCY_ADMIN_USER = 'postgres';
+
+const SYNTHETIC_LOCAL_PASSWORD_PATTERN = /^ltcm_ci_[a-z0-9_]+_only$/u;
+
+export function resolveConcurrencyIdentity(options = {}, environment = process.env) {
+  if (options.adminUser !== undefined && options.adminUser !== CONCURRENCY_ADMIN_USER) {
+    throw new Error('identidade administrativa concorrente deve ser postgres');
+  }
+  if (options.adminPassword !== undefined) {
+    throw new Error('credencial administrativa separada nao e permitida');
+  }
+  const postgresPassword = options.postgresPassword ?? environment.LTCM_CI_POSTGRES_PASSWORD;
+  if (!SYNTHETIC_LOCAL_PASSWORD_PATTERN.test(String(postgresPassword ?? ''))) {
+    throw new Error('credencial sintetica local de postgres ausente ou invalida');
+  }
+  return {
+    adminUser: CONCURRENCY_ADMIN_USER,
+    adminPassword: postgresPassword,
+    postgresPassword,
+  };
+}
 
 function psqlArguments({ database, user, file, command }) {
   const args = [
@@ -175,15 +196,17 @@ function parseJsonOutput(stdout) {
 }
 
 export async function runConcurrencyTest(options = {}) {
-  const adminUser = options.adminUser ?? process.env.PGUSER;
-  const adminPassword = options.adminPassword ?? process.env.PGPASSWORD;
-  const postgresPassword = options.postgresPassword ?? process.env.LTCM_CI_POSTGRES_PASSWORD;
+  const { adminUser, adminPassword, postgresPassword } = resolveConcurrencyIdentity(options);
+  const runPsqlSync = options.runPsql ?? runPsql;
+  const runPsqlConcurrent = options.runPsqlAsync ?? runPsqlAsync;
+  const wait =
+    options.wait ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ltcm-ci-concurrency-'));
   const sql = buildConcurrencySql();
   let databaseCreated = false;
   try {
     const databaseCheck = parseJsonOutput(
-      runPsql({
+      runPsqlSync({
         database: 'postgres',
         user: adminUser,
         password: adminPassword,
@@ -198,21 +221,21 @@ export async function runConcurrencyTest(options = {}) {
       throw new Error('banco concorrente descartável não foi preparado pelo runner');
     }
     databaseCreated = true;
-    runPsql({
+    runPsqlSync({
       database: CONCURRENCY_DATABASE,
       user: 'postgres',
       password: postgresPassword,
       file: writeSql(tempDirectory, 'setup.sql', sql.setup),
     });
 
-    const firstLink = runPsqlAsync({
+    const firstLink = runPsqlConcurrent({
       database: CONCURRENCY_DATABASE,
       user: 'postgres',
       password: postgresPassword,
       file: writeSql(tempDirectory, 'link-first.sql', sql.linkFirst),
     });
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const firstReject = runPsqlAsync({
+    await wait(400);
+    const firstReject = runPsqlConcurrent({
       database: CONCURRENCY_DATABASE,
       user: 'postgres',
       password: postgresPassword,
@@ -225,14 +248,14 @@ export async function runConcurrencyTest(options = {}) {
       throw new Error('concorrência vínculo-primeiro não demonstrou serialização');
     }
 
-    const secondReject = runPsqlAsync({
+    const secondReject = runPsqlConcurrent({
       database: CONCURRENCY_DATABASE,
       user: 'postgres',
       password: postgresPassword,
       file: writeSql(tempDirectory, 'reject-second.sql', sql.rejectSecond),
     });
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    const secondLink = runPsqlAsync({
+    await wait(400);
+    const secondLink = runPsqlConcurrent({
       database: CONCURRENCY_DATABASE,
       user: 'postgres',
       password: postgresPassword,
@@ -246,7 +269,7 @@ export async function runConcurrencyTest(options = {}) {
     }
 
     const verification = parseJsonOutput(
-      runPsql({
+      runPsqlSync({
         database: CONCURRENCY_DATABASE,
         user: 'postgres',
         password: postgresPassword,
@@ -277,7 +300,7 @@ export async function runConcurrencyTest(options = {}) {
     };
   } finally {
     if (databaseCreated) {
-      runPsql({
+      runPsqlSync({
         database: 'postgres',
         user: adminUser,
         password: adminPassword,
