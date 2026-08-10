@@ -53,6 +53,44 @@ function sha256(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex').toUpperCase();
 }
 
+export function toPortableRelativePath(value) {
+  if (typeof value !== 'string') throw new TypeError('caminho relativo deve ser string');
+  if (value.length === 0) throw new Error('caminho relativo vazio');
+
+  const portable = value.replaceAll('\\', '/');
+  if (portable.startsWith('//')) throw new Error('caminho UNC proibido');
+  if (/^[A-Za-z]:/u.test(portable)) throw new Error('drive letter proibida');
+  if (path.posix.isAbsolute(portable)) throw new Error('caminho absoluto proibido');
+
+  const segments = [];
+  for (const segment of portable.split('/')) {
+    if (segment === '' || segment === '.') continue;
+    if (segment === '..') {
+      if (segments.length === 0) throw new Error('caminho relativo escapa da raiz');
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  if (segments.length === 0) throw new Error('caminho relativo vazio');
+  return segments.join('/');
+}
+
+export function finalizeGateManifest(manifest) {
+  const sourceFiles = manifest.sourceFiles.map((source) => ({
+    ...source,
+    path: toPortableRelativePath(source.path),
+  }));
+  const { manifestSha256: _previousHash, ...withoutHash } = manifest;
+  const finalized = {
+    ...withoutHash,
+    sourceHash: sha256(JSON.stringify(sourceFiles)),
+    sourceFiles,
+  };
+  finalized.manifestSha256 = sha256(JSON.stringify(finalized));
+  return finalized;
+}
+
 function locationAt(sql, offset) {
   const prefix = sql.slice(0, Math.max(0, offset));
   const lines = prefix.split('\n');
@@ -765,7 +803,11 @@ export function validateSqlBundle(rootDirectory, runId) {
 
   for (const [artifact, entry] of Object.entries(bundle)) {
     rootSqlByArtifact.set(artifact, entry.sql);
-    sourceFiles.push({ artifact, path: entry.sourcePath, sha256: sha256(entry.source) });
+    sourceFiles.push({
+      artifact,
+      path: toPortableRelativePath(entry.sourcePath),
+      sha256: sha256(entry.source),
+    });
     const analysis = analyzeInsertStatements(entry.sql, artifact);
     inserts.push(...analysis.inserts);
     issues.push(...analysis.issues);
@@ -936,8 +978,7 @@ export function buildGateManifest(rootDirectory, runIds = DEFAULT_GATE_RUN_IDS) 
     ],
     issues,
   };
-  manifest.manifestSha256 = sha256(JSON.stringify(manifest));
-  return { manifest, runs };
+  return { manifest: finalizeGateManifest(manifest), runs };
 }
 
 function writeGateArtifacts(rootDirectory, result) {

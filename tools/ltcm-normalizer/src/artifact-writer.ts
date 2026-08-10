@@ -6,7 +6,8 @@ import { canonicalJson, prettyCanonicalJson, sha256 } from './canonical-json.js'
 import type { P011Artifacts } from './types.js';
 
 const MARKER_FILE = '.ltcm-p011-artifacts';
-const MARKER_CONTENT = 'ltcm-p011-artifacts-v1\n';
+const MARKER_CONTENT = 'ltcm-p011-artifacts-v2\n';
+const COMPATIBLE_MARKERS = new Set(['ltcm-p011-artifacts-v1\n', MARKER_CONTENT]);
 
 async function exists(target: string): Promise<boolean> {
   try {
@@ -28,7 +29,7 @@ async function assertManaged(target: string): Promise<void> {
   } catch {
     throw new Error('O diretório de saída existente não é gerenciado pelo P011.');
   }
-  if (marker !== MARKER_CONTENT) throw new Error('Marcador P011 inválido.');
+  if (!COMPATIBLE_MARKERS.has(marker)) throw new Error('Marcador P011 inválido.');
 }
 
 function jsonl(values: unknown[]): string {
@@ -65,7 +66,7 @@ export async function writeP011Artifacts(
   );
   artifacts.manifest['output_hashes'] = outputHashes;
   const hashes = {
-    contract: 'ltcm.p011.hashes.v1',
+    contract: 'ltcm.p011.hashes.v2',
     algorithm: 'sha256',
     files: outputHashes,
   };

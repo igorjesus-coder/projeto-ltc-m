@@ -159,53 +159,112 @@ export function parseP009TerminalEnvelope(stdout, options = {}) {
   return { line: match.line, payload, sha256: parts[2] };
 }
 
-export function terminateProcessTree(pid, platform = process.platform) {
+function terminationErrorCode(error) {
+  return typeof error?.code === 'string' ? error.code : null;
+}
+
+function terminationErrorMessage(error) {
+  if (error instanceof Error) return error.message;
+  if (typeof error?.message === 'string') return error.message;
+  return String(error);
+}
+
+function describeTerminationError(attempt) {
+  const code = terminationErrorCode(attempt.error);
+  const message = terminationErrorMessage(attempt.error);
+  const detail = code && !message.includes(code) ? `${code}: ${message}` : message;
+  return `${attempt.target}: ${detail}`;
+}
+
+export function terminateProcessTree(pid, platform = process.platform, dependencies = {}) {
   if (!Number.isInteger(pid) || pid <= 0)
     return Promise.resolve({ ok: false, code: null, error: 'PID invalido' });
+  const killProcess = dependencies.killProcess ?? process.kill.bind(process);
+  const spawnProcess = dependencies.spawnProcess ?? spawn;
   if (platform === 'win32') {
     return new Promise((resolve) => {
+      let finalized = false;
+      const finish = (result) => {
+        if (finalized) return;
+        finalized = true;
+        resolve(result);
+      };
       const taskkillPath = path.join(
         process.env.SystemRoot ?? String.raw`C:\Windows`,
         'System32',
         'taskkill.exe',
       );
-      const killer = spawn(taskkillPath, ['/PID', String(pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
+      let killer;
+      try {
+        killer = spawnProcess(taskkillPath, ['/PID', String(pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (error) {
+        finish({ ok: false, code: null, error: terminationErrorMessage(error) });
+        return;
+      }
       const stderrChunks = [];
-      killer.stderr.on('data', (chunk) => stderrChunks.push(Buffer.from(chunk)));
+      killer.stderr?.on('data', (chunk) => stderrChunks.push(Buffer.from(chunk)));
       killer.once('error', (error) => {
+        if (finalized) return;
         try {
-          process.kill(pid, 'SIGKILL');
+          killProcess(pid, 'SIGKILL');
         } catch {
           // O processo pode ter encerrado durante a tentativa.
         }
-        resolve({ ok: false, code: null, error: error.message });
+        finish({ ok: false, code: null, error: terminationErrorMessage(error) });
       });
       killer.once('close', (code) => {
+        if (finalized) return;
         const error = Buffer.concat(stderrChunks).toString('utf8').trim();
         if (code !== 0) {
           try {
-            process.kill(pid, 'SIGKILL');
+            killProcess(pid, 'SIGKILL');
           } catch {
             // O processo pode ter encerrado durante a tentativa.
           }
         }
-        resolve({ ok: code === 0, code, error: error || null });
+        finish({ ok: code === 0, code, error: error || null });
       });
     });
   }
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch {
+
+  const attempts = [];
+  const tryKill = (targetPid, target) => {
     try {
-      process.kill(pid, 'SIGKILL');
-    } catch {
-      // O processo ja encerrou.
+      killProcess(targetPid, 'SIGKILL');
+      const attempt = { target, delivered: true, missing: false, error: null };
+      attempts.push(attempt);
+      return attempt;
+    } catch (error) {
+      const attempt = {
+        target,
+        delivered: false,
+        missing: terminationErrorCode(error) === 'ESRCH',
+        error,
+      };
+      attempts.push(attempt);
+      return attempt;
     }
+  };
+
+  const groupAttempt = tryKill(-pid, 'process group');
+  if (groupAttempt.delivered) {
+    return Promise.resolve({ ok: true, code: null, error: null });
   }
-  return Promise.resolve({ ok: true, code: null, error: null });
+
+  const processAttempt = tryKill(pid, 'process');
+  if (processAttempt.delivered || (groupAttempt.missing && processAttempt.missing)) {
+    return Promise.resolve({ ok: true, code: null, error: null });
+  }
+
+  const errors = attempts.filter((attempt) => !attempt.missing && attempt.error !== null);
+  return Promise.resolve({
+    ok: false,
+    code: null,
+    error: errors.map(describeTerminationError).join('; ') || 'falha ao encerrar processo',
+  });
 }
 
 export function runCapturedProcess(command, args, options = {}) {

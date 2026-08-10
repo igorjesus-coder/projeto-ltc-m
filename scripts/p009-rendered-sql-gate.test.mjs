@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import test from 'node:test';
 
 import {
   analyzeInsertStatements,
   buildGateManifest,
+  finalizeGateManifest,
   lexSql,
+  toPortableRelativePath,
   validateSqlArtifact,
 } from './p009-rendered-sql-gate.mjs';
 import { renderComprehensiveP009 } from './sql-rendering.mjs';
@@ -15,6 +19,36 @@ values
   ('00000000-0000-4000-8000-000000000001', 'test|viewer', 'Viewer', 'viewer', true),
   ('00000000-0000-4000-8000-000000000002', 'test|inactive', 'Inactive', 'viewer', false);
 `;
+
+const storedManifest = JSON.parse(
+  fs.readFileSync(
+    new URL('../docs/database/p009-rendered-sql-gate-manifest.json', import.meta.url),
+    'utf8',
+  ),
+);
+
+const historicalEvidence = new Map([
+  [
+    '../docs/database/p008-runtime-validation-result.json',
+    'BAEF49D3808FDC8505321AAC9C27F790888E7E175A2CCCEA6B8770392E348B62',
+  ],
+  [
+    '../docs/database/p009-post-application-report.md',
+    '8CF17BC521AA6959A2F6EF9724ECFF811195F5DD85076BBBEE9513B97EDF3363',
+  ],
+  [
+    '../docs/database/p009-runtime-validation-report.md',
+    'A0EA8A2DD8C41474D7716E6838627C9A3CE1E338393B4DA3487BB3B543E48643',
+  ],
+  [
+    '../docs/database/p009-runtime-validation-result.json',
+    'D044E2AFC8BF59EFFBC43D87855BF995C377A221D31BD90340F32FAB823AC37D',
+  ],
+]);
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex').toUpperCase();
+}
 
 test('lexer reconhece strings, identificadores, comentarios, dollar quotes e parenteses', () => {
   const sql = `
@@ -137,6 +171,93 @@ test('run IDs com hifen e underscore alteram apenas literais autorizados', () =>
   assert.deepEqual(firstGate.canonical, secondGate.canonical);
   assert.match(first, /as p009_rejection_partial_integrity/u);
   assert.match(second, /as p009_rejection_partial_integrity/u);
+});
+
+test('canonicaliza caminhos Windows e preserva caminhos POSIX', () => {
+  const windows = 'database\\audit\\arquivo.sql';
+  const posix = 'database/audit/arquivo.sql';
+  assert.equal(toPortableRelativePath(windows), posix);
+  assert.equal(toPortableRelativePath(posix), posix);
+  assert.equal(toPortableRelativePath(windows), toPortableRelativePath(posix));
+  assert.equal(toPortableRelativePath('database/temporary/../audit/arquivo.sql'), posix);
+});
+
+test('rejeita caminhos vazios, absolutos, drive, UNC e escape da raiz', () => {
+  assert.throws(() => toPortableRelativePath(null), /deve ser string/u);
+  assert.throws(() => toPortableRelativePath(''), /vazio/u);
+  assert.throws(() => toPortableRelativePath('/database/audit/arquivo.sql'), /absoluto/u);
+  assert.throws(() => toPortableRelativePath('C:\\database\\audit\\arquivo.sql'), /drive/u);
+  assert.throws(() => toPortableRelativePath('C:database\\audit\\arquivo.sql'), /drive/u);
+  assert.throws(() => toPortableRelativePath('\\\\server\\share\\arquivo.sql'), /UNC/u);
+  assert.throws(() => toPortableRelativePath('../database/audit/arquivo.sql'), /escapa/u);
+  assert.throws(() => toPortableRelativePath('database/../../arquivo.sql'), /escapa/u);
+});
+
+test('manifesto completo canonicaliza estruturas Windows e POSIX para os mesmos hashes', () => {
+  const current = buildGateManifest(process.cwd()).manifest;
+  const windows = finalizeGateManifest({
+    ...current,
+    sourceHash: 'substituido-pela-finalizacao',
+    sourceFiles: current.sourceFiles.map((source) => ({
+      ...source,
+      path: source.path.replaceAll('/', '\\'),
+    })),
+    manifestSha256: 'substituido-pela-finalizacao',
+  });
+  const posix = finalizeGateManifest({
+    ...current,
+    sourceHash: 'substituido-pela-finalizacao',
+    sourceFiles: current.sourceFiles.map((source) => ({ ...source })),
+    manifestSha256: 'substituido-pela-finalizacao',
+  });
+
+  assert.deepEqual(windows.sourceFiles, posix.sourceFiles);
+  assert.equal(windows.sourceHash, posix.sourceHash);
+  assert.equal(windows.manifestSha256, posix.manifestSha256);
+  assert.equal(JSON.stringify(windows), JSON.stringify(posix));
+  assert.doesNotMatch(JSON.stringify(windows.sourceFiles), /\\/u);
+});
+
+test('manifesto oficial possui exatamente 19 caminhos portateis e hashes pos-canonicalizacao', () => {
+  const { manifest } = buildGateManifest(process.cwd());
+  assert.equal(manifest.sourceFiles.length, 19);
+  for (const source of manifest.sourceFiles) {
+    assert.equal(source.path, toPortableRelativePath(source.path));
+    assert.doesNotMatch(source.path, /\\/u);
+    assert.doesNotMatch(source.path, /^\//u);
+    assert.doesNotMatch(source.path, /^[A-Za-z]:/u);
+    assert.doesNotMatch(source.path, /^\/\//u);
+    assert.ok(!source.path.split('/').includes('..'));
+  }
+
+  assert.equal(manifest.sourceHash, sha256(JSON.stringify(manifest.sourceFiles)));
+  const { manifestSha256, ...withoutHash } = manifest;
+  assert.equal(manifestSha256, sha256(JSON.stringify(withoutHash)));
+});
+
+test('duas geracoes independentes produzem bytes e JSON canonicalizado identicos', () => {
+  const first = `${JSON.stringify(buildGateManifest(process.cwd()).manifest, null, 2)}\n`;
+  const second = `${JSON.stringify(buildGateManifest(process.cwd()).manifest, null, 2)}\n`;
+  assert.equal(Buffer.from(first).equals(Buffer.from(second)), true);
+  assert.equal(JSON.stringify(JSON.parse(first)), JSON.stringify(JSON.parse(second)));
+});
+
+test('canonicalizacao preserva inputs SQL, metricas, INSERTs, gates e issues', () => {
+  const generated = buildGateManifest(process.cwd()).manifest;
+  assert.deepEqual(
+    generated.sourceFiles.map(({ artifact, sha256: hash }) => ({ artifact, sha256: hash })),
+    storedManifest.sourceFiles.map(({ artifact, sha256: hash }) => ({ artifact, sha256: hash })),
+  );
+  assert.deepEqual(generated.rendered, storedManifest.rendered);
+  assert.deepEqual(generated.gates, storedManifest.gates);
+  assert.deepEqual(generated.issues, storedManifest.issues);
+});
+
+test('evidencias historicas D33 permanecem byte a byte inalteradas', () => {
+  for (const [relativePath, expectedHash] of historicalEvidence) {
+    const bytes = fs.readFileSync(new URL(relativePath, import.meta.url));
+    assert.equal(sha256(bytes), expectedHash, relativePath);
+  }
 });
 
 test('manifesto integral oficial aprova os dois run IDs e todas as aridades', () => {

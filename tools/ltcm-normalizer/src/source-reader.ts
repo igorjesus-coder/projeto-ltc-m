@@ -2,6 +2,7 @@ import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 import { canonicalJson, sha256, sha256Canonical } from './canonical-json.js';
+import { parseExistingSnapshot } from './contracts.js';
 import {
   EXPECTED_PROJECT_CODES,
   P010_WORKBOOK_SHA256,
@@ -222,7 +223,7 @@ export async function loadP010Source(inputDir: string): Promise<LoadedSource> {
 
 export function emptySnapshot(): ExistingSnapshot {
   return {
-    contract: 'ltcm.p011.existing-snapshot.v1',
+    contract: 'ltcm.p011.existing-snapshot.v2',
     currencies: [{ code: 'BRL', active: true }],
     clients: [],
     projects: [],
@@ -237,16 +238,7 @@ export async function loadSnapshot(snapshotPath: string | undefined): Promise<Ex
     throw new Error('Snapshot existente inseguro ou acima do limite.');
   }
   const parsed = parseJson(await readFile(absolute), 'existing-snapshot');
-  assertRecord(parsed, 'existing-snapshot');
-  if (
-    parsed['contract'] !== 'ltcm.p011.existing-snapshot.v1' ||
-    !Array.isArray(parsed['currencies']) ||
-    !Array.isArray(parsed['clients']) ||
-    !Array.isArray(parsed['projects'])
-  ) {
-    throw new Error('Contrato do snapshot existente incompatível.');
-  }
-  return parsed as unknown as ExistingSnapshot;
+  return parseExistingSnapshot(parsed);
 }
 
 export async function assertSafeOutput(outputDir: string, inputDir: string): Promise<string> {

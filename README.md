@@ -85,6 +85,7 @@ npm run p007:check
 npm run p008:check
 npm run d28:check
 npm run p009:check
+npm run d40:check
 npm run pw902:check
 npm run d21:check
 npm run test:p010
@@ -95,6 +96,11 @@ Execute tudo em sequência com:
 ```bash
 npm run check
 ```
+
+O gate D43 executa as migrations e as regressões P006–P009/D40/D41 em PostgreSQL 17 efêmero no
+GitHub Actions. Ele não usa Supabase, secrets ou banco persistente. A arquitetura, os comandos e o
+JSON sanitizado estão documentados em
+[`docs/database/p011-d43-postgres-ci.md`](docs/database/p011-d43-postgres-ci.md).
 
 ## Banco local
 
@@ -208,6 +214,13 @@ A validação sanitizada do workbook de referência está em
 
 O P011 consome somente os artefatos P010, extrai candidatos de clientes/projetos e produz um plano
 local determinístico. Ele não lê o XLSX, não acessa banco ou rede e não importa itens.
+
+Os contratos v2 representam D40 com lote existente ou planejado, sem UUID ou data artificial. A
+fronteira futura resolve lote → clientes → projetos em uma transação; nenhum adapter remoto está
+implementado.
+
+D41 impede que um lote já referenciado transite para `rejected`; a linhagem deve ser corrigida para
+outro lote permitido por fluxo administrativo e auditado, nunca removida.
 
 ```powershell
 npm run ltcm:normalize-projects -- `

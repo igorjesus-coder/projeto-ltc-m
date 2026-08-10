@@ -3,101 +3,101 @@
   "decision": "D33",
   "status": "approved",
   "runIds": ["r20991231-gate-a1b2c3d4", "r20000101_gate_00000000"],
-  "sourceHash": "5AC7DE31776EA27D66D68286C80896005D18ED61011A02CA22F82BD701AE26BA",
+  "sourceHash": "D775CA4BA224EA9EBB3F3B3BEFA4C6725B889A612D7A1E4F8C820C2F53AB91E3",
   "sourceFiles": [
     {
       "artifact": "membershipPreflight",
-      "path": "database\\audit\\p008-runtime\\membership-preflight.sql",
+      "path": "database/audit/p008-runtime/membership-preflight.sql",
       "sha256": "49F73747B9D3B7D91FE48D02BF9E4B9DD2E648015642A97266C2C4B136E38439"
     },
     {
       "artifact": "membershipProof",
-      "path": "database\\audit\\p008-runtime\\membership-reversibility-proof.sql",
+      "path": "database/audit/p008-runtime/membership-reversibility-proof.sql",
       "sha256": "D2F23D94E7C73E08860566C9AE49367F4D79A54C1EB5D80D16577775E28BBCEF"
     },
     {
       "artifact": "membershipGrant",
-      "path": "database\\audit\\p008-runtime\\membership-grant.sql",
+      "path": "database/audit/p008-runtime/membership-grant.sql",
       "sha256": "65D9C60F9E1BA1FC6A427304C3BE05817F587CD62F2225A056550280634F01CF"
     },
     {
       "artifact": "membershipCleanup",
-      "path": "database\\audit\\p008-runtime\\membership-cleanup.sql",
+      "path": "database/audit/p008-runtime/membership-cleanup.sql",
       "sha256": "26AB97DA25B6523E8BAD9B1502995542746F6971AFC7ADD458A58F542954A98C"
     },
     {
       "artifact": "invalidContext",
-      "path": "database\\audit\\p008-runtime\\connection-invalid-context.sql",
+      "path": "database/audit/p008-runtime/connection-invalid-context.sql",
       "sha256": "E6D33D818494360A049EE7149664A37228357CCFEFF7EE13DB4FA0432DFA92C6"
     },
     {
       "artifact": "viewer",
-      "path": "database\\audit\\p008-runtime\\connection-viewer.sql",
+      "path": "database/audit/p008-runtime/connection-viewer.sql",
       "sha256": "CB15793AFC60BD0E5169436B15D918E1E754C909F822E2B80D10CCBE4C7D4D67"
     },
     {
       "artifact": "editor",
-      "path": "database\\audit\\p008-runtime\\connection-editor.sql",
+      "path": "database/audit/p008-runtime/connection-editor.sql",
       "sha256": "1DF478B64B31FE71B6D718C00AE501430CEE97E493EBE57BB6CEE678C623F33F"
     },
     {
       "artifact": "editorWorkflow",
-      "path": "database\\audit\\p008-runtime\\connection-editor-workflow.sql",
+      "path": "database/audit/p008-runtime/connection-editor-workflow.sql",
       "sha256": "E71F99FA1F48481DA1533230FE57ACC1CDC289950A0B7602A15EEC0C7F947FF5"
     },
     {
       "artifact": "admin",
-      "path": "database\\audit\\p008-runtime\\connection-admin-d23-d24.sql",
+      "path": "database/audit/p008-runtime/connection-admin-d23-d24.sql",
       "sha256": "A7F801C1AFC2529A865A6658A569AC4639CB98AB65D212BC66EE17717DA93255"
     },
     {
       "artifact": "adminD24",
-      "path": "database\\audit\\p008-runtime\\connection-admin-d24.sql",
+      "path": "database/audit/p008-runtime/connection-admin-d24.sql",
       "sha256": "3263EBF972FD5C78D85008DF95DC62CA168A183139923F181427F2AF804C01EA"
     },
     {
       "artifact": "concurrency",
-      "path": "database\\audit\\p008-runtime\\connection-d23-concurrency.sql",
+      "path": "database/audit/p008-runtime/connection-d23-concurrency.sql",
       "sha256": "DD1A0ED2D9FDA6AF497B8DB0EC6E85DB658F8F23C6A0F3D61B5522963C1D2B6D"
     },
     {
       "artifact": "finalState",
-      "path": "database\\audit\\p008-runtime\\final-state.sql",
+      "path": "database/audit/p008-runtime/final-state.sql",
       "sha256": "05C2B8612C7B5E83F23120BC723ACFA9B7DD10A8E82E69C27195C93DEE219BFA"
     },
     {
       "artifact": "p007",
-      "path": "database\\audit\\ltcm-p007-tests.sql",
+      "path": "database/audit/ltcm-p007-tests.sql",
       "sha256": "DEC0567A375320177C7CA140AA96ADE637AA9E4E58E3649C323BFC9185DC9559"
     },
     {
       "artifact": "p008",
-      "path": "database\\audit\\ltcm-p008-rls-tests.sql",
+      "path": "database/audit/ltcm-p008-rls-tests.sql",
       "sha256": "3A59DF7F03601C641FFBEB283E8095C4D316BBE4FA1CAC8BDA576B934E71E450"
     },
     {
       "artifact": "p009Bootstrap",
-      "path": "database\\audit\\ltcm-p009-bootstrap.sql",
+      "path": "database/audit/ltcm-p009-bootstrap.sql",
       "sha256": "9BEC13F9071FE8CFD588977E7216FC729FEB2288EEA06E1E3B9E0C6B56AAD072"
     },
     {
       "artifact": "p009",
-      "path": "database\\audit\\ltcm-p009-staging-tests.sql",
+      "path": "database/audit/ltcm-p009-staging-tests.sql",
       "sha256": "4A63B4EBD58F07C8F551DCE35380C1076C60F078C50B6A5AFEF161FB6C9C061D"
     },
     {
       "artifact": "structuralPostcheck",
-      "path": "database\\audit\\ltcm-p008-postcheck.sql",
+      "path": "database/audit/ltcm-p008-postcheck.sql",
       "sha256": "9D678849CC8935B92778CB6815A12342F442ACEDDE5CB167A3D318F4045A6E6B"
     },
     {
       "artifact": "p009Postcheck",
-      "path": "database\\audit\\ltcm-p009-postcheck.sql",
+      "path": "database/audit/ltcm-p009-postcheck.sql",
       "sha256": "4970CE339F204F2C9508D187945D1E5A5512505F0630CF85809F0D23FC20A682"
     },
     {
       "artifact": "inventory",
-      "path": "database\\audit\\remote-metadata-inventory.sql",
+      "path": "database/audit/remote-metadata-inventory.sql",
       "sha256": "B2BB58761FDB90C6866495C16AF8A9487A8E275546DEC755845B4E412758B702"
     }
   ],
@@ -1477,5 +1477,5 @@
     "DML sem contexto e vazamento entre transações/conexões"
   ],
   "issues": [],
-  "manifestSha256": "BB338E54535CA4F61E57481768C1905C1C3AC7B8646A11312C3F494E983EEC42"
+  "manifestSha256": "7F424201F25930F2B187D0B4539599A79E3EFC3259E371384DD0EA2BE5AC34E2"
 }

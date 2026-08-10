@@ -267,3 +267,19 @@ renderizador local. A D30 autorizou e consumiu uma única reexecução
 divergente no INSERT de usuários sintéticos. P007/P008 e cleanup passaram novamente, sem delta.
 A fixture foi corrigida somente localmente. Não houve segundo push; nova execução remota da suíte
 depende de outra decisão explícita.
+
+## P011 / D40 — exceção legada auditável de data de referência
+
+A migration forward local
+[`20260804120000_add_legacy_project_reference_date_exception.sql`](../../supabase/migrations/20260804120000_add_legacy_project_reference_date_exception.sql)
+adiciona somente `projects.legacy_import_batch_id`, FK `NO ACTION`, CHECK validado, índice parcial
+e `trg_07_projects_legacy_reference_guard`. O `NOT NULL` físico é removido por último e o CHECK
+mantém o domínio fail-closed. A guarda reutiliza o contexto P007/P008. `received`, `validating` e
+`loaded` permitem vínculo; `rejected` não. Nenhuma policy, grant, enum ou migration aplicada foi
+alterada. A migration permanece local e não há autorização para `db push`.
+
+D41 foi incorporada atomicamente à mesma migration D40 ainda não aplicada. A função
+`enforce_import_batch_rejection_guard()` e `trg_07_import_batches_rejection_guard` bloqueiam
+`NEW.status = 'rejected'` quando existe qualquer projeto referenciando o lote. A guarda não altera
+projetos, não ignora soft delete, executa antes de metadata/auditoria e não adiciona policy/grant.
+O hash D40 anterior foi invalidado pela correção e deve ser substituído pelo hash final D40/D41.

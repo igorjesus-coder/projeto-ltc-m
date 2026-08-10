@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const MIGRATION_NAME = /^(\d{14})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$/;
 const P009_MIGRATION_NAME = '20260731130000_add_ltcm_import_staging.sql';
+const D40_MIGRATION_NAME = '20260804120000_add_legacy_project_reference_date_exception.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -94,6 +95,8 @@ const P009_COLUMNS = new Map([
   ],
 ]);
 
+const D40_COLUMNS = new Map([['projects', new Set(['legacy_import_batch_id'])]]);
+
 const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.audit_row_change',
   'ltc_m.submit_plan_version',
@@ -106,6 +109,11 @@ const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.current_actor_id',
   'ltc_m.enforce_admin_inactivation',
   'ltc_m.read_audit_log',
+]);
+
+const D40_SECURITY_DEFINER_FUNCTIONS = new Set([
+  'ltc_m.enforce_project_legacy_reference_date',
+  'ltc_m.enforce_import_batch_rejection_guard',
 ]);
 
 const APPLIED_MIGRATION_HASHES = new Map([
@@ -144,6 +152,10 @@ const APPLIED_MIGRATION_HASHES = new Map([
   [
     '20260731120000_fix_ltcm_runtime_function_acl.sql',
     'E2CF2E94DCC14713840472684D90369E76A889E30E0C45198B533D8A92F729A8',
+  ],
+  [
+    '20260731130000_add_ltcm_import_staging.sql',
+    'C0CDBC2F020A9D727D0E353A31EA7E91DF715E5B96BEB343E79407DECD940A22',
   ],
 ]);
 
@@ -295,7 +307,25 @@ function requireAdditiveAlterTables(sql, issues, scope) {
 
     const tableName = tableMatch[1].toLowerCase();
     const allowedColumns =
-      scope === 'p009' ? P009_COLUMNS.get(tableName) : P007_COLUMNS.get(tableName);
+      scope === 'd40'
+        ? D40_COLUMNS.get(tableName)
+        : scope === 'p009'
+          ? P009_COLUMNS.get(tableName)
+          : P007_COLUMNS.get(tableName);
+
+    if (scope === 'd40') {
+      const normalized = statement.toLowerCase().replace(/\s+/g, ' ').trim();
+      const allowedStatements = new Set([
+        'alter table ltc_m.projects add column legacy_import_batch_id uuid;',
+        'alter table ltc_m.projects add constraint fk_projects_legacy_import_batch foreign key (legacy_import_batch_id) references ltc_m.import_batches (id) on update no action on delete no action, add constraint ck_projects_data_reference_date_legacy check ( data_reference_date is not null or legacy_import_batch_id is not null ) not valid;',
+        'alter table ltc_m.projects validate constraint ck_projects_data_reference_date_legacy;',
+        'alter table ltc_m.projects alter column data_reference_date drop not null;',
+      ]);
+      if (!allowedStatements.has(normalized)) {
+        issues.push('ALTER TABLE fora da allowlist nominal D40');
+      }
+      continue;
+    }
     if (/\b(?:enable|force)\s+row\s+level\s+security\s*;/i.test(statement)) {
       if (
         !(scope === 'p009' ? P009_RLS_TABLES : P008_RLS_TABLES).has(tableName) ||
@@ -388,7 +418,7 @@ function extractDollarBodies(sql) {
   return bodies;
 }
 
-function requireSafeFunctions(sql, issues) {
+function requireSafeFunctions(sql, issues, scope) {
   const functionStarts = [
     ...sql.matchAll(/\bcreate\s+(?:or\s+replace\s+)?function\s+(ltc_m\.[a-z_][a-z0-9_]*)\s*\(/gi),
   ];
@@ -404,7 +434,8 @@ function requireSafeFunctions(sql, issues) {
       issues.push(`${functionName}: SECURITY INVOKER ou DEFINER deve ser explícito`);
     } else if (
       securityMatch[1].toLowerCase() === 'definer' &&
-      !P007_SECURITY_DEFINER_FUNCTIONS.has(functionName)
+      !P007_SECURITY_DEFINER_FUNCTIONS.has(functionName) &&
+      !(scope === 'd40' && D40_SECURITY_DEFINER_FUNCTIONS.has(functionName))
     ) {
       issues.push(`${functionName}: SECURITY DEFINER fora da whitelist P007`);
     }
@@ -450,7 +481,14 @@ function requireP008Security(sql, stripped, issues, scope) {
       /pg_roles\.rolname\s*=\s*'ltc_m_runtime'/i.test(sql) &&
       /pg_auth_members/i.test(sql) &&
       /raise\s+exception/i.test(sql);
-    if (!safeRoleBlock)
+    const safeD40Preflight =
+      scope === 'd40' &&
+      doCount === 1 &&
+      /\bdo\s+\$d40_preflight\$/i.test(sql) &&
+      /projects\.data_reference_date não é date NOT NULL/i.test(sql) &&
+      /lifecycle de import_batches divergente/i.test(sql) &&
+      /data_reference_date nula antes da exceção/i.test(sql);
+    if (!safeRoleBlock && !safeD40Preflight)
       issues.push('DO permitido somente para criação idempotente de ltc_m_runtime');
   }
 
@@ -546,12 +584,103 @@ function requireP008Security(sql, stripped, issues, scope) {
   }
 }
 
+function requireD40Contract(sql, stripped, issues) {
+  const requiredPatterns = [
+    /\badd\s+column\s+legacy_import_batch_id\s+uuid\s*;/i,
+    /\bconstraint\s+fk_projects_legacy_import_batch\s+foreign\s+key\s*\(\s*legacy_import_batch_id\s*\)\s+references\s+ltc_m\.import_batches\s*\(\s*id\s*\)\s+on\s+update\s+no\s+action\s+on\s+delete\s+no\s+action/i,
+    /\bconstraint\s+ck_projects_data_reference_date_legacy\s+check\s*\(\s*data_reference_date\s+is\s+not\s+null\s+or\s+legacy_import_batch_id\s+is\s+not\s+null\s*\)\s+not\s+valid/i,
+    /\bvalidate\s+constraint\s+ck_projects_data_reference_date_legacy\s*;/i,
+    /\bcreate\s+index\s+ix_projects_legacy_import_batch\s+on\s+ltc_m\.projects\s*\(\s*legacy_import_batch_id\s*\)\s+where\s+legacy_import_batch_id\s+is\s+not\s+null\s*;/i,
+    /\bcreate\s+function\s+ltc_m\.enforce_project_legacy_reference_date\s*\(\s*\)/i,
+    /\bcreate\s+trigger\s+trg_07_projects_legacy_reference_guard\s+before\s+insert\s+or\s+update\s+on\s+ltc_m\.projects\s+for\s+each\s+row\s+execute\s+function\s+ltc_m\.enforce_project_legacy_reference_date\s*\(\s*\)\s*;/i,
+    /\bcreate\s+function\s+ltc_m\.enforce_import_batch_rejection_guard\s*\(\s*\)/i,
+    /\brevoke\s+execute\s+on\s+function\s+ltc_m\.enforce_import_batch_rejection_guard\s*\(\s*\)\s+from\s+public\s*;/i,
+    /\bcreate\s+trigger\s+trg_07_import_batches_rejection_guard\s+before\s+update\s+on\s+ltc_m\.import_batches\s+for\s+each\s+row\s+execute\s+function\s+ltc_m\.enforce_import_batch_rejection_guard\s*\(\s*\)\s*;/i,
+    /\balter\s+table\s+ltc_m\.projects\s+alter\s+column\s+data_reference_date\s+drop\s+not\s+null\s*;/i,
+  ];
+  for (const pattern of requiredPatterns) {
+    if (!pattern.test(stripped)) issues.push('migration D40 incompleta ou divergente');
+  }
+
+  const exactCounts = [
+    [/\badd\s+column\b/gi, 1, 'ADD COLUMN D40 deve ser único'],
+    [/\bcreate\s+function\b/gi, 2, 'D40 deve conter exatamente duas funções'],
+    [/\bcreate\s+trigger\b/gi, 2, 'D40 deve conter exatamente dois triggers'],
+    [/\bcreate\s+(?:unique\s+)?index\b/gi, 1, 'índice D40 deve ser único'],
+  ];
+  for (const [pattern, expected, message] of exactCounts) {
+    if ((stripped.match(pattern) ?? []).length !== expected) issues.push(message);
+  }
+
+  if (/\bis_legacy\b/i.test(sql)) issues.push('booleano is_legacy proibido na D40');
+  if (/\b(?:current_date|localtimestamp)\b|\b(?:now|make_date)\s*\(/i.test(stripped)) {
+    issues.push('data artificial proibida na D40');
+  }
+  if (/\b(?:create|alter|drop)\s+policy\b|\bgrant\b/i.test(stripped)) {
+    issues.push('policy ou GRANT extra proibido na D40');
+  }
+  if (/\bcascade\b/i.test(stripped)) issues.push('CASCADE proibido na D40');
+  if (!/\bsecurity\s+definer\b/i.test(stripped)) {
+    issues.push('guarda D40 deve declarar SECURITY DEFINER');
+  }
+  if (!/\bcurrent_justification\s*\(\s*true\s*\)/i.test(sql)) {
+    issues.push('guarda D40 deve reutilizar current_justification');
+  }
+  if (!/\bcurrent_setting\s*\(\s*'ltc_m\.request_id'\s*,\s*true\s*\)/i.test(sql)) {
+    issues.push('guarda D40 deve validar o request ID do contexto');
+  }
+  if (!/\bauthorization_context\s*\(\s*\)/i.test(sql)) {
+    issues.push('guarda D40 deve reutilizar authorization_context');
+  }
+  if (!/\bnot\s+in\s*\(\s*'received'\s*,\s*'validating'\s*,\s*'loaded'\s*\)/i.test(sql)) {
+    issues.push('lifecycle D40 permitido divergente');
+  }
+  if (!/\bfor\s+share\s*;/i.test(sql)) {
+    issues.push('vínculo D40 deve bloquear o lote com FOR SHARE');
+  }
+  if (
+    !/\bcreate\s+function\s+ltc_m\.enforce_import_batch_rejection_guard\s*\(\s*\)\s+returns\s+trigger\s+language\s+plpgsql\s+security\s+definer\s+set\s+search_path\s*=\s*''\s+as\s+\$function\$/iu.test(
+      sql,
+    )
+  ) {
+    issues.push('guarda D41 deve ser SECURITY DEFINER trigger-only com search_path vazio');
+  }
+
+  const rejectionGuard = sql.match(
+    /create\s+function\s+ltc_m\.enforce_import_batch_rejection_guard\s*\(\s*\)[\s\S]*?as\s+\$function\$([\s\S]*?)\$function\$\s*;/iu,
+  )?.[1];
+  if (rejectionGuard === undefined) {
+    issues.push('corpo nominal da guarda D41 ausente');
+  } else {
+    if (!/old\.status\s+is\s+not\s+distinct\s+from\s+new\.status/iu.test(rejectionGuard)) {
+      issues.push('guarda D41 deve ignorar update sem mudança de status');
+    }
+    if (!/new\.status\s*<>\s*'rejected'/iu.test(rejectionGuard)) {
+      issues.push('guarda D41 deve agir somente na transição para rejected');
+    }
+    if (
+      !/if\s+exists\s*\(\s*select\s+1\s+from\s+ltc_m\.projects\s+as\s+project\s+where\s+project\.legacy_import_batch_id\s*=\s*new\.id\s*\)\s*then/iu.test(
+        rejectionGuard,
+      )
+    ) {
+      issues.push('EXISTS D41 deve considerar toda referência persistente sem filtro');
+    }
+    if (/\b(?:project\.status|deleted_at)\b/iu.test(rejectionGuard)) {
+      issues.push('guarda D41 não pode ignorar projeto por status ou soft delete');
+    }
+    if (/\b(?:update|delete\s+from)\s+ltc_m\.projects\b/iu.test(rejectionGuard)) {
+      issues.push('guarda D41 não pode alterar projetos ou linhagem');
+    }
+  }
+}
+
 export function extractNamedObjects(sql) {
   const stripped = stripSqlNoise(sql);
+  const constraints = [...stripped.matchAll(/\bconstraint\s+([a-z_][a-z0-9_]*)/gi)]
+    .filter((match) => !/\bvalidate\s+$/i.test(stripped.slice(0, match.index)))
+    .map((match) => match[1].toLowerCase());
   return {
-    constraints: [...stripped.matchAll(/\bconstraint\s+([a-z_][a-z0-9_]*)/gi)].map((match) =>
-      match[1].toLowerCase(),
-    ),
+    constraints,
     indexes: [
       ...stripped.matchAll(
         /\bcreate\s+(?:unique\s+)?index\s+(?!concurrently\b)([a-z_][a-z0-9_]*)/gi,
@@ -562,7 +691,12 @@ export function extractNamedObjects(sql) {
 
 export function scanMigrationText(sql, options = {}) {
   const issues = [];
-  const scope = options.migrationName === P009_MIGRATION_NAME ? 'p009' : 'p007';
+  const scope =
+    options.migrationName === D40_MIGRATION_NAME
+      ? 'd40'
+      : options.migrationName === P009_MIGRATION_NAME
+        ? 'p009'
+        : 'p007';
   const stripped = stripSqlNoise(sql);
   const semanticSql = stripped.replace(/\b(?:begin|commit|rollback)\b/gi, '').replace(/[;\s]/g, '');
 
@@ -575,8 +709,9 @@ export function scanMigrationText(sql, options = {}) {
   requireQualifiedObjects(stripped, issues);
   requireAdditiveAlterTables(stripped, issues, scope);
   requireApprovedAlterTypes(sql, issues);
-  requireSafeFunctions(sql, issues);
+  requireSafeFunctions(sql, issues, scope);
   requireP008Security(sql, stripped, issues, scope);
+  if (scope === 'd40') requireD40Contract(sql, stripped, issues);
 
   if (/--project-ref\b/i.test(sql) || /\b[a-z0-9]{20}\.supabase\.co\b/i.test(sql)) {
     issues.push('project ref ou endpoint remoto versionado');

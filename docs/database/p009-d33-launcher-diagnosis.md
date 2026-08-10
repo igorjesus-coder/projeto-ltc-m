@@ -62,3 +62,27 @@ acionou timeout.
 A única invocação `r20260803173036-ddabb07d` encerrou com código 0 após 252,7 s. O worker publicou
 um envelope, stderr vazio e 9.085 bytes de stdout; o launcher reconstituiu e validou os mesmos
 bytes/hash antes de emitir a linha final.
+
+## Portabilidade e segurança do encerramento D49
+
+O encerrador preserva mecanismos distintos por plataforma. No Windows, ele inicia
+`taskkill.exe /PID <pid> /T /F`; por isso `termination.code` contém o código numérico desse
+subprocesso e zero representa encerramento bem-sucedido. No POSIX, o encerrador entrega
+`SIGKILL` com `process.kill()` ao grupo e, quando necessário, ao processo direto. Como não existe
+um subprocesso de encerramento nesse caminho, `termination.code` permanece `null` tanto no
+sucesso quanto na falha.
+
+`termination.ok=true` significa que pelo menos um sinal foi entregue ou que grupo e processo já
+não existiam. `ESRCH` confirma alvo inexistente e não é falha operacional quando ambas as
+tentativas aplicáveis confirmam essa condição. `EPERM` e qualquer outro erro real permanecem
+falhas, com informação do erro preservada; todas as tentativas falharem nunca produz
+`termination.ok=true`.
+
+Timeout continua sendo falha de `runCapturedProcess`, ainda que o encerramento da árvore seja
+bem-sucedido. Non-zero, sinal e erro de spawn também não são convertidos em sucesso. A Promise
+principal continua resolvendo somente depois de `close`, e o encerrador Windows possui guarda
+própria para que eventos `error` e `close` tardios não gerem efeitos conflitantes ou substituam o
+primeiro resultado.
+
+A D49 altera apenas o helper, seus testes locais e esta clarificação. Não modifica banco, SQL,
+migrations, manifesto/evidências históricas D33, P009 funcional, P011 ou D40/D41.
