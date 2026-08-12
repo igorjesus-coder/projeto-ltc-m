@@ -3,18 +3,173 @@ import type {
   ExistingSnapshotV1,
   LegacyImportBatchReference,
   PlannedLegacyImportBatchReference,
+  ProjectStatus,
+  ReviewedResolution,
+  ReviewedResolutionDocument,
 } from './types.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const SHA256 = /^[0-9a-f]{64}$/u;
 const PLANNED_KEY = /^[a-z0-9][a-z0-9:._-]{0,254}$/u;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
+const PROJECT_STATUSES = new Set<ProjectStatus>([
+  'draft',
+  'active',
+  'on_hold',
+  'completed',
+  'cancelled',
+]);
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`Contrato inválido: ${label}.`);
   }
   return value as Record<string, unknown>;
+}
+
+function exactKeys(
+  value: Record<string, unknown>,
+  required: string[],
+  optional: string[],
+  label: string,
+): void {
+  const accepted = new Set([...required, ...optional]);
+  const missing = required.filter((key) => !Object.hasOwn(value, key));
+  const unexpected = Object.keys(value).filter((key) => !accepted.has(key));
+  if (missing.length > 0 || unexpected.length > 0) {
+    throw new Error(
+      `Contrato inválido: ${label}; campos ausentes=${missing.join(',') || 'nenhum'}; ` +
+        `campos não autorizados=${unexpected.join(',') || 'nenhum'}.`,
+    );
+  }
+}
+
+function sha256(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !SHA256.test(value)) {
+    throw new Error(`Contrato inválido: ${label} exige SHA-256 canônico.`);
+  }
+  return value;
+}
+
+function identifier(value: unknown, label: string): string {
+  if (typeof value !== 'string' || value === '' || value.length > 255) {
+    throw new Error(`Contrato inválido: ${label}.`);
+  }
+  return value;
+}
+
+function parseResolution(value: unknown, index: number): ReviewedResolution {
+  const resolution = record(value, `resolutions[${index}]`);
+  const type = resolution['type'];
+  if (type === 'client_identity') {
+    exactKeys(
+      resolution,
+      ['type', 'candidate_id', 'candidate_hash', 'identity'],
+      [],
+      `resolutions[${index}]`,
+    );
+    const identity = record(resolution['identity'], `resolutions[${index}].identity`);
+    if (identity['kind'] === 'create_new') {
+      exactKeys(identity, ['kind'], [], `resolutions[${index}].identity`);
+      return {
+        type,
+        candidate_id: identifier(resolution['candidate_id'], 'candidate_id'),
+        candidate_hash: sha256(resolution['candidate_hash'], 'candidate_hash'),
+        identity: { kind: 'create_new' },
+      };
+    }
+    if (identity['kind'] === 'use_existing') {
+      exactKeys(identity, ['kind', 'client_id'], [], `resolutions[${index}].identity`);
+      const clientId = identifier(identity['client_id'], 'identity.client_id');
+      assertUuid(clientId, 'Identidade revisada de cliente');
+      return {
+        type,
+        candidate_id: identifier(resolution['candidate_id'], 'candidate_id'),
+        candidate_hash: sha256(resolution['candidate_hash'], 'candidate_hash'),
+        identity: { kind: 'use_existing', client_id: clientId },
+      };
+    }
+    throw new Error(`Contrato inválido: resolutions[${index}].identity.kind.`);
+  }
+  if (type === 'project') {
+    exactKeys(
+      resolution,
+      ['type', 'candidate_id', 'candidate_hash'],
+      ['approved_name', 'approved_status'],
+      `resolutions[${index}]`,
+    );
+    const approvedName = resolution['approved_name'];
+    const approvedStatus = resolution['approved_status'];
+    if (approvedName === undefined && approvedStatus === undefined) {
+      throw new Error(`Contrato inválido: resolutions[${index}] não contém decisão.`);
+    }
+    if (approvedName !== undefined) {
+      if (
+        typeof approvedName !== 'string' ||
+        approvedName.length === 0 ||
+        approvedName.length > 512 ||
+        approvedName !== approvedName.normalize('NFC').trim().replace(/\s+/gu, ' ') ||
+        /\p{Cc}/u.test(approvedName)
+      ) {
+        throw new Error(`Contrato inválido: resolutions[${index}].approved_name.`);
+      }
+    }
+    if (
+      approvedStatus !== undefined &&
+      (typeof approvedStatus !== 'string' || !PROJECT_STATUSES.has(approvedStatus as ProjectStatus))
+    ) {
+      throw new Error(`Contrato inválido: resolutions[${index}].approved_status.`);
+    }
+    return {
+      type,
+      candidate_id: identifier(resolution['candidate_id'], 'candidate_id'),
+      candidate_hash: sha256(resolution['candidate_hash'], 'candidate_hash'),
+      ...(approvedName === undefined ? {} : { approved_name: approvedName }),
+      ...(approvedStatus === undefined ? {} : { approved_status: approvedStatus as ProjectStatus }),
+    };
+  }
+  throw new Error(`Contrato inválido: resolutions[${index}].type.`);
+}
+
+export function parseReviewedResolutionDocument(value: unknown): ReviewedResolutionDocument {
+  const document = record(value, 'reviewed-resolutions');
+  exactKeys(
+    document,
+    [
+      'contract',
+      'normalizer_version',
+      'normalization_manifest_hash',
+      'p010_manifest_hash',
+      'input_hash',
+      'snapshot_hash',
+      'candidate_set_hash',
+      'resolutions',
+    ],
+    [],
+    'reviewed-resolutions',
+  );
+  if (document['contract'] !== 'ltcm.p011.reviewed-resolutions.v1') {
+    throw new Error('Contrato de resoluções revisadas incompatível.');
+  }
+  if (!Array.isArray(document['resolutions'])) {
+    throw new Error('Contrato inválido: resolutions deve ser array.');
+  }
+  if (document['resolutions'].length > 10_000) {
+    throw new Error('Contrato inválido: quantidade de resoluções excede o limite.');
+  }
+  return {
+    contract: document['contract'],
+    normalizer_version: identifier(document['normalizer_version'], 'normalizer_version'),
+    normalization_manifest_hash: sha256(
+      document['normalization_manifest_hash'],
+      'normalization_manifest_hash',
+    ),
+    p010_manifest_hash: sha256(document['p010_manifest_hash'], 'p010_manifest_hash'),
+    input_hash: sha256(document['input_hash'], 'input_hash'),
+    snapshot_hash: sha256(document['snapshot_hash'], 'snapshot_hash'),
+    candidate_set_hash: sha256(document['candidate_set_hash'], 'candidate_set_hash'),
+    resolutions: document['resolutions'].map(parseResolution),
+  };
 }
 
 function validDate(value: unknown): value is string {

@@ -12,6 +12,18 @@ empresarial real integra a suíte.
 | Fronteiras   | zero item/competência/Curva S/P012, `--apply` bloqueado, saída segura, diretório não gerenciado                   |
 | Persistência | transação serializável, clientes antes de projetos, resultado por registro, zero delete/bypass RLS                |
 | Determinismo | objetos/hashes idênticos e artefatos A/B byte a byte                                                              |
+| D69 binding  | contrato v1, manifesto/input/candidate set, candidato/hash, replay, duplicidade e campos não autorizados          |
+| D69 decisões | identidade de cliente, nome/status de projeto, parcial/completa, erro normativo e preservação D02–D06/D38–D41     |
+| D69 entrada  | JSON local, ausente/inválido, limite, URL/UNC/device recusados, links estáticos, `--apply` bloqueado, zero rede   |
 
 Resultado local D40: 16 testes/casos Node, incluindo D02–D06, D38/D39, P012 bloqueado e bytes
 canônicos, todos aprovados antes dos gates integrais.
+
+A D69/D71 amplia a mesma suíte para 36 testes/casos Node com fixtures exclusivamente sintéticas
+para o contrato `ltcm.p011.reviewed-resolutions.v1`. A D71 cobre snapshot canônico no binding,
+`use_existing` comprovado/ausente/incompatível, reconciliação pós-resolução, preflight atômico,
+HTTP/HTTPS, `file://`, UNC/device paths, arquivo acima de 5 MiB e symlinks/junctions
+finais/ancestrais presentes no momento da validação. Essa cobertura comprova somente as proteções
+estáticas implementadas; não afirma eliminação da janela TOCTOU contra substituição concorrente.
+O documento real futuro permanece fora do Git.
+Nenhuma evidência v2 com dados reais, conexão, adapter ou operação de banco foi criada.

@@ -17,6 +17,7 @@ export type SheetKey = 'project_values' | 'monthly_revenue' | 'curve_s';
 export type DiagnosticSeverity = 'warning' | 'error';
 export type MappingStatus = 'mapped' | 'evidence_only' | 'pending_decision' | 'ambiguous';
 export type PlanAction = 'insert' | 'no_op' | 'conflict' | 'rejected' | 'pending_decision';
+export type ProjectStatus = 'draft' | 'active' | 'on_hold' | 'completed' | 'cancelled';
 
 export interface ExistingLegacyImportBatchReference {
   kind: 'existing';
@@ -141,7 +142,7 @@ export interface ProjectCandidate {
   currency: string | null;
   raw_classifications: string[];
   classification: 'full_contract' | 'demand' | 'opening_balance' | null;
-  operational_status: 'draft' | 'active' | 'on_hold' | 'completed' | 'cancelled' | null;
+  operational_status: ProjectStatus | null;
   contract_value: string | null;
   data_reference_date: string | null;
   legacy_import_batch_reference: LegacyImportBatchReference | null;
@@ -153,6 +154,62 @@ export interface ProjectCandidate {
   diagnostic_codes: string[];
   source_manifest_hash: string;
   hash: string;
+}
+
+export interface ClientIdentityResolution {
+  type: 'client_identity';
+  candidate_id: string;
+  candidate_hash: string;
+  identity: { kind: 'create_new' } | { kind: 'use_existing'; client_id: string };
+}
+
+export interface ProjectResolution {
+  type: 'project';
+  candidate_id: string;
+  candidate_hash: string;
+  approved_name?: string;
+  approved_status?: ProjectStatus;
+}
+
+export type ReviewedResolution = ClientIdentityResolution | ProjectResolution;
+
+export interface ReviewedResolutionDocument {
+  contract: 'ltcm.p011.reviewed-resolutions.v1';
+  normalizer_version: string;
+  normalization_manifest_hash: string;
+  p010_manifest_hash: string;
+  input_hash: string;
+  snapshot_hash: string;
+  candidate_set_hash: string;
+  resolutions: ReviewedResolution[];
+}
+
+export interface ReviewBinding {
+  contract: 'ltcm.p011.review-binding.v1';
+  normalizer_version: string;
+  normalization_manifest_hash: string;
+  p010_manifest_hash: string;
+  input_hash: string;
+  snapshot_hash: string;
+  candidate_set_hash: string;
+}
+
+export interface ResolutionDiagnostic {
+  code: 'REVIEWED_RESOLUTION_PARTIAL';
+  entity: 'client' | 'project';
+  candidate_id: string;
+}
+
+export interface ResolutionSummary {
+  contract: 'ltcm.p011.resolution-summary.v1';
+  document_hash: string;
+  binding_hash: string;
+  applied_client_identities: number;
+  applied_project_names: number;
+  applied_project_statuses: number;
+  pending_clients: number;
+  pending_projects: number;
+  diagnostics: ResolutionDiagnostic[];
 }
 
 export interface ExistingSnapshotV1 {
@@ -223,5 +280,6 @@ export interface P011Artifacts {
   divergences: Diagnostic[];
   importPlan: { contract: string; operations: ImportPlanOperation[] };
   validationSummary: Record<string, unknown>;
+  resolutionSummary?: ResolutionSummary;
   report: string;
 }

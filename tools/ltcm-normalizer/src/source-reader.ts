@@ -2,12 +2,13 @@ import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 import { canonicalJson, sha256, sha256Canonical } from './canonical-json.js';
-import { parseExistingSnapshot } from './contracts.js';
+import { parseExistingSnapshot, parseReviewedResolutionDocument } from './contracts.js';
 import {
   EXPECTED_PROJECT_CODES,
   P010_WORKBOOK_SHA256,
   type ExistingSnapshot,
   type P010Row,
+  type ReviewedResolutionDocument,
   type SheetKey,
 } from './types.js';
 
@@ -239,6 +240,43 @@ export async function loadSnapshot(snapshotPath: string | undefined): Promise<Ex
   }
   const parsed = parseJson(await readFile(absolute), 'existing-snapshot');
   return parseExistingSnapshot(parsed);
+}
+
+export async function loadReviewedResolutions(
+  resolutionsPath: string | undefined,
+): Promise<ReviewedResolutionDocument | undefined> {
+  if (resolutionsPath === undefined) return undefined;
+  if (
+    /^(?:\\\\|\/\/)/u.test(resolutionsPath) ||
+    /^(?:file|https?):/iu.test(resolutionsPath) ||
+    /^[a-z][a-z0-9+.-]*:\/\//iu.test(resolutionsPath)
+  ) {
+    throw new Error('Resoluções revisadas aceitam somente arquivo local, nunca URL.');
+  }
+  if (path.extname(resolutionsPath).toLocaleLowerCase('und') !== '.json') {
+    throw new Error('Resoluções revisadas exigem arquivo local com extensão .json.');
+  }
+  const absolute = path.resolve(resolutionsPath);
+  const root = path.parse(absolute).root;
+  const parts = path.relative(root, absolute).split(path.sep).filter(Boolean);
+  let cursor = root;
+  for (const [index, part] of parts.entries()) {
+    cursor = path.join(cursor, part);
+    const metadata = await lstat(cursor);
+    if (metadata.isSymbolicLink()) {
+      throw new Error('Arquivo de resoluções revisadas não pode atravessar symlink.');
+    }
+    const final = index === parts.length - 1;
+    if (!final && !metadata.isDirectory()) {
+      throw new Error('Ancestral do arquivo de resoluções revisadas não é diretório.');
+    }
+    if (final && (!metadata.isFile() || metadata.size > MAX_FILE_BYTES)) {
+      throw new Error('Arquivo de resoluções revisadas inseguro ou acima do limite.');
+    }
+  }
+  return parseReviewedResolutionDocument(
+    parseJson(await readFile(absolute), 'reviewed-resolutions'),
+  );
 }
 
 export async function assertSafeOutput(outputDir: string, inputDir: string): Promise<string> {

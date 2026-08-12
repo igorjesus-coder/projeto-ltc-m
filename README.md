@@ -230,8 +230,23 @@ npm run ltcm:normalize-projects -- `
 ```
 
 Use `--existing-snapshot` apenas com snapshot JSON sintético/controlado e `--generated-at` para
-fixar um instante ISO UTC nos artefatos. `--apply` sempre retorna
-`REMOTE_APPLY_NOT_AUTHORIZED`. Contrato, regras, diagnósticos e riscos estão em
+fixar um instante ISO UTC nos artefatos. `--reviewed-resolutions` aceita opcionalmente um documento
+local `ltcm.p011.reviewed-resolutions.v1`, vinculado ao manifesto, input e hashes dos candidatos,
+snapshot canônico, para resolver somente identidade de cliente e nome/status pendentes de projeto.
+`use_existing` exige evidência compatível no snapshot local vinculado. Arquivos com
+decisões reais podem conter dados empresariais e devem permanecer fora do Git.
+
+Use `--reviewed-resolutions` somente em filesystem local, dentro de diretório privado e controlado
+pelo operador, sem ancestral gravável por outro usuário não confiável. UNC/SMB, mapped drive,
+network filesystem, cloud-sync e diretórios compartilhados não são suportados para essa entrada;
+não execute o normalizador elevado/como administrador nem altere o documento durante a execução.
+Paths explicitamente remotos e links presentes no momento da validação são rejeitados, mas o
+loader não garante resistência à substituição concorrente do arquivo ou de ancestrais por outro
+processo local com permissão de escrita. Esse risco TOCTOU foi identificado, classificado e aceito
+para o estágio atual sob essas condições operacionais.
+
+`--apply` sempre retorna `REMOTE_APPLY_NOT_AUTHORIZED`. Contrato, regras, diagnósticos, threat
+model e riscos estão em
 [`p011-normalizer.md`](docs/import/p011-normalizer.md); o dry-run real sanitizado está em
 [`p011-validation-report.md`](docs/import/p011-validation-report.md).
 

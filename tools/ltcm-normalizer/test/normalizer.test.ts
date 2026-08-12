@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -10,6 +10,7 @@ import { parseArguments } from '../src/cli.js';
 import {
   assertLegacyImportBatchReference,
   parseExistingSnapshot,
+  parseReviewedResolutionDocument,
   plannedLegacyImportBatchReference,
 } from '../src/contracts.js';
 import {
@@ -18,18 +19,28 @@ import {
   normalizeClientName,
   normalizeP011,
 } from '../src/normalizer.js';
+import { applyReviewedResolutions, createSnapshotHash } from '../src/reviewed-resolutions.js';
 import {
   executePreparedBatch,
   preparePersistenceBatch,
   type LtcmPersistencePort,
 } from '../src/persistence.js';
-import { assertSafeOutput, emptySnapshot, loadP010Source } from '../src/source-reader.js';
+import {
+  assertSafeOutput,
+  emptySnapshot,
+  loadP010Source,
+  loadReviewedResolutions,
+} from '../src/source-reader.js';
 import {
   EXPECTED_PROJECT_CODES,
   P010_WORKBOOK_SHA256,
+  type ClientCandidate,
   type ExistingSnapshot,
   type P010Row,
   type RawCell,
+  type ReviewBinding,
+  type ReviewedResolution,
+  type ReviewedResolutionDocument,
   type SheetKey,
 } from '../src/types.js';
 
@@ -237,6 +248,23 @@ async function withFixture<T>(work: (root: string) => Promise<T>): Promise<T> {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+function reviewedDocument(
+  artifacts: ReturnType<typeof normalizeP011>,
+  resolutions: ReviewedResolution[],
+): ReviewedResolutionDocument {
+  const binding = artifacts.manifest['review_binding'] as Record<string, string>;
+  return {
+    contract: 'ltcm.p011.reviewed-resolutions.v1',
+    normalizer_version: binding['normalizer_version'] ?? '',
+    normalization_manifest_hash: binding['normalization_manifest_hash'] ?? '',
+    p010_manifest_hash: binding['p010_manifest_hash'] ?? '',
+    input_hash: binding['input_hash'] ?? '',
+    snapshot_hash: binding['snapshot_hash'] ?? '',
+    candidate_set_hash: binding['candidate_set_hash'] ?? '',
+    resolutions,
+  };
 }
 
 test('normalização estrita preserva regras de nomes e chave determinística', () => {
@@ -460,6 +488,729 @@ test('saída exige subdiretório gerenciado sob .artifacts e rejeita traversal',
     assertSafeOutput(path.resolve('.artifacts', 'p010-fixture', 'p011'), input),
     /não pode estar dentro da entrada/u,
   );
+});
+
+test('contrato de resoluções revisadas é estrito, versionado e aceita somente campos autorizados', async (context) => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const base = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const project = base.projects.find((candidate) => candidate.project_code === '2025-08-14656');
+    assert.ok(project);
+    const valid = reviewedDocument(base, [
+      {
+        type: 'project',
+        candidate_id: project.candidate_id,
+        candidate_hash: project.hash,
+        approved_name: 'Projeto sintético aprovado',
+        approved_status: 'active',
+      },
+    ]);
+    assert.deepEqual(parseReviewedResolutionDocument(valid), valid);
+
+    await context.test('versão inválida', () => {
+      assert.throws(
+        () => parseReviewedResolutionDocument({ ...valid, contract: 'invalid.v2' }),
+        /incompatível/u,
+      );
+    });
+    await context.test('status fora do enum', () => {
+      const invalid = structuredClone(valid) as unknown as Record<string, unknown>;
+      (invalid['resolutions'] as Array<Record<string, unknown>>)[0]!['approved_status'] = 'deleted';
+      assert.throws(() => parseReviewedResolutionDocument(invalid), /approved_status/u);
+    });
+    await context.test('campo não autorizado', () => {
+      const invalid = structuredClone(valid) as unknown as Record<string, unknown>;
+      (invalid['resolutions'] as Array<Record<string, unknown>>)[0]!['currency'] = 'USD';
+      assert.throws(() => parseReviewedResolutionDocument(invalid), /não autorizados=currency/u);
+    });
+    await context.test('identidade de cliente inválida', () => {
+      const invalid = structuredClone(valid) as unknown as Record<string, unknown>;
+      invalid['resolutions'] = [
+        {
+          type: 'client_identity',
+          candidate_id: 'client-synthetic',
+          candidate_hash: 'a'.repeat(64),
+          identity: { kind: 'use_existing', client_id: 'invalid' },
+        },
+      ];
+      assert.throws(() => parseReviewedResolutionDocument(invalid), /UUID inválido/u);
+    });
+  });
+});
+
+test('binding rejeita replay, candidato adulterado, inexistente e resolução duplicada', async (context) => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const base = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const project = base.projects.find((candidate) => candidate.project_code === '2025-08-14656');
+    assert.ok(project);
+    const entry: ReviewedResolution = {
+      type: 'project',
+      candidate_id: project.candidate_id,
+      candidate_hash: project.hash,
+      approved_name: 'Projeto sintético aprovado',
+    };
+    const valid = reviewedDocument(base, [entry]);
+
+    await context.test('outro manifesto de normalização', () => {
+      assert.throws(
+        () =>
+          normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', {
+            ...valid,
+            normalization_manifest_hash: '0'.repeat(64),
+          }),
+        /BINDING_MISMATCH: normalization_manifest_hash/u,
+      );
+    });
+    await context.test('outro manifesto', () => {
+      assert.throws(
+        () =>
+          normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', {
+            ...valid,
+            p010_manifest_hash: '0'.repeat(64),
+          }),
+        /BINDING_MISMATCH: p010_manifest_hash/u,
+      );
+    });
+    await context.test('outro conjunto de candidatos', () => {
+      assert.throws(
+        () =>
+          normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', {
+            ...valid,
+            candidate_set_hash: '0'.repeat(64),
+          }),
+        /BINDING_MISMATCH: candidate_set_hash/u,
+      );
+    });
+    await context.test('candidato alterado depois da revisão', () => {
+      assert.throws(
+        () =>
+          normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', {
+            ...valid,
+            resolutions: [{ ...entry, candidate_hash: '0'.repeat(64) }],
+          }),
+        /CANDIDATE_HASH_MISMATCH/u,
+      );
+    });
+    await context.test('candidato inexistente', () => {
+      assert.throws(
+        () =>
+          normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', {
+            ...valid,
+            resolutions: [{ ...entry, candidate_id: 'project-inexistente' }],
+          }),
+        /CANDIDATE_NOT_FOUND/u,
+      );
+    });
+    await context.test('resolução duplicada', () => {
+      assert.throws(
+        () =>
+          normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', {
+            ...valid,
+            resolutions: [entry, entry],
+          }),
+        /RESOLUTION_DUPLICATE/u,
+      );
+    });
+  });
+});
+
+test('binding inclui snapshot canônico, rejeita replay e ignora ordem incidental', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const clientA = {
+      id: '00000000-0000-4000-8000-000000000071',
+      legal_name: 'Cliente sintético externo A',
+      display_name: 'Cliente sintético externo A',
+      tax_id: null,
+      active: true,
+      deleted_at: null,
+      row_version: 1,
+    };
+    const clientB = {
+      ...clientA,
+      id: '00000000-0000-4000-8000-000000000072',
+      legal_name: 'Cliente sintético externo B',
+      display_name: 'Cliente sintético externo B',
+    };
+    const snapshotA: ExistingSnapshot = {
+      ...emptySnapshot(),
+      currencies: [
+        { code: 'ZZZ', active: true },
+        { code: 'YYY', active: false },
+      ],
+      clients: [clientA, clientB],
+    };
+    const reordered: ExistingSnapshot = {
+      ...snapshotA,
+      currencies: [...snapshotA.currencies].reverse(),
+      clients: [...snapshotA.clients].reverse(),
+    };
+    const snapshotB: ExistingSnapshot = {
+      ...snapshotA,
+      clients: snapshotA.clients.map((client) =>
+        client.id === clientA.id ? { ...client, active: false } : client,
+      ),
+    };
+    assert.equal(createSnapshotHash(snapshotA), createSnapshotHash(reordered));
+    assert.notEqual(createSnapshotHash(snapshotA), createSnapshotHash(snapshotB));
+    const base = normalizeP011(source, snapshotA, '1970-01-01T00:00:00.000Z');
+    const project = base.projects.find((candidate) => candidate.project_code === '2025-08-14656');
+    assert.ok(project);
+    const document = reviewedDocument(base, [
+      {
+        type: 'project',
+        candidate_id: project.candidate_id,
+        candidate_hash: project.hash,
+        approved_name: 'Projeto sintético aprovado',
+      },
+    ]);
+    assert.throws(
+      () => normalizeP011(source, snapshotB, '1970-01-01T00:00:00.000Z', document),
+      /BINDING_MISMATCH: snapshot_hash/u,
+    );
+    assert.doesNotThrow(() =>
+      normalizeP011(source, reordered, '1970-01-01T00:00:00.000Z', document),
+    );
+  });
+});
+
+test('identidade revisada exige evidência compatível do snapshot para use_existing', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const base = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const ambiguous = base.clients.find((candidate) => candidate.status === 'ambiguous');
+    const validClient = base.clients.find((candidate) => candidate.status === 'valid');
+    assert.ok(ambiguous && validClient);
+    const createNew = normalizeP011(
+      source,
+      emptySnapshot(),
+      '1970-01-01T00:00:00.000Z',
+      reviewedDocument(base, [
+        {
+          type: 'client_identity',
+          candidate_id: ambiguous.candidate_id,
+          candidate_hash: ambiguous.hash,
+          identity: { kind: 'create_new' },
+        },
+      ]),
+    );
+    assert.equal(
+      createNew.clients.find((candidate) => candidate.candidate_id === ambiguous.candidate_id)
+        ?.action,
+      'insert',
+    );
+
+    const existingId = '00000000-0000-4000-8000-000000000069';
+    assert.throws(
+      () =>
+        normalizeP011(
+          source,
+          emptySnapshot(),
+          '1970-01-01T00:00:00.000Z',
+          reviewedDocument(base, [
+            {
+              type: 'client_identity',
+              candidate_id: ambiguous.candidate_id,
+              candidate_hash: ambiguous.hash,
+              identity: { kind: 'use_existing', client_id: existingId },
+            },
+          ]),
+        ),
+      /SNAPSHOT_INSUFFICIENT/u,
+    );
+    const compatibleSnapshot: ExistingSnapshot = {
+      ...emptySnapshot(),
+      clients: [
+        {
+          id: existingId,
+          legal_name: ambiguous.normalized_name,
+          display_name: ambiguous.normalized_name,
+          tax_id: null,
+          active: true,
+          deleted_at: null,
+          row_version: 1,
+        },
+      ],
+    };
+    const compatibleBase = normalizeP011(source, compatibleSnapshot, '1970-01-01T00:00:00.000Z');
+    const compatibleCandidate = compatibleBase.clients.find(
+      (candidate) => candidate.candidate_id === ambiguous.candidate_id,
+    );
+    assert.ok(compatibleCandidate);
+    const useExisting = normalizeP011(
+      source,
+      compatibleSnapshot,
+      '1970-01-01T00:00:00.000Z',
+      reviewedDocument(compatibleBase, [
+        {
+          type: 'client_identity',
+          candidate_id: compatibleCandidate.candidate_id,
+          candidate_hash: compatibleCandidate.hash,
+          identity: { kind: 'use_existing', client_id: existingId },
+        },
+      ]),
+    );
+    assert.equal(
+      useExisting.clients.find((candidate) => candidate.candidate_id === ambiguous.candidate_id)
+        ?.matched_client_id,
+      existingId,
+    );
+    assert.equal(
+      useExisting.clients.find(
+        (candidate) => candidate.candidate_id === compatibleCandidate.candidate_id,
+      )?.action,
+      'no_op',
+    );
+    for (const [snapshot, pattern] of [
+      [
+        {
+          ...compatibleSnapshot,
+          clients: [
+            { ...compatibleSnapshot.clients[0]!, id: '00000000-0000-4000-8000-000000000070' },
+          ],
+        },
+        /EXISTING_CLIENT_NOT_FOUND/u,
+      ],
+      [
+        {
+          ...compatibleSnapshot,
+          clients: [
+            {
+              ...compatibleSnapshot.clients[0]!,
+              legal_name: 'Cliente sintético incompatível',
+              display_name: 'Cliente sintético incompatível',
+            },
+          ],
+        },
+        /EXISTING_CLIENT_INCOMPATIBLE/u,
+      ],
+    ] as Array<[ExistingSnapshot, RegExp]>) {
+      const snapshotBase = normalizeP011(source, snapshot, '1970-01-01T00:00:00.000Z');
+      const snapshotCandidate: ClientCandidate | undefined = snapshotBase.clients.find(
+        (candidate) => candidate.candidate_id === ambiguous.candidate_id,
+      );
+      assert.ok(snapshotCandidate);
+      assert.throws(
+        () =>
+          normalizeP011(
+            source,
+            snapshot,
+            '1970-01-01T00:00:00.000Z',
+            reviewedDocument(snapshotBase, [
+              {
+                type: 'client_identity',
+                candidate_id: snapshotCandidate.candidate_id,
+                candidate_hash: snapshotCandidate.hash,
+                identity: { kind: 'use_existing', client_id: existingId },
+              },
+            ]),
+          ),
+        pattern,
+      );
+    }
+    assert.throws(
+      () =>
+        normalizeP011(
+          source,
+          emptySnapshot(),
+          '1970-01-01T00:00:00.000Z',
+          reviewedDocument(base, [
+            {
+              type: 'client_identity',
+              candidate_id: validClient.candidate_id,
+              candidate_hash: validClient.hash,
+              identity: { kind: 'create_new' },
+            },
+          ]),
+        ),
+      /CLIENT_NOT_REVIEWABLE/u,
+    );
+  });
+});
+
+test('projeto resolvido é reconciliado novamente contra snapshot antes da ação final', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const emptyBase = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const ambiguous = emptyBase.clients.find((candidate) => candidate.status === 'ambiguous');
+    const project = emptyBase.projects.find(
+      (candidate) => candidate.client_candidate_id === ambiguous?.candidate_id,
+    );
+    assert.ok(
+      ambiguous && project && project.classification && project.currency && project.contract_value,
+    );
+    const clientId = '00000000-0000-4000-8000-000000000073';
+    const clientSnapshot: ExistingSnapshot = {
+      ...emptySnapshot(),
+      clients: [
+        {
+          id: clientId,
+          legal_name: ambiguous.normalized_name,
+          display_name: ambiguous.normalized_name,
+          tax_id: null,
+          active: true,
+          deleted_at: null,
+          row_version: 1,
+        },
+      ],
+    };
+    const resolveAgainst = (snapshot: ExistingSnapshot) => {
+      const base = normalizeP011(source, snapshot, '1970-01-01T00:00:00.000Z');
+      const client = base.clients.find(
+        (candidate) => candidate.candidate_id === ambiguous.candidate_id,
+      );
+      const boundProject = base.projects.find(
+        (candidate) => candidate.candidate_id === project.candidate_id,
+      );
+      assert.ok(client && boundProject);
+      return normalizeP011(
+        source,
+        snapshot,
+        '1970-01-01T00:00:00.000Z',
+        reviewedDocument(base, [
+          {
+            type: 'client_identity',
+            candidate_id: client.candidate_id,
+            candidate_hash: client.hash,
+            identity: { kind: 'use_existing', client_id: clientId },
+          },
+          {
+            type: 'project',
+            candidate_id: boundProject.candidate_id,
+            candidate_hash: boundProject.hash,
+            approved_name: 'Projeto sintético reconciliado',
+            approved_status: 'active',
+          },
+        ]),
+      ).projects.find((candidate) => candidate.candidate_id === boundProject.candidate_id);
+    };
+    assert.equal(resolveAgainst(clientSnapshot)?.action, 'insert');
+
+    const existingSnapshot: ExistingSnapshot = {
+      ...clientSnapshot,
+      projects: [
+        {
+          id: '00000000-0000-4000-8000-000000000074',
+          project_code: project.project_code,
+          project_name: 'Projeto sintético reconciliado',
+          client_id: clientId,
+          classification: project.classification,
+          status: 'active',
+          base_currency: project.currency,
+          contract_value: project.contract_value,
+          data_reference_date: null,
+          legacy_import_batch_id: '00000000-0000-4000-8000-000000000075',
+          deleted_at: null,
+          version: 1,
+        },
+      ],
+    };
+    const reconciled = resolveAgainst(existingSnapshot);
+    assert.equal(reconciled?.action, 'conflict');
+    assert.ok(reconciled?.diagnostic_codes.includes('PROTECTED_RECORD_CONFLICT'));
+  });
+});
+
+test('validação integral ocorre antes de qualquer mutação observável', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const snapshot = emptySnapshot();
+    const base = normalizeP011(source, snapshot, '1970-01-01T00:00:00.000Z');
+    const ambiguous = base.clients.find((candidate) => candidate.status === 'ambiguous');
+    const d39 = base.projects.find((candidate) => candidate.project_code === '2024-02-10990');
+    assert.ok(ambiguous && d39);
+    const clients = structuredClone(base.clients);
+    const projects = structuredClone(base.projects);
+    const mappings = structuredClone(base.mappings);
+    const before = canonicalJson({ clients, projects, mappings });
+    assert.throws(
+      () =>
+        applyReviewedResolutions(
+          reviewedDocument(base, [
+            {
+              type: 'client_identity',
+              candidate_id: ambiguous.candidate_id,
+              candidate_hash: ambiguous.hash,
+              identity: { kind: 'create_new' },
+            },
+            {
+              type: 'project',
+              candidate_id: d39.candidate_id,
+              candidate_hash: d39.hash,
+              approved_name: 'Tentativa sintética inválida',
+            },
+          ]),
+          base.manifest['review_binding'] as ReviewBinding,
+          snapshot,
+          clients,
+          projects,
+          mappings,
+        ),
+      /PROJECT_NAME_NOT_REVIEWABLE/u,
+    );
+    assert.equal(canonicalJson({ clients, projects, mappings }), before);
+    assert.equal(base.resolutionSummary, undefined);
+  });
+});
+
+test('resolução parcial mantém revisão e resolução completa torna somente projeto elegível', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const base = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const project = base.projects.find((candidate) => candidate.project_code === '2025-08-14656');
+    assert.ok(project);
+    const partial = normalizeP011(
+      source,
+      emptySnapshot(),
+      '1970-01-01T00:00:00.000Z',
+      reviewedDocument(base, [
+        {
+          type: 'project',
+          candidate_id: project.candidate_id,
+          candidate_hash: project.hash,
+          approved_name: 'Projeto sintético aprovado',
+        },
+      ]),
+    );
+    const partialProject = partial.projects.find(
+      (candidate) => candidate.candidate_id === project.candidate_id,
+    );
+    assert.equal(partialProject?.action, 'pending_decision');
+    assert.equal(
+      partial.importPlan.operations.find(
+        (operation) => operation.natural_key === project.project_code,
+      )?.status,
+      'requires_review',
+    );
+
+    const complete = normalizeP011(
+      source,
+      emptySnapshot(),
+      '1970-01-01T00:00:00.000Z',
+      reviewedDocument(base, [
+        {
+          type: 'project',
+          candidate_id: project.candidate_id,
+          candidate_hash: project.hash,
+          approved_name: 'Projeto sintético aprovado',
+          approved_status: 'active',
+        },
+      ]),
+    );
+    const completeProject = complete.projects.find(
+      (candidate) => candidate.candidate_id === project.candidate_id,
+    );
+    assert.equal(completeProject?.action, 'insert');
+    assert.equal(completeProject?.currency, project.currency);
+    assert.equal(completeProject?.contract_value, project.contract_value);
+    assert.equal(completeProject?.classification, project.classification);
+    assert.equal(completeProject?.data_reference_date, null);
+    assert.equal(completeProject?.legacy_import_batch_reference?.kind, 'planned');
+    assert.equal(complete.resolutionSummary?.applied_project_names, 1);
+    assert.equal(complete.resolutionSummary?.applied_project_statuses, 1);
+  });
+});
+
+test('resoluções não sobrescrevem erro normativo, D02-D06, D38-D41 ou D39', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const projectRows = source.rows.get('project_values') ?? [];
+    const value = projectRows[2]?.raw_payload.cells.find((candidate) => candidate.address === 'K3');
+    assert.ok(value);
+    value.value = 168000;
+    value.round_trip_text = '168000';
+    const base = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const invalid = base.projects.find((candidate) => candidate.project_code === '2026-04-16531');
+    assert.ok(invalid);
+    const resolved = normalizeP011(
+      source,
+      emptySnapshot(),
+      '1970-01-01T00:00:00.000Z',
+      reviewedDocument(base, [
+        {
+          type: 'project',
+          candidate_id: invalid.candidate_id,
+          candidate_hash: invalid.hash,
+          approved_name: 'Projeto sintético inválido',
+          approved_status: 'active',
+        },
+      ]),
+    );
+    const stillInvalid = resolved.projects.find(
+      (candidate) => candidate.candidate_id === invalid.candidate_id,
+    );
+    assert.equal(stillInvalid?.action, 'rejected');
+    assert.equal(stillInvalid?.contract_value, null);
+    assert.ok(stillInvalid?.diagnostic_codes.includes('PROJECT_VALUE_CONFLICT'));
+    assert.ok(
+      resolved.projects.every(
+        (candidate) =>
+          candidate.data_reference_date === null &&
+          candidate.legacy_import_batch_reference?.kind === 'planned' &&
+          !('import_batch_id' in candidate.legacy_import_batch_reference),
+      ),
+    );
+
+    const d39 = base.projects.find((candidate) => candidate.project_code === '2024-02-10990');
+    assert.ok(d39);
+    assert.throws(
+      () =>
+        normalizeP011(
+          source,
+          emptySnapshot(),
+          '1970-01-01T00:00:00.000Z',
+          reviewedDocument(base, [
+            {
+              type: 'project',
+              candidate_id: d39.candidate_id,
+              candidate_hash: d39.hash,
+              approved_name: 'Tentativa de sobrescrever D39',
+            },
+          ]),
+        ),
+      /PROJECT_NAME_NOT_REVIEWABLE/u,
+    );
+  });
+});
+
+test('arquivo local e CLI integram resoluções sem URL, banco, rede ou apply', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const base = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const project = base.projects.find((candidate) => candidate.project_code === '2025-08-14656');
+    assert.ok(project);
+    const document = reviewedDocument(base, [
+      {
+        type: 'project',
+        candidate_id: project.candidate_id,
+        candidate_hash: project.hash,
+        approved_name: 'Projeto sintético aprovado',
+        approved_status: 'active',
+      },
+    ]);
+    const file = path.join(root, 'reviewed-resolutions.json');
+    await writeFile(file, prettyCanonicalJson(document));
+    const loaded = await loadReviewedResolutions(file);
+    assert.deepEqual(loaded, document);
+    assert.deepEqual(await loadReviewedResolutions(path.relative(process.cwd(), file)), document);
+    const options = parseArguments([
+      '--input-dir',
+      root,
+      '--output-dir',
+      path.resolve('.artifacts', 'p011-synthetic'),
+      '--reviewed-resolutions',
+      file,
+    ]);
+    assert.notEqual(options, 'help');
+    if (options !== 'help') assert.equal(options.reviewedResolutions, file);
+    const without = parseArguments([
+      '--input-dir',
+      root,
+      '--output-dir',
+      path.resolve('.artifacts', 'p011-synthetic'),
+    ]);
+    assert.notEqual(without, 'help');
+    if (without !== 'help') assert.equal(without.reviewedResolutions, undefined);
+    assert.throws(
+      () =>
+        parseArguments([
+          '--input-dir',
+          root,
+          '--output-dir',
+          path.resolve('.artifacts', 'p011-synthetic'),
+          '--reviewed-resolutions',
+          'https://example.invalid/resolutions.json',
+        ]),
+      /somente arquivo local/u,
+    );
+    await assert.rejects(loadReviewedResolutions(path.join(root, 'missing.json')), /ENOENT/u);
+    const corrupted = path.join(root, 'corrupted-reviewed-resolutions.json');
+    await writeFile(corrupted, '{');
+    await assert.rejects(loadReviewedResolutions(corrupted), /JSON corrompido/u);
+    const oversized = path.join(root, 'oversized-reviewed-resolutions.json');
+    await writeFile(oversized, Buffer.alloc(5 * 1024 * 1024 + 1));
+    await assert.rejects(loadReviewedResolutions(oversized), /acima do limite/u);
+    await assert.rejects(loadReviewedResolutions('https://example.invalid/a.json'), /nunca URL/u);
+    await assert.rejects(loadReviewedResolutions('http://example.invalid/a.json'), /nunca URL/u);
+    await assert.rejects(loadReviewedResolutions('file:///tmp/a.json'), /nunca URL/u);
+    await assert.rejects(
+      loadReviewedResolutions(String.raw`\\server\share\reviewed-resolutions.json`),
+      /somente arquivo local/u,
+    );
+    await assert.rejects(
+      loadReviewedResolutions('//server/share/reviewed-resolutions.json'),
+      /somente arquivo local/u,
+    );
+    await assert.rejects(
+      loadReviewedResolutions(String.raw`\\?\C:\reviewed-resolutions.json`),
+      /somente arquivo local/u,
+    );
+
+    const targetDirectory = path.join(root, 'reviewed-target');
+    await mkdir(targetDirectory);
+    await writeFile(
+      path.join(targetDirectory, 'reviewed-resolutions.json'),
+      prettyCanonicalJson(document),
+    );
+    const finalLink = path.join(root, 'reviewed-resolutions-link.json');
+    await symlink(targetDirectory, finalLink, process.platform === 'win32' ? 'junction' : 'dir');
+    await assert.rejects(loadReviewedResolutions(finalLink), /symlink/u);
+
+    const ancestorLink = path.join(root, 'reviewed-link');
+    await symlink(targetDirectory, ancestorLink, process.platform === 'win32' ? 'junction' : 'dir');
+    await assert.rejects(
+      loadReviewedResolutions(path.join(ancestorLink, 'reviewed-resolutions.json')),
+      /symlink/u,
+    );
+
+    const directoryAsJson = path.join(root, 'directory.json');
+    await mkdir(directoryAsJson);
+    await assert.rejects(loadReviewedResolutions(directoryAsJson), /inseguro/u);
+    assert.throws(() => parseArguments(['--apply']), /REMOTE_APPLY_NOT_AUTHORIZED/u);
+    const integrated = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', loaded);
+    assert.equal(integrated.validationSummary['remote_access'], false);
+    assert.equal(integrated.resolutionSummary?.document_hash, sha256Canonical(document));
+  });
+});
+
+test('resoluções mantêm determinismo de objetos e artefatos byte a byte', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const base = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    const project = base.projects.find((candidate) => candidate.project_code === '2025-08-14656');
+    assert.ok(project);
+    const document = reviewedDocument(base, [
+      {
+        type: 'project',
+        candidate_id: project.candidate_id,
+        candidate_hash: project.hash,
+        approved_name: 'Projeto sintético aprovado',
+        approved_status: 'active',
+      },
+    ]);
+    const first = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', document);
+    const second = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z', document);
+    assert.equal(canonicalJson(first), canonicalJson(second));
+    const parent = await mkdtemp(path.join(os.tmpdir(), 'ltcm-p011-d69-write-'));
+    try {
+      const outputA = path.join(parent, 'a');
+      const outputB = path.join(parent, 'b');
+      await writeP011Artifacts(outputA, structuredClone(first));
+      await writeP011Artifacts(outputB, structuredClone(second));
+      const names = (await readdir(outputA)).sort();
+      assert.deepEqual(names, (await readdir(outputB)).sort());
+      assert.ok(names.includes('resolution-summary.json'));
+      for (const name of names) {
+        assert.deepEqual(
+          await readFile(path.join(outputA, name)),
+          await readFile(path.join(outputB, name)),
+        );
+      }
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
 });
 
 test('contratos v2 validam snapshot e referência de lote sem inferir data artificial', () => {

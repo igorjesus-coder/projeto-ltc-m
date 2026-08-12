@@ -1,5 +1,14 @@
 # P011-PRE — relatório final sanitizado
 
+> **Evidência histórica v1:** este relatório registra a execução real local anterior à D40/D69.
+> O normalizador atual usa contratos v2 e a D69 adiciona
+> `ltcm.p011.reviewed-resolutions.v1`. Nenhuma nova execução v2 com dados reais foi realizada e os
+> hashes/contagens abaixo não devem ser reinterpretados como evidência do contrato atual.
+> A D74/D75 classifica a entrada revisada sob threat model parcial: links e paths explicitamente
+> remotos presentes no momento da validação são rejeitados, mas permanece risco TOCTOU aceito sob
+> uso em filesystem local, privado e controlado pelo operador. Este relatório histórico não é
+> evidência de resistência a processo local concorrente.
+
 Status: **concluída localmente e pronta para revisão Git**. A aplicação remota continua bloqueada
 pela D34. A autorização D35 foi consumida pela única execução de `npm audit --omit=dev` e não é
 reutilizável.
@@ -85,7 +94,8 @@ de banco.
 
 - `types.ts`: contratos tipados e constantes;
 - `canonical-json.ts`: JSON canônico e SHA-256;
-- `source-reader.ts`: validação P009/P010, hashes, arquivos regulares, symlinks, traversal e limites;
+- `source-reader.ts`: validação P009/P010, hashes, arquivos regulares, links presentes durante a
+  validação, traversal e limites;
 - `normalizer.ts`: candidatos, regras D02–D06/D08, diagnósticos e plano;
 - `artifact-writer.ts`: artefatos determinísticos e troca atômica de diretório gerenciado;
 - `persistence.ts`: porta abstrata serializável, sem driver/SQL;
@@ -97,8 +107,9 @@ CLI: `npm run ltcm:normalize-projects --`, com `--input-dir`, `--output-dir`, `-
 `1970-01-01T00:00:00.000Z`.
 
 Entrada JSON/JSONL é não confiável: limite de 5 MiB por arquivo, 100.000 linhas JSONL,
-profundidade 32 e texto 32.767 caracteres; arquivos não regulares, symlinks e traversal são
-rejeitados. Saída deve ser subdiretório de `.artifacts`, não pode ficar dentro da entrada e só
+profundidade 32 e texto 32.767 caracteres; arquivos não regulares, symlinks presentes no momento
+da validação e traversal são rejeitados. Isso não constitui garantia contra troca concorrente do
+arquivo ou de ancestrais. Saída deve ser subdiretório de `.artifacts`, não pode ficar dentro da entrada e só
 substitui diretório marcado `.ltcm-p011-artifacts`. A escrita usa temporário, backup e `rename`.
 
 O snapshot `ltcm.p011.existing-snapshot.v1` é opcional e sintético. A execução real omitiu o

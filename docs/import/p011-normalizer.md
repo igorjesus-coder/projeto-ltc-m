@@ -24,6 +24,87 @@ São exigidos:
 JSON/JSONL é tratado como não confiável. O leitor limita arquivo, linhas, texto e profundidade,
 rejeita symlinks/arquivos não regulares, valida paths e nunca executa conteúdo da origem.
 
+## Decisões revisadas D69
+
+O input opcional `ltcm.p011.reviewed-resolutions.v1` é um JSON local estrito. Seus campos de topo
+são `contract`, `normalizer_version`, `normalization_manifest_hash`, `p010_manifest_hash`,
+`input_hash`, `snapshot_hash`, `candidate_set_hash` e `resolutions`. O binding
+`ltcm.p011.review-binding.v1` é
+calculado depois do snapshot opcional e antes de qualquer resolução, a partir da versão do
+normalizador, manifesto P010, input canônico, hash do snapshot v2 completo e pares ordenados
+`candidate_id`/`candidate_hash`. O snapshot é canonicalizado com objetos por chaves e cada array
+ordenado pelo hash canônico de seus elementos; sua ordem incidental não altera o binding. Assim,
+mudança semântica de origem, snapshot, versão ou candidato invalida a decisão antes de qualquer
+mutação dos candidatos.
+
+Cada resolução contém `type`, `candidate_id` e `candidate_hash`:
+
+- `client_identity` aceita somente `identity.kind = create_new` ou `use_existing`; esta última
+  exige UUID explícito de cliente e somente produz `no_op` quando o snapshot vinculado contém
+  exatamente esse cliente, ativo, não excluído e com nome compatível com a chave do candidato.
+  Snapshot vazio, UUID ausente ou registro incompatível falham fechados. A decisão só pode
+  resolver candidato marcado exclusivamente como `CLIENT_MATCH_AMBIGUOUS`;
+- `project` aceita somente `approved_name` e/ou `approved_status`. Nome deve estar em NFC, sem
+  controles, trim ou whitespace divergente; status deve ser `draft`, `active`, `on_hold`,
+  `completed` ou `cancelled`.
+
+Campos desconhecidos, duplicidade, candidato/hash ausente, versão divergente, replay contra outro
+binding e tentativa de alterar campo já decidido falham fechados. O contrato não possui campos de
+moeda, valor, classificação, data ou lote. Portanto D02–D06, D38/D39, D40/D41, moeda, linhagem e
+data não são sobrescrevíveis. Erro normativo existente continua bloqueando o candidato mesmo que
+nome/status pendentes sejam aprovados.
+
+Todas as resoluções são validadas antes de qualquer mutação; a aplicação ocorre em cópias e só
+essas cópias seguem no pipeline após sucesso integral. Projetos resolvidos são reconciliados
+novamente contra o mesmo snapshot vinculado antes da ação final. Resolução parcial mantém
+`requires_review`; somente o preenchimento de todas as pendências permitidas torna o projeto
+elegível. Quando fornecido, o dry-run inclui
+`resolution-summary.json` sanitizado e hashes do documento/binding, nunca o conteúdo das decisões.
+O `review_binding` passa a integrar o manifesto v2, por isso hashes de manifesto/artefatos gerados
+após D69 mudam deterministicamente. Sem documento, ações e candidatos mantêm a semântica anterior.
+
+```powershell
+npm run ltcm:normalize-projects -- `
+  --input-dir ".artifacts\p010-synthetic" `
+  --output-dir ".artifacts\p011-synthetic" `
+  --reviewed-resolutions "C:\caminho-local\reviewed-resolutions.json" `
+  --strict
+```
+
+Documentos reais podem conter nomes e IDs empresariais: devem permanecer fora do Git, dos testes
+e da documentação versionada. A D69 usa exclusivamente fixtures sintéticas e não produziu nova
+evidência v2 com dados reais.
+
+### Threat model da entrada local — D74/D75
+
+O P011 permanece uma ferramenta local de dry-run: não acessa banco ou rede e recusa `--apply` com
+`REMOTE_APPLY_NOT_AUTHORIZED`. O conteúdo de `reviewed-resolutions` é sempre não confiável. O
+contrato, a versão, os limites, o binding, os hashes, os candidatos, os campos autorizados, a
+leitura, o parse e as regras semânticas continuam validados de forma fail-closed.
+
+A entrada é suportada somente em filesystem local, dentro de diretório privado e controlado pelo
+operador. Nenhum diretório ancestral deve ser gravável por outro usuário não confiável. UNC/SMB,
+mapped drive, network filesystem, cloud-sync e diretórios compartilhados não integram o ambiente
+operacional suportado. O normalizador não deve ser executado elevado/como administrador, e o
+operador deve evitar modificar o documento durante a execução.
+
+O leitor rejeita URLs, UNC e device paths explicitamente informados, extensão divergente,
+arquivo ausente ou não regular, entradas acima de 5 MiB e links finais/ancestrais presentes no
+momento da validação. Essas proteções estáticas não garantem que o path permaneça local nem
+impedem a substituição concorrente do arquivo ou de seus ancestrais depois da validação. Um
+processo local com permissão de escrita na árvore pode explorar a janela TOCTOU entre a validação
+baseada em path e a leitura. O risco foi identificado, classificado e aceito no threat model
+parcial D74 sob as condições operacionais acima; não foi eliminado.
+
+Administrador malicioso, malware com acesso ao processo/filesystem, host multiusuário hostil, CI
+compartilhado e filesystems remotos estão fora da fronteira hostil obrigatória atual, não são
+considerados seguros e exigem nova revisão antes de uso. O threat model também deve ser
+obrigatoriamente reavaliado antes de CI/automação, host compartilhado, execução multiusuário,
+suporte a network filesystem, integração com adapter, consulta ao destino, aplicação remota,
+mutação de banco ou uso operacional com dados reais em ambiente não controlado. Validade
+estrutural do documento, binding ao snapshot e existência futura no destino continuam conceitos
+distintos.
+
 ## Schema auditado
 
 O destino permanece o schema `ltc_m` existente:

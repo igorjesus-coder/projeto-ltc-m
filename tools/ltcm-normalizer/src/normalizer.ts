@@ -1,5 +1,6 @@
 import { sha256Canonical } from './canonical-json.js';
 import { plannedLegacyImportBatchReference } from './contracts.js';
+import { applyReviewedResolutions, createReviewBinding } from './reviewed-resolutions.js';
 import { canonicalInputHash, type LoadedSource } from './source-reader.js';
 import {
   EXPECTED_PROJECT_CODES,
@@ -15,6 +16,7 @@ import {
   type P011Artifacts,
   type ProjectCandidate,
   type RawCell,
+  type ReviewedResolutionDocument,
   type SourceCoordinate,
 } from './types.js';
 
@@ -759,15 +761,49 @@ export function normalizeP011(
   source: LoadedSource,
   snapshot: ExistingSnapshot,
   generatedAt: string,
+  reviewedResolutions?: ReviewedResolutionDocument,
 ): P011Artifacts {
-  const state = extractCandidates(source);
-  applyExistingSnapshot(state.clients, state.projects, snapshot);
+  const initialState = extractCandidates(source);
+  applyExistingSnapshot(initialState.clients, initialState.projects, snapshot);
+  const inputHash = canonicalInputHash(source.inputHashes);
+  const reviewBinding = createReviewBinding(
+    NORMALIZER_VERSION,
+    source.manifestHash,
+    inputHash,
+    snapshot,
+    initialState.clients,
+    initialState.projects,
+  );
+  const appliedResolutions =
+    reviewedResolutions === undefined
+      ? undefined
+      : applyReviewedResolutions(
+          reviewedResolutions,
+          reviewBinding,
+          snapshot,
+          initialState.clients,
+          initialState.projects,
+          initialState.mappings,
+        );
+  const state =
+    appliedResolutions === undefined
+      ? initialState
+      : {
+          ...initialState,
+          clients: appliedResolutions.clients,
+          projects: appliedResolutions.projects,
+          mappings: appliedResolutions.mappings,
+        };
+  const resolutionSummary = appliedResolutions?.summary;
   const operations = buildPlan(state);
   const actionCounts = countActions(operations);
   const projectCodes = state.projects.map((project) => project.project_code);
+  const hasPending = operations.some(
+    (operation) => !['insert', 'no_op'].includes(operation.action),
+  );
   const validationSummary = {
     contract: 'ltcm.p011.validation-summary.v2',
-    status: 'passed_with_pending_decisions',
+    status: hasPending ? 'passed_with_pending_decisions' : 'passed',
     client_candidates: state.clients.length,
     project_candidates: state.projects.length,
     unique_project_codes: new Set(projectCodes).size,
@@ -792,6 +828,8 @@ export function normalizeP011(
     curve_s_operations: 0,
     p012_executed: false,
     remote_access: false,
+    reviewed_resolutions_provided: resolutionSummary !== undefined,
+    reviewed_resolution_document_hash: resolutionSummary?.document_hash ?? null,
     action_counts: actionCounts,
     warnings: state.divergences.filter((entry) => entry.severity === 'warning').length,
     errors: state.divergences.filter((entry) => entry.severity === 'error').length,
@@ -803,7 +841,6 @@ export function normalizeP011(
   ) {
     throw new Error('Dry-run P011 não produziu exatamente os nove projetos aprovados.');
   }
-  const inputHash = canonicalInputHash(source.inputHashes);
   const sourceValidation = {
     contract: 'ltcm.p011.source-validation.v2',
     p010_manifest_contract: source.manifest['artifact_contract'],
@@ -828,6 +865,7 @@ export function normalizeP011(
     `- projetos candidatos: ${state.projects.length};`,
     `- códigos únicos de projeto: ${new Set(projectCodes).size};`,
     `- ações simuladas: ${JSON.stringify(actionCounts)};`,
+    `- resoluções revisadas: ${resolutionSummary === undefined ? 'não fornecidas' : `aplicadas (${resolutionSummary.document_hash})`};`,
     `- warnings: ${validationSummary.warnings}; errors de candidato: ${validationSummary.errors};`,
     '- D02 validada em 164000; D03 preservada; D04 propagada somente como warning/evidência;',
     '- D05/D06 aplicadas; D38 preserva nulo somente com lote planejado; D39 preservada;',
@@ -848,6 +886,16 @@ export function normalizeP011(
       workbook_hash: source.workbookHash,
       input_hash: inputHash,
       input_hashes: source.inputHashes,
+      review_binding: reviewBinding,
+      ...(resolutionSummary === undefined
+        ? {}
+        : {
+            reviewed_resolutions: {
+              contract: reviewedResolutions?.contract,
+              document_hash: resolutionSummary.document_hash,
+              binding_hash: resolutionSummary.binding_hash,
+            },
+          }),
       rules: [
         'client_nfc_trim_collapse_case_insensitive',
         'client_no_accent_punctuation_suffix_word_removal',
@@ -872,6 +920,7 @@ export function normalizeP011(
     divergences: state.divergences,
     importPlan: { contract: 'ltcm.p011.import-plan.v2', operations },
     validationSummary,
+    ...(resolutionSummary === undefined ? {} : { resolutionSummary }),
     report,
   };
 }
