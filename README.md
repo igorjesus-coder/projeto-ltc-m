@@ -215,9 +215,11 @@ A validação sanitizada do workbook de referência está em
 O P011 consome somente os artefatos P010, extrai candidatos de clientes/projetos e produz um plano
 local determinístico. Ele não lê o XLSX, não acessa banco ou rede e não importa itens.
 
-Os contratos v2 representam D40 com lote existente ou planejado, sem UUID ou data artificial. A
-fronteira futura resolve lote → clientes → projetos em uma transação; nenhum adapter remoto está
-implementado.
+Os contratos v2 representam D40 com lote existente ou planejado, sem UUID ou data artificial. O
+snapshot local v3 pode carregar a projeção sintética `id`/`idempotency_key`/`source_hash` dos
+lotes para provar, de forma fail-closed, que uma referência `planned` corresponde ao UUID já
+persistido. A fronteira futura resolve lote → clientes → projetos em uma transação; nenhum
+adapter remoto está implementado.
 
 D41 impede que um lote já referenciado transite para `rejected`; a linhagem deve ser corrigida para
 outro lote permitido por fluxo administrativo e auditado, nunca removida.
@@ -235,6 +237,20 @@ local `ltcm.p011.reviewed-resolutions.v1`, vinculado ao manifesto, input e hashe
 snapshot canônico, para resolver somente identidade de cliente e nome/status pendentes de projeto.
 `use_existing` exige evidência compatível no snapshot local vinculado. Arquivos com
 decisões reais podem conter dados empresariais e devem permanecer fora do Git.
+States/actions e a ausência de diagnostics recebidos também são não confiáveis. O normalizador
+deriva ambiguidade, blockers D02–D06, associação, provenance e ação esperada do candidate set,
+evidências e snapshot disponíveis antes do hash. `client/insert` é reconciliado para `no_op` diante
+de um único match ativo compatível; matches múltiplos, indisponíveis ou `create_new` contradito pelo
+snapshot falham antes do binding/summary. A derivação global é repetida após qualquer resolução.
+`loadP010Source` registra, sob a identidade runtime retornada, uma única materialização canônica
+privada dos fatos validados. `normalizeP011` deriva fingerprint e candidates exclusivamente dessa
+autoridade privada; `rows`, `get`, `entries`, manifesto e hashes expostos no `LoadedSource` público
+permanecem compatíveis para inspeção, mas sua mutação posterior não altera os fatos certificados.
+Candidates comuns, cópias, casts, JSON e hashes recalculados podem passar por validação estrutural,
+mas não provam provenance P010 nem atravessam
+`createReviewBinding`/`applyReviewedResolutions`. Hash de candidate continua provando integridade do
+objeto correspondente, não autoridade factual. Moeda não unívoca usa o único código factual
+`PROJECT_CURRENCY_UNRESOLVED`; o caller não escolhe entre missing e ambiguous.
 
 Use `--reviewed-resolutions` somente em filesystem local, dentro de diretório privado e controlado
 pelo operador, sem ancestral gravável por outro usuário não confiável. UNC/SMB, mapped drive,

@@ -1,7 +1,7 @@
 # P011-PRE — relatório final sanitizado
 
 > **Evidência histórica v1:** este relatório registra a execução real local anterior à D40/D69.
-> O normalizador atual usa contratos v2 e a D69 adiciona
+> O normalizador atual usa contratos v2, snapshot local v3, e a D69 adiciona
 > `ltcm.p011.reviewed-resolutions.v1`. Nenhuma nova execução v2 com dados reais foi realizada e os
 > hashes/contagens abaixo não devem ser reinterpretados como evidência do contrato atual.
 > A D74/D75 classifica a entrada revisada sob threat model parcial: links e paths explicitamente
@@ -167,7 +167,7 @@ Há zero duplicidade no plano. O raw de `2024-06-11837` preserva o espaço inici
 - D05: valor de venda não inferido; `PROJECT_VALUE_SEMANTICS_PENDING` em oito projetos;
 - D06: contrato/demanda/saldo não inferidos; `PROJECT_CLASSIFICATION_PENDING` nos nove projetos;
 - D08: uma moeda explícita por projeto, sem conversão; fonte real válida não gerou diagnóstico.
-  Casos inválidos usam `PROJECT_CURRENCY_MISSING` ou `PROJECT_CURRENCY_AMBIGUOUS`.
+  Casos inválidos usam o diagnóstico factual único `PROJECT_CURRENCY_UNRESOLVED`.
 
 ## Fronteira P011/P012
 

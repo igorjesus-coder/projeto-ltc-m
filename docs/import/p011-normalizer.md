@@ -31,7 +31,7 @@ são `contract`, `normalizer_version`, `normalization_manifest_hash`, `p010_mani
 `input_hash`, `snapshot_hash`, `candidate_set_hash` e `resolutions`. O binding
 `ltcm.p011.review-binding.v1` é
 calculado depois do snapshot opcional e antes de qualquer resolução, a partir da versão do
-normalizador, manifesto P010, input canônico, hash do snapshot v2 completo e pares ordenados
+normalizador, manifesto P010, input canônico, hash do snapshot v3 completo e pares ordenados
 `candidate_id`/`candidate_hash`. O snapshot é canonicalizado com objetos por chaves e cada array
 ordenado pelo hash canônico de seus elementos; sua ordem incidental não altera o binding. Assim,
 mudança semântica de origem, snapshot, versão ou candidato invalida a decisão antes de qualquer
@@ -157,12 +157,175 @@ planejado determinístico. Um cliente ambíguo torna apenas seus projetos `rejec
 
 ## Snapshot, plano e persistência
 
-`--existing-snapshot` usa `ltcm.p011.existing-snapshot.v2`. O parser converte explicitamente v1
-válido em v2, atribuindo linhagem nula somente quando a data existe; v1 com data nula é rejeitado.
-Ele permite simular
+`--existing-snapshot` usa `ltcm.p011.existing-snapshot.v3`. O parser converte explicitamente v1/v2
+válidos em v3, com `import_batches` vazio; v1 com data nula continua rejeitado. A projeção local
+v3 de cada lote contém somente `id`, `idempotency_key` e `source_hash`. Para reconciliar uma
+referência `planned` com o UUID persistido de um projeto, deve existir exatamente um lote com o
+UUID referenciado e exatamente uma correspondência conjunta da `idempotency_key` única e do
+`source_hash` já presentes na referência planejada. A prova converte somente a cópia reconciliada
+para referência `existing`; evidência ausente, divergente, arbitrária ou ambígua preserva conflito.
+O objeto superior, moedas, clientes, projetos e cada lote são contratos runtime fechados e
+reconstruídos somente com campos reconhecidos. `currencies.code`, já validado como três letras
+ASCII maiúsculas, é único no snapshot; duplicatas são rejeitadas mesmo quando `active` diverge.
+UUIDs de clientes e projetos são únicos por identidade UUID, sem distinguir caixa textual; UUIDs e
+`idempotency_key` não nulos também são globalmente únicos em `import_batches`. Qualquer duplicidade
+invalida o snapshot antes do hash ou da reconciliação, sem escolha, canonicalização ou deduplicação
+silenciosa. A regra é aplicada igualmente ao snapshot v3 e às conversões válidas de v1/v2.
+`parseExistingSnapshot` é o preflight normativo único e também é aplicado em runtime pelas APIs
+programáticas exportadas antes de hash, binding, aplicação de resoluções ou equivalência de lineage.
+Na aplicação programática direta, os hashes efetivos do snapshot e do conjunto de candidatos são
+recalculados e comparados ao binding antes de cópias ou resoluções. `ClientCandidate` e
+`ProjectCandidate` são contratos runtime fechados: cada objeto e suas estruturas aninhadas são
+reconstruídos somente com campos reconhecidos. Depois do parse estrutural e antes de confiar no
+hash, a barreira semântica deriva e exige as combinações de cliente `valid/insert`, `valid/no_op`,
+`ambiguous/conflict` ou `rejected/rejected`. Clientes não rejeitados exigem `normalized_name` não
+vazio em NFC, trim e whitespace canônicos e `match_key` derivada exatamente desse nome. Nome e
+chave precisam conter ao menos uma letra ou um número Unicode; whitespace, controles `Cc`, formatos
+`Cf`, marcas combinantes ou pontuação não constituem sozinhos uma identidade.
+U+200B/U+200C/U+200D/U+2060 e controles bidi são, portanto, insuficientes. A
+validação rejeita, sem remover ou reparar, a entrada composta somente por conteúdo invisível.
+Conteúdo visível Unicode legítimo, inclusive português, grego e CJK, permanece válido. `no_op`
+exige UUID que corresponda a exatamente um cliente ativo, não excluído e compatível no snapshot,
+enquanto as demais combinações não aceitam `matched_client_id`. Estado `valid` não aceita
+diagnóstico; os outros estados exigem ao menos um. Essa política interna de conteúdo utilizável não
+é a política humana mais restritiva de `approved_name`, que continua rejeitando qualquer `Cc`/`Cf`
+e mantém sua validação Unicode própria.
+
+`ambiguous/conflict` não é aceito somente porque o caller declarou o estado — nem pode ser ocultado
+declarando todos os membros como `valid/insert`. A família lexical e o estado esperado são derivados
+para todos os ClientCandidates. O diagnóstico deve ser
+exatamente `CLIENT_MATCH_AMBIGUOUS`, `possible_matches` deve ser uma lista não vazia, única e sem
+autorreferência, e deve corresponder exatamente aos `client_ref` dos demais candidatos da mesma
+família lexical calculada pelo normalizador. Como cada candidato lista os outros membros, uma
+família legítima de dois clientes possui um match por candidato. `client_ref` também é único no
+conjunto. `create_new` e `use_existing` operam somente depois dessa prova; a decisão limpa a lista
+resolvida e o conjunto resultante inteiro é rederivado antes de elegibilidade ou summary.
+`create_new` autoriza separar a identidade da família lexical, mas não ignora o snapshot: se já
+existir match compatível, a decisão falha em vez de produzir outro insert. `use_existing` continua
+exigindo o UUID único, ativo, não excluído e compatível.
+
+O snapshot também determina a associação final de clientes sem decisão humana. Zero match permite
+`valid/insert`; exatamente um match compatível ativo deriva `valid/no_op` e seu UUID; mais de um
+match, ou match inativo/excluído, falha fechado com código sanitizado. Somente
+`applyExistingSnapshot` pode reconstruir o estado pré-snapshot `insert` para `no_op` antes do
+binding. Parser, binding e aplicação direta exigem que o estado recebido já coincida com essa
+derivação.
+
+Cada ação de projeto possui matriz semântica fail-closed antes do hash. `insert` exige nome mapeado,
+associação ao candidato de cliente válido, moeda, classificação, status, valor e data ou lineage,
+sem blocker normativo. `no_op` exige os mesmos campos finais e, nos entry points que recebem o
+snapshot, correspondência única com projeto existente, cliente persistido e equivalência completa
+de nome, associação, classificação, status, moeda, valor e lineage. O caller não pode declarar
+`no_op` sem essa prova. `conflict` exige diagnóstico de conflito; `rejected` exige diagnóstico de
+rejeição; `pending_decision` exige campo ainda pendente e não pode coexistir com condição de
+rejeição ou conflito. Não há default permissivo.
+
+Os diagnostics de projeto pertencem a uma taxonomia única (`conflict`, `rejection`, `pending` ou
+`informational`) e códigos desconhecidos falham antes do hash. O conjunto obrigatório é derivado do
+estado disponível — associação de cliente, moeda, classificação bruta, data, evidência financeira,
+receipt e snapshot — e comparado canonicamente ao conjunto declarado. Ausência de diagnostic não
+apaga uma causa. D02 deriva conflito sempre que `2026-04-16531` diverge de `164000`; D06 deriva a
+classificação das classificações brutas e rejeita declaração incompatível ou combinação conflitante.
+`PROJECT_DUPLICATE_CONFLICT` exige mais de um projeto ativo com o mesmo código no snapshot;
+`PROTECTED_RECORD_CONFLICT` exige exatamente um projeto correspondente, candidate final completo e
+divergência normativa real. Portanto, snapshot vazio não certifica `conflict`. Uma rejeição por
+`PROJECT_CLIENT_UNRESOLVED` exige que a associação ao ClientCandidate esteja realmente ausente ou
+inelegível; a mesma causa não pode ser declarada quando o cliente já está resolvido.
+Como o Candidate não preserva evidence discriminante suficiente para provar se a moeda estava
+ausente ou se havia mais de uma, ambos os fatos source-derived produzem o único diagnóstico
+verdadeiro `PROJECT_CURRENCY_UNRESOLVED`. Os códigos anteriores `PROJECT_CURRENCY_MISSING` e
+`PROJECT_CURRENCY_AMBIGUOUS` não pertencem mais à taxonomia certificável e não podem ser escolhidos
+pelo caller.
+
+A associação final aponta para o mesmo `candidate_id` e `match_key` do cliente e mantém `client_id`
+coerente com `matched_client_id`. Para ações finais, todo diagnóstico é bloqueante salvo a allowlist
+positiva: `RECEIPT_FORECAST_PRESENT_IN_MONTHLY_SOURCE` é informativo, e
+`PROJECT_DATA_REFERENCE_DATE_MISSING` só é não bloqueante quando existe lineage D38 válida. Assim,
+diagnóstico desconhecido ou `PROJECT_CLASSIFICATION_PENDING` impede `insert`/`no_op`, enquanto uma
+pendência permanece explicitamente `pending_decision`.
+
+O valor de contrato, tanto em `ProjectCandidate` quanto em `ExistingSnapshot.projects`, usa um
+único validador textual compatível com `numeric(20,2)`: decimal não negativo, sem sinal, expoente,
+zeros iniciais ou lixo, com até 18 dígitos inteiros e uma ou duas casas quando houver fração. A
+representação já canônica é preservada, sem `Number`, `parseFloat`, arredondamento ou reparo. Assim,
+`0`, `0.00`, `1000.5` e `164000` são válidos; vazio, whitespace, `not-a-number`, `NaN`, `Infinity`,
+`1e3`, `01`, `-1` e `1.230` falham antes do hash. A mesma regra alcança snapshots v1/v2 durante a
+conversão explícita para v3. `createSnapshotHash` não certifica snapshot semanticamente inválido.
+
+Somente depois dessas invariantes o `hash` declarado é tratado como não confiável e comparado ao
+SHA-256 canônico efetivo de `{...candidate, hash: undefined}`. Portanto, recalcular corretamente o
+hash não legitima conteúdo impossível. Candidato parcial, malformado, com campo extra ou alterado
+mantendo o hash antigo falha fechado. IDs de candidato duplicados são rejeitados no namespace
+conjunto de clientes e projetos, inclusive quando diferem somente por caixa. O gerador normativo
+usa `client-` + 24 hexadecimais minúsculos derivados do SHA-256 canônico de
+`{ entity: "client", match_key }`, ou `project-` + 24 hexadecimais minúsculos derivados de
+`{ entity: "project", project_code }`. Cada tipo aceita somente seu prefixo e tamanho. Uppercase,
+mixed-case, prefixo cruzado, tamanho ou alfabeto divergente são rejeitados, nunca convertidos com
+`toLowerCase`; a comparação case-insensitive permanece como defesa adicional de unicidade.
+Somente candidatos estrutural e semanticamente validados, em forma canônica, e seus hashes
+recomputados formam o `candidate_set_hash`. O binding deve declarar
+exatamente `ltcm.p011.review-binding.v1`, e binding e documento devem usar a constante runtime
+`NORMALIZER_VERSION`; autocoerência entre valores fornecidos pelo caller não substitui essas fontes
+nominais. `createReviewBinding` rejeita versão diferente da runtime. `matchProjectLineage` valida e
+reconstrói integralmente o candidato, exige que o target seja exatamente um projeto do snapshot
+canônico validado e somente então chama seu matcher interno não exportado. Esses campos integram
+`snapshot_hash` e o binding anti-replay. O snapshot permite simular
 cliente existente, projeto idêntico, conflito e registro protegido sem afirmar estado do banco
 real. Destino omitido significa fixture vazia com catálogo BRL conhecido; suas contagens são
 simulações, não inventário remoto.
+
+Cada candidate final exige provenance mínima já produzida pelo pipeline: nomes/códigos brutos
+compatíveis, ao menos uma origem, um único workbook por candidate e evidência `mapped` coerente com
+o valor contratual. Lineage `planned` deve vincular `source_manifest_hash` ao candidate e
+`source_hash` ao workbook das origens. Todos os candidates do conjunto usam o mesmo manifesto, e
+`createReviewBinding`/`applyReviewedResolutions` o comparam ao `p010_manifest_hash` disponível.
+Essa coerência estrutural, isoladamente, não prova a veracidade da origem. A fronteira factual usa
+uma capability runtime guardada em `WeakMap`: depois de validar manifesto, relatórios, input hashes,
+row hashes e linhas, `loadP010Source` cria uma única materialização canônica privada e frozen desses
+fatos e a associa à identidade do `LoadedSource` retornado. O fingerprint é calculado sobre essa
+materialização. `normalizeP011` obtém dela uma view de leitura nova e deriva dessa mesma autoridade
+privada todos os candidates, origins, evidence, classificação, moeda, valores e diagnostics. O Map e
+os objetos expostos publicamente continuam disponíveis para compatibilidade e inspeção, mas não são
+mais autoridade certificadora: substituir `rows`, `get`, `entries` ou qualquer conteúdo nested depois
+do loader não muda os fatos consumidos pelo pipeline. A view derivada não recebe a identidade
+registrada e não pode ser reapresentada como `LoadedSource` source-proven.
+
+Depois da reconciliação, o pipeline emite internamente uma segunda capability vinculada ao P010,
+input, snapshot e fingerprint exato do candidate set. Essa capability não integra nenhum objeto
+retornado e não pode ser reconstruída por propriedade, cast, spread, `Object.assign`, JSON ou
+SHA-256 recalculado. Hash de candidate prova somente integridade do objeto correspondente, nunca a
+autoridade factual da fonte. O risco TOCTOU de filesystem descrito abaixo permanece separado: a
+materialização privada isola mutações runtime posteriores ao loader, não substitui as condições
+operacionais aplicadas durante a leitura dos arquivos.
+
+`applyExistingSnapshot`, `createReviewBinding` e `applyReviewedResolutions` reutilizam as mesmas
+barreiras estrutural, canônica e de derived state antes de reconciliar, vincular ou aplicar decisões. Elas
+rejeitam hash declarado divergente, hash corretamente recalculado sobre semântica inválida,
+candidato parcial, campo extra, ID não canônico/duplicado, `no_op` sem prova e `insert` com blocker
+antes de qualquer transição. O helper pré-reconciliação aceita somente a diferença snapshot-dependent
+que `applyExistingSnapshot` está prestes a reconstruir e não pode gerar binding. Essa função
+continua sendo somente reconciliação estrutural/snapshot-dependent: seu resultado não recebe
+provenance por transitividade. Somente o pipeline contextual pode emitir a capability exigida por
+binding e aplicação. Os candidatos
+resultantes de reconciliação/resolução passam novamente pela derivação global antes de summary ou
+plano. A reconciliação ocorre em cópias canônicas, cujos
+hashes somente são atualizados depois de uma transição válida.
+
+A remoção de um diagnostic não é prova autônoma de resolução. Depois de `create_new`,
+`use_existing`, `approved_name` ou `approved_status`, associação, diagnostics, snapshot e action
+são novamente derivados ou conferidos pela mesma barreira. Conflitos de snapshot são recalculados
+contra o snapshot vinculado; blockers restantes preservam `rejected`/`pending_decision`; `insert`
+somente surge quando todas as condições finais derivadas voltam a passar. A ordem é parse fechado,
+derivação factual, comparação declared-versus-derived, hash do candidate, candidate-set hash e
+binding. Após decisões, a mesma derivação ocorre sobre o conjunto resultante completo.
+
+O pipeline completo deriva manifesto P010 e `input_hash` da fonte efetivamente lida. A API
+`parseValidatedCandidateSet` continua útil para schema, semântica e coerência interna, mas seu nome
+não implica source provenance e seu resultado não é bindable. `createReviewBinding` e
+`applyReviewedResolutions` rejeitam chamadas programáticas sem a capability interna, mesmo quando
+todos os campos e hashes são matematicamente corretos. Contrato nominal, versão runtime, snapshot e
+candidate set permanecem verificados de forma independente antes dessa barreira. Hash de candidate
+prova somente integridade do objeto; binding somente é emitido depois da prova factual contextual.
 
 A fronteira `LtcmPersistencePort` v2 exige transação serializável e ordem lote → clientes →
 projetos. A referência tipada `existing` carrega UUID validado; `planned` carrega chave,
@@ -198,7 +361,7 @@ reconciliação e garantia de zero alteração fora de `ltc_m`.
 
 O catálogo inclui `CLIENT_NAME_MISSING`, `CLIENT_MATCH_AMBIGUOUS`,
 `CLIENT_SOURCE_FIELD_AMBIGUOUS`, `PROJECT_CODE_INVALID`, `PROJECT_DUPLICATE_CONFLICT`,
-`PROJECT_CLIENT_UNRESOLVED`, `PROJECT_CURRENCY_MISSING`, `PROJECT_CURRENCY_AMBIGUOUS`,
+`PROJECT_CLIENT_UNRESOLVED`, `PROJECT_CURRENCY_UNRESOLVED`,
 `PROJECT_VALUE_CONFLICT`, `PROJECT_CLASSIFICATION_CONFLICT`,
 `PROJECT_DATA_REFERENCE_DATE_MISSING`, `PROTECTED_RECORD_CONFLICT`,
 `RECEIPT_FORECAST_PRESENT_IN_MONTHLY_SOURCE`, `REMOTE_APPLY_NOT_AUTHORIZED`,

@@ -239,7 +239,7 @@ export interface ExistingSnapshotV1 {
   }>;
 }
 
-export interface ExistingSnapshot {
+export interface ExistingSnapshotV2 {
   contract: 'ltcm.p011.existing-snapshot.v2';
   currencies: ExistingSnapshotV1['currencies'];
   clients: ExistingSnapshotV1['clients'];
@@ -257,6 +257,20 @@ export interface ExistingSnapshot {
     deleted_at: string | null;
     version: number;
   }>;
+}
+
+export interface ExistingImportBatchEvidence {
+  id: string;
+  idempotency_key: string | null;
+  source_hash: string | null;
+}
+
+export interface ExistingSnapshot {
+  contract: 'ltcm.p011.existing-snapshot.v3';
+  currencies: ExistingSnapshotV1['currencies'];
+  clients: ExistingSnapshotV1['clients'];
+  import_batches: ExistingImportBatchEvidence[];
+  projects: ExistingSnapshotV2['projects'];
 }
 
 export interface ImportPlanOperation {
