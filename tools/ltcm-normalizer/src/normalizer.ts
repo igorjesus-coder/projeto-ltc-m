@@ -1,6 +1,26 @@
 import { sha256Canonical } from './canonical-json.js';
-import { plannedLegacyImportBatchReference } from './contracts.js';
-import { canonicalInputHash, type LoadedSource } from './source-reader.js';
+import {
+  canonicalClientMatchKey,
+  canonicalClientName,
+  clientPossibleMatchFamily,
+  createClientCandidateId,
+  createProjectCandidateId,
+  parseExistingSnapshot,
+  plannedLegacyImportBatchReference,
+} from './contracts.js';
+import {
+  applyReviewedResolutions,
+  createReviewBinding,
+  matchProjectLineage,
+  parseCandidateSetForSnapshotReconciliation,
+  parseValidatedCandidateSet,
+} from './reviewed-resolutions.js';
+import {
+  assertLoadedSourceProvenance,
+  canonicalInputHash,
+  createValidatedSourceView,
+  type LoadedSource,
+} from './source-reader.js';
 import {
   EXPECTED_PROJECT_CODES,
   NORMALIZER_VERSION,
@@ -15,6 +35,7 @@ import {
   type P011Artifacts,
   type ProjectCandidate,
   type RawCell,
+  type ReviewedResolutionDocument,
   type SourceCoordinate,
 } from './types.js';
 
@@ -27,11 +48,11 @@ function compare(left: string, right: string): number {
 }
 
 export function normalizeClientName(value: string): string {
-  return value.normalize('NFC').trim().replace(/\s+/gu, ' ');
+  return canonicalClientName(value);
 }
 
 export function clientMatchKey(value: string): string {
-  return normalizeClientName(value).toLocaleLowerCase('und');
+  return canonicalClientMatchKey(value);
 }
 
 function cell(row: P010Row, column: string): RawCell | undefined {
@@ -131,17 +152,6 @@ function splitClientAndClassification(rawValue: string): {
   };
 }
 
-function possibleMatchFamily(name: string): string {
-  return (
-    clientMatchKey(name)
-      .normalize('NFD')
-      .replace(/\p{M}+/gu, '')
-      .replace(/[^\p{L}\p{N}]+/gu, ' ')
-      .trim()
-      .split(/\s/u, 1)[0] ?? ''
-  );
-}
-
 function financialEvidence(
   candidate: RawCell,
   row: P010Row,
@@ -166,6 +176,63 @@ interface ExtractionState {
   projects: ProjectCandidate[];
   mappings: MappingEvidence[];
   divergences: Diagnostic[];
+}
+
+interface SourceProvenCandidateProofRecord {
+  p010ManifestHash: string;
+  inputHash: string;
+  snapshotFingerprint: string;
+  candidateFingerprint: string;
+}
+
+const sourceProvenCandidateProofs = new WeakMap<object, SourceProvenCandidateProofRecord>();
+
+function candidateFingerprint(clients: ClientCandidate[], projects: ProjectCandidate[]): string {
+  return sha256Canonical({ clients, projects });
+}
+
+function createSourceProvenCandidateProof(
+  sourceIdentity: LoadedSource,
+  sourceView: LoadedSource,
+  inputHash: string,
+  snapshot: ExistingSnapshot,
+  clients: ClientCandidate[],
+  projects: ProjectCandidate[],
+): object {
+  assertLoadedSourceProvenance(sourceIdentity);
+  const proof = Object.freeze(Object.create(null)) as object;
+  sourceProvenCandidateProofs.set(proof, {
+    p010ManifestHash: sourceView.manifestHash,
+    inputHash,
+    snapshotFingerprint: sha256Canonical(snapshot),
+    candidateFingerprint: candidateFingerprint(clients, projects),
+  });
+  return proof;
+}
+
+export function assertSourceProvenCandidateProof(
+  proof: unknown,
+  p010ManifestHash: string,
+  inputHash: string,
+  snapshot: ExistingSnapshot,
+  clients: ClientCandidate[],
+  projects: ProjectCandidate[],
+): void {
+  if (proof === null || typeof proof !== 'object') {
+    throw new Error('P011_SOURCE_PROVENANCE_REQUIRED: candidate-set.');
+  }
+  const expected = sourceProvenCandidateProofs.get(proof);
+  if (expected === undefined) {
+    throw new Error('P011_SOURCE_PROVENANCE_REQUIRED: candidate-set.');
+  }
+  if (
+    expected.p010ManifestHash !== p010ManifestHash ||
+    expected.inputHash !== inputHash ||
+    expected.snapshotFingerprint !== sha256Canonical(snapshot) ||
+    expected.candidateFingerprint !== candidateFingerprint(clients, projects)
+  ) {
+    throw new Error('P011_SOURCE_PROVENANCE_MISMATCH: candidate-set.');
+  }
 }
 
 function extractCandidates(source: LoadedSource): ExtractionState {
@@ -293,7 +360,7 @@ function extractCandidates(source: LoadedSource): ExtractionState {
     const rawNames = [...evidence.rawNames].sort(compare);
     const normalizedName = normalizeClientName(rawNames[0] ?? '');
     const base = {
-      candidate_id: `client-${sha256Canonical({ entity: 'client', match_key: key }).slice(0, 24)}`,
+      candidate_id: createClientCandidateId(key),
       client_ref: `client-${sha256Canonical(key).slice(0, 12)}`,
       raw_names: rawNames,
       normalized_name: normalizedName,
@@ -311,7 +378,7 @@ function extractCandidates(source: LoadedSource): ExtractionState {
 
   const families = new Map<string, ClientCandidate[]>();
   for (const candidate of clients) {
-    const family = possibleMatchFamily(candidate.normalized_name);
+    const family = clientPossibleMatchFamily(candidate.normalized_name);
     families.set(family, [...(families.get(family) ?? []), candidate]);
   }
   for (const family of families.values()) {
@@ -413,11 +480,8 @@ function extractCandidates(source: LoadedSource): ExtractionState {
         ),
       );
     }
-    if (currencies.length === 0) {
-      diagnostics.push('PROJECT_CURRENCY_MISSING');
-      action = 'rejected';
-    } else if (currencies.length > 1) {
-      diagnostics.push('PROJECT_CURRENCY_AMBIGUOUS');
+    if (currencies.length !== 1) {
+      diagnostics.push('PROJECT_CURRENCY_UNRESOLVED');
       action = 'rejected';
     }
     const rawClassifications = [...aggregate.classifications].sort(compare);
@@ -526,7 +590,7 @@ function extractCandidates(source: LoadedSource): ExtractionState {
     }
     const operationalStatus = projectCode === '2024-02-10990' ? ('completed' as const) : null;
     const base = {
-      candidate_id: `project-${sha256Canonical({ entity: 'project', project_code: projectCode }).slice(0, 24)}`,
+      candidate_id: createProjectCandidateId(projectCode),
       raw_codes: [...aggregate.rawCodes].sort(compare),
       project_code: projectCode,
       raw_project_label: rawLabel,
@@ -581,26 +645,45 @@ export function applyExistingSnapshot(
   clients: ClientCandidate[],
   projects: ProjectCandidate[],
   snapshot: ExistingSnapshot,
-): void {
-  for (const candidate of clients) {
+): {
+  snapshot: ExistingSnapshot;
+  clients: ClientCandidate[];
+  projects: ProjectCandidate[];
+} {
+  const validatedSnapshot = parseExistingSnapshot(snapshot);
+  const validatedCandidates = parseCandidateSetForSnapshotReconciliation(
+    clients,
+    projects,
+    validatedSnapshot,
+  );
+  const appliedClients = validatedCandidates.clients;
+  const appliedProjects = validatedCandidates.projects;
+  for (const candidate of appliedClients) {
     if (candidate.status !== 'valid') continue;
-    const matches = snapshot.clients.filter(
+    const matches = validatedSnapshot.clients.filter(
       (existing) =>
         clientMatchKey(existing.legal_name) === candidate.match_key ||
         clientMatchKey(existing.display_name) === candidate.match_key,
     );
+    if (matches.length > 1) {
+      throw new Error(
+        `REVIEWED_RESOLUTION_CLIENT_SNAPSHOT_MATCH_AMBIGUOUS: ${candidate.candidate_id}.`,
+      );
+    }
     if (matches.length === 1 && matches[0]?.deleted_at === null && matches[0].active) {
       candidate.action = 'no_op';
       candidate.matched_client_id = matches[0].id;
-    } else if (matches.length > 0) {
-      candidate.action = 'conflict';
-      candidate.status = 'ambiguous';
-      candidate.diagnostic_codes = ['PROTECTED_RECORD_CONFLICT'];
+    } else if (matches.length === 1) {
+      throw new Error(
+        `REVIEWED_RESOLUTION_CLIENT_SNAPSHOT_MATCH_UNAVAILABLE: ${candidate.candidate_id}.`,
+      );
     }
     candidate.hash = sha256Canonical({ ...candidate, hash: undefined });
   }
-  const clientsById = new Map(clients.map((candidate) => [candidate.candidate_id, candidate]));
-  for (const project of projects) {
+  const clientsById = new Map(
+    appliedClients.map((candidate) => [candidate.candidate_id, candidate]),
+  );
+  for (const project of appliedProjects) {
     const client =
       project.client_candidate_id === null
         ? undefined
@@ -608,7 +691,7 @@ export function applyExistingSnapshot(
     if (client?.matched_client_id !== null && client?.matched_client_id !== undefined) {
       project.client_id = client.matched_client_id;
     }
-    const existing = snapshot.projects.filter(
+    const existing = validatedSnapshot.projects.filter(
       (candidate) =>
         candidate.project_code.toUpperCase() === project.project_code.toUpperCase() &&
         candidate.deleted_at === null,
@@ -621,10 +704,9 @@ export function applyExistingSnapshot(
     } else if (existing.length === 1) {
       const target = existing[0];
       project.matched_legacy_import_batch_id = target?.legacy_import_batch_id ?? null;
-      const candidateLegacyBatchId =
-        project.legacy_import_batch_reference?.kind === 'existing'
-          ? project.legacy_import_batch_reference.import_batch_id
-          : null;
+      project.hash = sha256Canonical({ ...project, hash: undefined });
+      const lineage =
+        target === undefined ? undefined : matchProjectLineage(project, target, validatedSnapshot);
       const fullyMapped =
         project.project_name_mapping_status === 'mapped' &&
         project.client_id !== null &&
@@ -641,9 +723,9 @@ export function applyExistingSnapshot(
         target.status === project.operational_status &&
         target.base_currency === project.currency &&
         target.contract_value === project.contract_value &&
-        target.data_reference_date === project.data_reference_date &&
-        target.legacy_import_batch_id === candidateLegacyBatchId
+        lineage?.equivalent === true
       ) {
+        project.legacy_import_batch_reference = lineage.resolvedReference;
         project.action = 'no_op';
       } else if (fullyMapped) {
         project.action = 'conflict';
@@ -654,6 +736,16 @@ export function applyExistingSnapshot(
     }
     project.hash = sha256Canonical({ ...project, hash: undefined });
   }
+  const finalCandidates = parseValidatedCandidateSet(
+    appliedClients,
+    appliedProjects,
+    validatedSnapshot,
+  );
+  return {
+    snapshot: validatedSnapshot,
+    clients: finalCandidates.clients,
+    projects: finalCandidates.projects,
+  };
 }
 
 function buildPlan(state: ExtractionState): ImportPlanOperation[] {
@@ -759,15 +851,69 @@ export function normalizeP011(
   source: LoadedSource,
   snapshot: ExistingSnapshot,
   generatedAt: string,
+  reviewedResolutions?: ReviewedResolutionDocument,
 ): P011Artifacts {
-  const state = extractCandidates(source);
-  applyExistingSnapshot(state.clients, state.projects, snapshot);
+  const sourceView = createValidatedSourceView(source);
+  const initialState = extractCandidates(sourceView);
+  const snapshotApplication = applyExistingSnapshot(
+    initialState.clients,
+    initialState.projects,
+    snapshot,
+  );
+  const reconciledState: ExtractionState = {
+    ...initialState,
+    clients: snapshotApplication.clients,
+    projects: snapshotApplication.projects,
+  };
+  const inputHash = canonicalInputHash(sourceView.inputHashes);
+  const sourceProof = createSourceProvenCandidateProof(
+    source,
+    sourceView,
+    inputHash,
+    snapshotApplication.snapshot,
+    reconciledState.clients,
+    reconciledState.projects,
+  );
+  const reviewBinding = createReviewBinding(
+    sourceProof,
+    NORMALIZER_VERSION,
+    sourceView.manifestHash,
+    inputHash,
+    snapshotApplication.snapshot,
+    reconciledState.clients,
+    reconciledState.projects,
+  );
+  const appliedResolutions =
+    reviewedResolutions === undefined
+      ? undefined
+      : applyReviewedResolutions(
+          sourceProof,
+          reviewedResolutions,
+          reviewBinding,
+          snapshotApplication.snapshot,
+          reconciledState.clients,
+          reconciledState.projects,
+          reconciledState.mappings,
+        );
+  const state =
+    appliedResolutions === undefined
+      ? reconciledState
+      : {
+          ...reconciledState,
+          clients: appliedResolutions.clients,
+          projects: appliedResolutions.projects,
+          mappings: appliedResolutions.mappings,
+        };
+  const resolutionSummary = appliedResolutions?.summary;
   const operations = buildPlan(state);
   const actionCounts = countActions(operations);
   const projectCodes = state.projects.map((project) => project.project_code);
+  const hasPending = operations.some(
+    (operation) => !['insert', 'no_op'].includes(operation.action),
+  );
   const validationSummary = {
     contract: 'ltcm.p011.validation-summary.v2',
-    status: 'passed_with_pending_decisions',
+    status: hasPending ? 'passed_with_pending_decisions' : 'passed',
     client_candidates: state.clients.length,
     project_candidates: state.projects.length,
     unique_project_codes: new Set(projectCodes).size,
@@ -792,6 +938,8 @@ export function normalizeP011(
     curve_s_operations: 0,
     p012_executed: false,
     remote_access: false,
+    reviewed_resolutions_provided: resolutionSummary !== undefined,
+    reviewed_resolution_document_hash: resolutionSummary?.document_hash ?? null,
     action_counts: actionCounts,
     warnings: state.divergences.filter((entry) => entry.severity === 'warning').length,
     errors: state.divergences.filter((entry) => entry.severity === 'error').length,
@@ -803,16 +951,15 @@ export function normalizeP011(
   ) {
     throw new Error('Dry-run P011 não produziu exatamente os nove projetos aprovados.');
   }
-  const inputHash = canonicalInputHash(source.inputHashes);
   const sourceValidation = {
     contract: 'ltcm.p011.source-validation.v2',
-    p010_manifest_contract: source.manifest['artifact_contract'],
-    p009_payload_schema_version: source.manifest['payload_schema_version'],
-    p010_manifest_hash: source.manifestHash,
-    workbook_hash: source.workbookHash,
+    p010_manifest_contract: sourceView.manifest['artifact_contract'],
+    p009_payload_schema_version: sourceView.manifest['payload_schema_version'],
+    p010_manifest_hash: sourceView.manifestHash,
+    workbook_hash: sourceView.workbookHash,
     input_hash: inputHash,
-    sheet_keys: [...source.rows.keys()],
-    row_counts: Object.fromEntries([...source.rows].map(([key, rows]) => [key, rows.length])),
+    sheet_keys: [...sourceView.rows.keys()],
+    row_counts: Object.fromEntries([...sourceView.rows].map(([key, rows]) => [key, rows.length])),
     structural_errors: 0,
     approved_warning: 'RECEIPT_FORECAST_PRESENT_IN_MONTHLY_SOURCE',
     valid: true,
@@ -823,11 +970,12 @@ export function normalizeP011(
     `Status: normalização concluída localmente; aplicação remota não autorizada.`,
     '',
     `- input: \`${inputHash}\`;`,
-    `- workbook: \`${source.workbookHash}\`;`,
+    `- workbook: \`${sourceView.workbookHash}\`;`,
     `- clientes candidatos: ${state.clients.length} (identificados apenas por referências sanitizadas);`,
     `- projetos candidatos: ${state.projects.length};`,
     `- códigos únicos de projeto: ${new Set(projectCodes).size};`,
     `- ações simuladas: ${JSON.stringify(actionCounts)};`,
+    `- resoluções revisadas: ${resolutionSummary === undefined ? 'não fornecidas' : `aplicadas (${resolutionSummary.document_hash})`};`,
     `- warnings: ${validationSummary.warnings}; errors de candidato: ${validationSummary.errors};`,
     '- D02 validada em 164000; D03 preservada; D04 propagada somente como warning/evidência;',
     '- D05/D06 aplicadas; D38 preserva nulo somente com lote planejado; D39 preservada;',
@@ -844,10 +992,20 @@ export function normalizeP011(
       artifact_contract: 'ltcm.p011.normalization-manifest.v2',
       generated_at: generatedAt,
       normalizer_version: NORMALIZER_VERSION,
-      p010_manifest_hash: source.manifestHash,
-      workbook_hash: source.workbookHash,
+      p010_manifest_hash: sourceView.manifestHash,
+      workbook_hash: sourceView.workbookHash,
       input_hash: inputHash,
-      input_hashes: source.inputHashes,
+      input_hashes: sourceView.inputHashes,
+      review_binding: reviewBinding,
+      ...(resolutionSummary === undefined
+        ? {}
+        : {
+            reviewed_resolutions: {
+              contract: reviewedResolutions?.contract,
+              document_hash: resolutionSummary.document_hash,
+              binding_hash: resolutionSummary.binding_hash,
+            },
+          }),
       rules: [
         'client_nfc_trim_collapse_case_insensitive',
         'client_no_accent_punctuation_suffix_word_removal',
@@ -872,6 +1030,7 @@ export function normalizeP011(
     divergences: state.divergences,
     importPlan: { contract: 'ltcm.p011.import-plan.v2', operations },
     validationSummary,
+    ...(resolutionSummary === undefined ? {} : { resolutionSummary }),
     report,
   };
 }

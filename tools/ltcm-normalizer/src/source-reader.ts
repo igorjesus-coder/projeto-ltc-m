@@ -2,12 +2,13 @@ import { lstat, readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
 
 import { canonicalJson, sha256, sha256Canonical } from './canonical-json.js';
-import { parseExistingSnapshot } from './contracts.js';
+import { parseExistingSnapshot, parseReviewedResolutionDocument } from './contracts.js';
 import {
   EXPECTED_PROJECT_CODES,
   P010_WORKBOOK_SHA256,
   type ExistingSnapshot,
   type P010Row,
+  type ReviewedResolutionDocument,
   type SheetKey,
 } from './types.js';
 
@@ -98,6 +99,109 @@ export interface LoadedSource {
   profile: Record<string, unknown>;
   rows: Map<SheetKey, P010Row[]>;
   inputHashes: Record<string, string>;
+}
+
+interface CanonicalLoadedSourceMaterialization {
+  inputDir: string;
+  manifest: Record<string, unknown>;
+  manifestHash: string;
+  workbookHash: string;
+  validation: Record<string, unknown>;
+  profile: Record<string, unknown>;
+  rows: Array<{ sheet_key: SheetKey; rows: P010Row[] }>;
+  inputHashes: Record<string, string>;
+}
+
+interface LoadedSourceProvenanceRecord {
+  materialization: CanonicalLoadedSourceMaterialization;
+  fingerprint: string;
+}
+
+const loadedSourceProvenance = new WeakMap<object, LoadedSourceProvenanceRecord>();
+
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const nested of Object.values(value)) deepFreeze(nested);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function createCanonicalSourceMaterialization(
+  source: LoadedSource,
+): CanonicalLoadedSourceMaterialization {
+  return deepFreeze(
+    structuredClone({
+      inputDir: source.inputDir,
+      manifest: source.manifest,
+      manifestHash: source.manifestHash,
+      workbookHash: source.workbookHash,
+      validation: source.validation,
+      profile: source.profile,
+      rows: [
+        ...(Map.prototype.entries.call(source.rows) as IterableIterator<[SheetKey, P010Row[]]>),
+      ].map(([sheetKey, rows]) => ({ sheet_key: sheetKey, rows })),
+      inputHashes: source.inputHashes,
+    }),
+  );
+}
+
+function materializedSourceView(
+  materialization: CanonicalLoadedSourceMaterialization,
+): LoadedSource {
+  return {
+    inputDir: materialization.inputDir,
+    manifest: structuredClone(materialization.manifest),
+    manifestHash: materialization.manifestHash,
+    workbookHash: materialization.workbookHash,
+    validation: structuredClone(materialization.validation),
+    profile: structuredClone(materialization.profile),
+    rows: new Map(
+      materialization.rows.map(({ sheet_key: sheetKey, rows }) => [
+        sheetKey,
+        structuredClone(rows),
+      ]),
+    ),
+    inputHashes: structuredClone(materialization.inputHashes),
+  };
+}
+
+function loadedSourceFingerprint(source: CanonicalLoadedSourceMaterialization): string {
+  return sha256Canonical({
+    input_dir: source.inputDir,
+    manifest: source.manifest,
+    manifest_hash: source.manifestHash,
+    workbook_hash: source.workbookHash,
+    validation: source.validation,
+    profile: source.profile,
+    rows: [...source.rows].sort(({ sheet_key: left }, { sheet_key: right }) =>
+      left.localeCompare(right, 'en'),
+    ),
+    input_hashes: source.inputHashes,
+  });
+}
+
+function loadedSourceProvenanceRecord(source: unknown): LoadedSourceProvenanceRecord {
+  if (source === null || typeof source !== 'object') {
+    throw new Error('P011_SOURCE_PROVENANCE_REQUIRED: loaded-source.');
+  }
+  const record = loadedSourceProvenance.get(source);
+  if (record === undefined) {
+    throw new Error('P011_SOURCE_PROVENANCE_REQUIRED: loaded-source.');
+  }
+  if (loadedSourceFingerprint(record.materialization) !== record.fingerprint) {
+    throw new Error('P011_SOURCE_PROVENANCE_TAMPERED: canonical-source.');
+  }
+  return record;
+}
+
+export function assertLoadedSourceProvenance(source: unknown): asserts source is LoadedSource {
+  loadedSourceProvenanceRecord(source);
+}
+
+/** @internal Returns a disposable read view derived only from the private validated materialization. */
+export function createValidatedSourceView(source: unknown): LoadedSource {
+  return materializedSourceView(loadedSourceProvenanceRecord(source).materialization);
 }
 
 export async function loadP010Source(inputDir: string): Promise<LoadedSource> {
@@ -209,7 +313,7 @@ export async function loadP010Source(inputDir: string): Promise<LoadedSource> {
   ) {
     throw new Error('O perfil P010 não contém exatamente os nove projetos aprovados.');
   }
-  return {
+  const parsedSource: LoadedSource = {
     inputDir: resolvedInput,
     manifest,
     manifestHash: sha256(manifestFile.bytes),
@@ -219,13 +323,21 @@ export async function loadP010Source(inputDir: string): Promise<LoadedSource> {
     rows,
     inputHashes,
   };
+  const materialization = createCanonicalSourceMaterialization(parsedSource);
+  const loadedSource = materializedSourceView(materialization);
+  loadedSourceProvenance.set(loadedSource, {
+    materialization,
+    fingerprint: loadedSourceFingerprint(materialization),
+  });
+  return loadedSource;
 }
 
 export function emptySnapshot(): ExistingSnapshot {
   return {
-    contract: 'ltcm.p011.existing-snapshot.v2',
+    contract: 'ltcm.p011.existing-snapshot.v3',
     currencies: [{ code: 'BRL', active: true }],
     clients: [],
+    import_batches: [],
     projects: [],
   };
 }
@@ -239,6 +351,43 @@ export async function loadSnapshot(snapshotPath: string | undefined): Promise<Ex
   }
   const parsed = parseJson(await readFile(absolute), 'existing-snapshot');
   return parseExistingSnapshot(parsed);
+}
+
+export async function loadReviewedResolutions(
+  resolutionsPath: string | undefined,
+): Promise<ReviewedResolutionDocument | undefined> {
+  if (resolutionsPath === undefined) return undefined;
+  if (
+    /^(?:\\\\|\/\/)/u.test(resolutionsPath) ||
+    /^(?:file|https?):/iu.test(resolutionsPath) ||
+    /^[a-z][a-z0-9+.-]*:\/\//iu.test(resolutionsPath)
+  ) {
+    throw new Error('Resoluções revisadas aceitam somente arquivo local, nunca URL.');
+  }
+  if (path.extname(resolutionsPath).toLocaleLowerCase('und') !== '.json') {
+    throw new Error('Resoluções revisadas exigem arquivo local com extensão .json.');
+  }
+  const absolute = path.resolve(resolutionsPath);
+  const root = path.parse(absolute).root;
+  const parts = path.relative(root, absolute).split(path.sep).filter(Boolean);
+  let cursor = root;
+  for (const [index, part] of parts.entries()) {
+    cursor = path.join(cursor, part);
+    const metadata = await lstat(cursor);
+    if (metadata.isSymbolicLink()) {
+      throw new Error('Arquivo de resoluções revisadas não pode atravessar symlink.');
+    }
+    const final = index === parts.length - 1;
+    if (!final && !metadata.isDirectory()) {
+      throw new Error('Ancestral do arquivo de resoluções revisadas não é diretório.');
+    }
+    if (final && (!metadata.isFile() || metadata.size > MAX_FILE_BYTES)) {
+      throw new Error('Arquivo de resoluções revisadas inseguro ou acima do limite.');
+    }
+  }
+  return parseReviewedResolutionDocument(
+    parseJson(await readFile(absolute), 'reviewed-resolutions'),
+  );
 }
 
 export async function assertSafeOutput(outputDir: string, inputDir: string): Promise<string> {

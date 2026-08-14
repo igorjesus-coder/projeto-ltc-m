@@ -4,12 +4,18 @@ import { pathToFileURL } from 'node:url';
 
 import { writeP011Artifacts } from './artifact-writer.js';
 import { normalizeP011 } from './normalizer.js';
-import { assertSafeOutput, loadP010Source, loadSnapshot } from './source-reader.js';
+import {
+  assertSafeOutput,
+  loadP010Source,
+  loadReviewedResolutions,
+  loadSnapshot,
+} from './source-reader.js';
 
 interface CliOptions {
   inputDir: string;
   outputDir: string;
   existingSnapshot: string | undefined;
+  reviewedResolutions: string | undefined;
   generatedAt: string;
   strict: boolean;
 }
@@ -21,6 +27,7 @@ Opções:
   --input-dir <diretório>       Artefatos canônicos P010.
   --output-dir <diretório>      Saída gerenciada dentro de .artifacts.
   --existing-snapshot <json>    Snapshot sintético/opcional do destino.
+  --reviewed-resolutions <json> Decisões locais revisadas e vinculadas ao dry-run.
   --generated-at <ISO UTC>      Timestamp determinístico; padrão 1970-01-01T00:00:00.000Z.
   --strict                      Exige o perfil real aprovado.
   --apply                       Sempre bloqueado: REMOTE_APPLY_NOT_AUTHORIZED.
@@ -43,6 +50,7 @@ export function parseArguments(arguments_: string[]): CliOptions | 'help' {
   let inputDir: string | undefined;
   let outputDir: string | undefined;
   let existingSnapshot: string | undefined;
+  let reviewedResolutions: string | undefined;
   let generatedAt = '1970-01-01T00:00:00.000Z';
   let strict = false;
   for (let index = 0; index < arguments_.length; index += 1) {
@@ -54,9 +62,13 @@ export function parseArguments(arguments_: string[]): CliOptions | 'help' {
       strict = true;
       continue;
     }
-    const option = ['--input-dir', '--output-dir', '--existing-snapshot', '--generated-at'].find(
-      (candidate) => argument === candidate || argument.startsWith(`${candidate}=`),
-    );
+    const option = [
+      '--input-dir',
+      '--output-dir',
+      '--existing-snapshot',
+      '--reviewed-resolutions',
+      '--generated-at',
+    ].find((candidate) => argument === candidate || argument.startsWith(`${candidate}=`));
     if (option === undefined) throw new Error(`Opção desconhecida: ${argument}.`);
     const [value, consumed] = optionValue(arguments_, index, option);
     index = consumed;
@@ -70,6 +82,13 @@ export function parseArguments(arguments_: string[]): CliOptions | 'help' {
       if (existingSnapshot !== undefined)
         throw new Error('--existing-snapshot informado mais de uma vez.');
       existingSnapshot = value;
+    } else if (option === '--reviewed-resolutions') {
+      if (reviewedResolutions !== undefined)
+        throw new Error('--reviewed-resolutions informado mais de uma vez.');
+      if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(value)) {
+        throw new Error('--reviewed-resolutions aceita somente arquivo local, nunca URL.');
+      }
+      reviewedResolutions = value;
     } else {
       generatedAt = value;
     }
@@ -85,6 +104,8 @@ export function parseArguments(arguments_: string[]): CliOptions | 'help' {
     inputDir: path.resolve(inputDir),
     outputDir: path.resolve(outputDir),
     existingSnapshot: existingSnapshot === undefined ? undefined : path.resolve(existingSnapshot),
+    reviewedResolutions:
+      reviewedResolutions === undefined ? undefined : path.resolve(reviewedResolutions),
     generatedAt,
     strict,
   };
@@ -107,7 +128,8 @@ async function main(): Promise<void> {
     const source = await loadP010Source(options.inputDir);
     const outputDir = await assertSafeOutput(options.outputDir, source.inputDir);
     const snapshot = await loadSnapshot(options.existingSnapshot);
-    const artifacts = normalizeP011(source, snapshot, options.generatedAt);
+    const reviewedResolutions = await loadReviewedResolutions(options.reviewedResolutions);
+    const artifacts = normalizeP011(source, snapshot, options.generatedAt, reviewedResolutions);
     await writeP011Artifacts(outputDir, artifacts);
     const summary = artifacts.validationSummary;
     const actions = summary['action_counts'] as Record<string, number>;

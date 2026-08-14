@@ -58,6 +58,9 @@ export async function writeP011Artifacts(
     ['validation-summary.json', prettyCanonicalJson(artifacts.validationSummary)],
     ['report.md', artifacts.report],
   ]);
+  if (artifacts.resolutionSummary !== undefined) {
+    files.set('resolution-summary.json', prettyCanonicalJson(artifacts.resolutionSummary));
+  }
   const outputHashes = Object.fromEntries(
     [...files.entries()].map(([relative, content]) => [
       relative,
