@@ -16,6 +16,22 @@ import {
   plannedLegacyImportBatchReference,
 } from '../src/contracts.js';
 import {
+  assertItemCandidateId,
+  assertSourceLineKey,
+  createItemCandidateId,
+  createSourceLineKey,
+  deriveTotalAmount,
+  emptyP012ExistingItemsSnapshot,
+  normalizeOptionalItemText,
+  normalizeUnit,
+  parseCanonicalCurrency,
+  parseP012ExistingItemsSnapshot,
+  parseSourceItemNumber,
+  parseQuantity,
+  parseUnitPrice,
+} from '../src/item-contracts.js';
+import { createValidatedP012CandidateView, normalizeP012Items } from '../src/item-normalizer.js';
+import {
   applyExistingSnapshot,
   clientMatchKey,
   normalizeClientName,
@@ -46,7 +62,10 @@ import {
   P010_WORKBOOK_SHA256,
   type ClientCandidate,
   type ExistingSnapshot,
+  type ItemCandidate,
   type MappingEvidence,
+  type P012ExistingItemsSnapshot,
+  type P012ItemCandidateSet,
   type P010Row,
   type ProjectCandidate,
   type RawCell,
@@ -155,15 +174,31 @@ function fixtureRows(): Map<SheetKey, P010Row[]> {
     stagingRow('monthly_revenue', 'Prev. Receita Mensal', index + 1, []),
   );
   monthly[2] = stagingRow('monthly_revenue', 'Prev. Receita Mensal', 3, [
+    rawCell('A', 3, 'Item'),
     rawCell('B', 3, 'Projeto LTC-M'),
     rawCell('C', 3, 'Cliente'),
+    rawCell('D', 3, 'Código'),
+    rawCell('E', 3, 'Descrição'),
+    rawCell('F', 3, 'Quantidade'),
+    rawCell('G', 3, 'Unidade'),
     rawCell('H', 3, 'Moeda'),
+    rawCell('I', 3, 'Preço unitário'),
+    rawCell('J', 3, 'Total'),
   ]);
   for (const [row, code] of rowAssignments) {
+    const sourceItemNumber = row - 3;
+    const unit = ['UN', 'Serviço', 'Unidade e Serviço'][sourceItemNumber % 3] ?? 'UN';
+    const unitPrice = row === 51 ? 164000 : 0;
     monthly[row - 1] = stagingRow('monthly_revenue', 'Prev. Receita Mensal', row, [
+      rawCell('A', row, sourceItemNumber),
       rawCell('B', row, `${row === 48 ? ' ' : ''}${code}`),
       rawCell('C', row, clientsByCode[code] ?? 'Cliente'),
+      rawCell('D', row, row === 48 ? null : `ITEM-${sourceItemNumber % 5}`),
+      rawCell('E', row, row === 48 ? null : `Item sintético ${sourceItemNumber}`),
+      rawCell('F', row, 1),
+      rawCell('G', row, unit),
       rawCell('H', row, 'BRL'),
+      rawCell('I', row, unitPrice),
       rawCell('J', row, row === 45 ? 369749.1735 : row === 51 ? 164000 : 0),
     ]);
   }
@@ -4164,6 +4199,818 @@ test('resoluções mantêm determinismo de objetos e artefatos byte a byte', asy
     } finally {
       await rm(parent, { recursive: true, force: true });
     }
+  });
+});
+
+function resolvedBetaArtifacts(
+  source: Awaited<ReturnType<typeof loadP010Source>>,
+  snapshot: ExistingSnapshot = emptySnapshot(),
+) {
+  const base = normalizeP011(source, snapshot, '1970-01-01T00:00:00.000Z');
+  const project = base.projects.find((candidate) => candidate.project_code === '2025-08-14656');
+  assert.ok(project);
+  return normalizeP011(
+    source,
+    snapshot,
+    '1970-01-01T00:00:00.000Z',
+    reviewedDocument(base, [
+      {
+        type: 'project',
+        candidate_id: project.candidate_id,
+        candidate_hash: project.hash,
+        approved_name: 'Projeto sintético P012',
+        approved_status: 'active',
+      },
+    ]),
+  );
+}
+
+function p012Snapshot(
+  project: ProjectCandidate,
+  projectId: string,
+  items: P012ExistingItemsSnapshot['items'] = [],
+): P012ExistingItemsSnapshot {
+  assert.ok(project.currency);
+  return {
+    ...emptyP012ExistingItemsSnapshot(),
+    projects: [
+      {
+        id: projectId,
+        project_candidate_id: project.candidate_id,
+        project_code: project.project_code,
+        currency_code: project.currency,
+        active: true,
+        deleted_at: null,
+      },
+    ],
+    items,
+  };
+}
+
+function snapshotItem(
+  candidate: ItemCandidate,
+  projectId: string,
+  itemId = '00000000-0000-4000-8000-000000000091',
+): P012ExistingItemsSnapshot['items'][number] {
+  assert.ok(
+    candidate.quantity &&
+      candidate.unit_code &&
+      candidate.currency_code &&
+      candidate.unit_price &&
+      candidate.total_amount,
+  );
+  return {
+    id: itemId,
+    project_id: projectId,
+    source_line_key: candidate.source_line_key,
+    line_number: candidate.line_number,
+    item_code: candidate.item_code,
+    description: candidate.description,
+    quantity: candidate.quantity,
+    unit_code: candidate.unit_code,
+    currency_code: candidate.currency_code,
+    unit_price: candidate.unit_price,
+    total_amount: candidate.total_amount,
+    active: true,
+    deleted_at: null,
+    row_version: 1,
+  };
+}
+
+function rehashP012CandidateSet(candidateSet: P012ItemCandidateSet): void {
+  for (const candidate of candidateSet.candidates) {
+    candidate.candidate_hash = sha256Canonical({ ...candidate, candidate_hash: undefined });
+  }
+  candidateSet.candidate_set_hash = sha256Canonical(
+    candidateSet.candidates.map(({ candidate_id, candidate_hash }) => ({
+      candidate_id,
+      candidate_hash,
+    })),
+  );
+}
+
+test('P012 source_line_key, candidate ID, decimals e aliases são exatos e determinísticos', () => {
+  const key = createSourceLineKey('2025-08-14656', 46);
+  assert.match(key, /^p012-item-v1:[0-9a-f]{64}$/u);
+  assert.equal(key.length, 77);
+  assert.equal(key, createSourceLineKey('2025-08-14656', 46));
+  assert.notEqual(key, createSourceLineKey('2025-08-14656', 47));
+  assert.notEqual(key, createSourceLineKey('2024-10-12524', 46));
+  assert.throws(
+    () => assertSourceLineKey(key.toUpperCase(), '2025-08-14656', 46),
+    /P012_SOURCE_LINE_KEY_INVALID/u,
+  );
+  const candidateId = createItemCandidateId(createProjectCandidateId('2025-08-14656'), key);
+  assert.match(candidateId, /^item-[0-9a-f]{24}$/u);
+  assert.equal(
+    assertItemCandidateId(candidateId, createProjectCandidateId('2025-08-14656'), key),
+    candidateId,
+  );
+  assert.throws(
+    () =>
+      assertItemCandidateId(
+        candidateId.toUpperCase(),
+        createProjectCandidateId('2025-08-14656'),
+        key,
+      ),
+    /P012_CANDIDATE_ID_INVALID/u,
+  );
+  const reidentifiedKey = createSourceLineKey('2025-08-14656', 47);
+  assert.throws(
+    () =>
+      assertItemCandidateId(
+        candidateId,
+        createProjectCandidateId('2025-08-14656'),
+        reidentifiedKey,
+      ),
+    /P012_CANDIDATE_ID_INVALID/u,
+  );
+
+  for (const [input, canonical] of [
+    ['1', '1.0000'],
+    ['1.0', '1.0000'],
+    ['1.0000', '1.0000'],
+    ['0.0001', '0.0001'],
+    ['9999999999999999.9999', '9999999999999999.9999'],
+  ]) {
+    assert.equal(parseQuantity(input).canonical, canonical);
+  }
+  for (const input of ['0', '-1', '-0.0001', '0.00001', '1e3', 'NaN', 'Infinity', '1,2', '01']) {
+    assert.throws(() => parseQuantity(input), /P012_DECIMAL_INVALID/u);
+  }
+  for (const [input, canonical] of [
+    ['0', '0.0000'],
+    ['0.0000', '0.0000'],
+    ['1', '1.0000'],
+    ['1.2345', '1.2345'],
+    ['9999999999999999.9999', '9999999999999999.9999'],
+  ]) {
+    assert.equal(parseUnitPrice(input).canonical, canonical);
+  }
+  for (const input of ['-1', '1.23456', '1e3', 'NaN', 'Infinity', '1,2']) {
+    assert.throws(() => parseUnitPrice(input), /P012_DECIMAL_INVALID/u);
+  }
+  assert.equal(deriveTotalAmount(parseQuantity('1'), parseUnitPrice('1.2344')), '1.23');
+  assert.equal(deriveTotalAmount(parseQuantity('1'), parseUnitPrice('1.2350')), '1.24');
+  assert.equal(deriveTotalAmount(parseQuantity('1'), parseUnitPrice('1.2351')), '1.24');
+  assert.equal(deriveTotalAmount(parseQuantity('1'), parseUnitPrice('9.9999')), '10.00');
+  assert.throws(
+    () =>
+      deriveTotalAmount(
+        parseQuantity('9999999999999999.9999'),
+        parseUnitPrice('9999999999999999.9999'),
+      ),
+    /overflow/u,
+  );
+
+  for (const [input, expected] of [
+    ['UN', 'UN'],
+    ['Unidade', 'UN'],
+    [' unidade ', 'UN'],
+    ['SERV', 'SERV'],
+    ['Serviço', 'SERV'],
+    ['SERVIÇO'.normalize('NFC'), 'SERV'],
+    ['US', 'US'],
+    ['Unidade e Serviço', 'US'],
+  ]) {
+    assert.equal(normalizeUnit(input), expected);
+  }
+  for (const input of ['UND', 'Servico', 'unit', 'Unidade/Serviço']) {
+    assert.throws(() => normalizeUnit(input), /P012_UNIT_UNRESOLVED/u);
+  }
+});
+
+test('P012 D05 restringe emissor P011 e reemissao por clones hashes e replay', async () => {
+  const provenanceModule = await import('../src/p011-artifacts-provenance.js');
+  assert.deepEqual(Object.keys(provenanceModule), ['createValidatedP011ProjectView']);
+  const itemModule = await import('../src/item-normalizer.js');
+  assert.equal(Object.hasOwn(itemModule, 'assertP012ItemCandidateIntegrity'), false);
+
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const artifacts = resolvedBetaArtifacts(source);
+    const legitimate = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+    assert.equal(createValidatedP012CandidateView(source, artifacts, legitimate).length, 48);
+
+    const forgedArtifacts: unknown[] = [
+      { ...artifacts },
+      Object.assign({}, artifacts),
+      JSON.parse(JSON.stringify(artifacts)),
+      structuredClone(artifacts),
+      {
+        manifest: structuredClone(artifacts.manifest),
+        projects: structuredClone(artifacts.projects),
+      },
+      {},
+    ];
+    for (const forged of forgedArtifacts) {
+      const before = canonicalJson(forged);
+      assert.throws(
+        () =>
+          normalizeP012Items(source, forged as typeof artifacts, emptyP012ExistingItemsSnapshot()),
+        /P012_PROJECT_PROVENANCE_REQUIRED/u,
+      );
+      assert.equal(canonicalJson(forged), before);
+    }
+
+    const unresolvedArtifacts = normalizeP011(source, emptySnapshot(), '1970-01-01T00:00:00.000Z');
+    for (const blockedAction of ['pending_decision', 'rejected'] as const) {
+      const forged = structuredClone(unresolvedArtifacts);
+      const project = forged.projects.find(({ action }) => action === blockedAction);
+      assert.ok(project);
+      project.action = 'insert';
+      project.hash = sha256Canonical({ ...project, hash: undefined });
+      const binding = forged.manifest['review_binding'] as Record<string, unknown>;
+      binding['candidate_set_hash'] = sha256Canonical({
+        clients: forged.clients,
+        projects: forged.projects,
+      });
+      const before = canonicalJson(forged);
+      assert.throws(
+        () => normalizeP012Items(source, forged, emptyP012ExistingItemsSnapshot()),
+        /P012_PROJECT_PROVENANCE_REQUIRED/u,
+      );
+      assert.equal(canonicalJson(forged), before);
+    }
+
+    const alternateSnapshot = emptySnapshot();
+    alternateSnapshot.currencies = [...alternateSnapshot.currencies, { code: 'USD', active: true }];
+    const alternateArtifacts = normalizeP011(source, alternateSnapshot, '1970-01-01T00:00:00.000Z');
+    const snapshotReplay = structuredClone(artifacts);
+    snapshotReplay.manifest['review_binding'] = structuredClone(
+      alternateArtifacts.manifest['review_binding'],
+    );
+    assert.throws(
+      () => normalizeP012Items(source, snapshotReplay, emptyP012ExistingItemsSnapshot()),
+      /P012_PROJECT_PROVENANCE_REQUIRED/u,
+    );
+    const bindingReplay = structuredClone(artifacts);
+    const replayedBinding = bindingReplay.manifest['review_binding'] as Record<string, unknown>;
+    replayedBinding['normalization_manifest_hash'] = 'f'.repeat(64);
+    assert.throws(
+      () => normalizeP012Items(source, bindingReplay, emptyP012ExistingItemsSnapshot()),
+      /P012_PROJECT_PROVENANCE_REQUIRED/u,
+    );
+  });
+
+  await withFixture(async (rootA) => {
+    await withFixture(async (rootB) => {
+      const sourceA = await loadP010Source(rootA);
+      const sourceB = await loadP010Source(rootB);
+      const artifactsA = resolvedBetaArtifacts(sourceA);
+      assert.throws(
+        () => normalizeP012Items(sourceB, artifactsA, emptyP012ExistingItemsSnapshot()),
+        /P012_PROJECT_PROVENANCE_REQUIRED/u,
+      );
+    });
+  });
+});
+
+test('P012 D05 fecha diagnostics e rederiva action status antes da view', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const artifacts = resolvedBetaArtifacts(source);
+    const mutateInsert = (mutation: (candidate: ItemCandidate) => void, expected: RegExp): void => {
+      const candidateSet = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+      const candidate = candidateSet.candidates.find(({ action }) => action === 'insert');
+      assert.ok(candidate);
+      mutation(candidate);
+      rehashP012CandidateSet(candidateSet);
+      const before = canonicalJson(candidateSet);
+      assert.throws(
+        () => createValidatedP012CandidateView(source, artifacts, candidateSet),
+        expected,
+      );
+      assert.equal(canonicalJson(candidateSet), before);
+    };
+
+    mutateInsert((candidate) => {
+      (candidate.diagnostic_codes as string[]).push('P012_INVENTED_DIAGNOSTIC');
+    }, /P012_CANDIDATE_SCHEMA_INVALID/u);
+    mutateInsert((candidate) => {
+      candidate.action = 'rejected';
+      candidate.status = 'rejected';
+      candidate.diagnostic_codes = [];
+    }, /P012_CANDIDATE_SCHEMA_INVALID: state-causality/u);
+    mutateInsert((candidate) => {
+      candidate.action = 'pending_decision';
+      candidate.status = 'requires_review';
+      candidate.diagnostic_codes = [];
+    }, /P012_CANDIDATE_SCHEMA_INVALID: state-causality/u);
+    mutateInsert((candidate) => {
+      candidate.action = 'conflict';
+      candidate.status = 'blocked';
+      candidate.diagnostic_codes = [];
+    }, /P012_CANDIDATE_SCHEMA_INVALID: state-causality/u);
+    mutateInsert((candidate) => {
+      candidate.diagnostic_codes = ['P012_UNIT_CATALOG_UNAVAILABLE'];
+    }, /P012_CANDIDATE_SCHEMA_INVALID: state-causality/u);
+    mutateInsert((candidate) => {
+      candidate.action = 'pending_decision';
+      candidate.status = 'requires_review';
+      candidate.diagnostic_codes = ['P012_UNIT_CATALOG_UNAVAILABLE'];
+    }, /P012_SOURCE_PROVENANCE_MISMATCH: contextual-declaration/u);
+    mutateInsert((candidate) => {
+      candidate.action = 'rejected';
+      candidate.status = 'rejected';
+      candidate.diagnostic_codes = ['P012_TEXT_INVALID'];
+    }, /P012_SOURCE_PROVENANCE_MISMATCH: contextual-declaration/u);
+    mutateInsert((candidate) => {
+      candidate.action = 'no_op';
+      candidate.status = 'unchanged';
+      candidate.target_id = null;
+    }, /P012_CANDIDATE_SCHEMA_INVALID/u);
+    mutateInsert((candidate) => {
+      candidate.status = 'blocked';
+    }, /P012_CANDIDATE_SCHEMA_INVALID/u);
+
+    const staleHash = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+    const staleCandidate = staleHash.candidates.find(({ action }) => action === 'insert');
+    assert.ok(staleCandidate);
+    staleCandidate.action = 'pending_decision';
+    staleCandidate.status = 'requires_review';
+    staleCandidate.diagnostic_codes = ['P012_UNIT_CATALOG_UNAVAILABLE'];
+    assert.throws(
+      () => createValidatedP012CandidateView(source, artifacts, staleHash),
+      /P012_SOURCE_PROVENANCE_MISMATCH: contextual-declaration/u,
+    );
+
+    const legitimate = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+    const view = createValidatedP012CandidateView(source, artifacts, legitimate);
+    assert.ok(view.some(({ action }) => action === 'insert'));
+    assert.ok(view.some(({ action }) => action === 'pending_decision'));
+    assert.ok(view.some(({ action }) => action === 'rejected'));
+  });
+});
+
+test('P012 D05 rejeita Cc Cf antes de trim e permite somente espaco ASCII periferico', async () => {
+  for (const value of [
+    '\tUN\t',
+    '\nUN\n',
+    '\rUN\r',
+    'U\tN',
+    'U\nN',
+    'U\rN',
+    'UN\u0000',
+    'UN\u200B',
+    'UN\u200C',
+    'UN\u200D',
+    'UN\u2060',
+    '\u202EUN',
+  ]) {
+    assert.throws(() => normalizeUnit(value), /P012_UNIT_UNRESOLVED/u);
+  }
+  for (const value of [
+    '\tABC\t',
+    '\nABC\n',
+    '\rABC\r',
+    'A\tB',
+    'A\nB',
+    'A\rB',
+    'ABC\u0000',
+    'ABC\u200B',
+    'ABC\u200C',
+    'ABC\u200D',
+    'ABC\u2060',
+    '\u202EABC',
+  ]) {
+    assert.throws(() => normalizeOptionalItemText(value, 'description'), /P012_TEXT_INVALID/u);
+  }
+  for (const value of ['\tBRL', 'BRL\t', 'B\rRL', 'BRL\u200B', '\u202EBRL']) {
+    assert.throws(() => parseCanonicalCurrency(value), /P012_CURRENCY_UNRESOLVED/u);
+  }
+  for (const value of ['\t1', '1\t', '1\n2', '1\u200B', '\u202E1']) {
+    assert.throws(() => parseSourceItemNumber(value), /P012_SOURCE_ITEM_NUMBER_INVALID/u);
+  }
+  for (const projectCode of [
+    '\t2025-08-14656',
+    '2025-08-14656\r',
+    '2025-08-\n14656',
+    '2025-08-14656\u200B',
+    '\u202E2025-08-14656',
+    'arbitrary-project',
+  ]) {
+    assert.throws(() => createSourceLineKey(projectCode, 1), /P012_SOURCE_LINE_KEY_INVALID/u);
+  }
+  assert.equal(normalizeUnit(' UN '), 'UN');
+  assert.equal(normalizeOptionalItemText(' ABC ', 'description'), 'ABC');
+  assert.equal(normalizeUnit('Servic\u0327o'), 'SERV');
+  assert.equal(normalizeOptionalItemText('Portugu\u00eas', 'description'), 'Portugu\u00eas');
+  assert.equal(normalizeOptionalItemText('Portugue\u0302s', 'description'), 'Portugu\u00eas');
+  assert.equal(
+    normalizeOptionalItemText('\u03b5\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac', 'description'),
+    '\u03b5\u03bb\u03bb\u03b7\u03bd\u03b9\u03ba\u03ac',
+  );
+  assert.equal(normalizeOptionalItemText('\u4e2d\u6587', 'description'), '\u4e2d\u6587');
+
+  await withFixture(
+    async (root) => {
+      const source = await loadP010Source(root);
+      const artifacts = resolvedBetaArtifacts(source);
+      const result = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+      const rejected = result.candidates.find(
+        ({ source_item_number }) => source_item_number === 46,
+      );
+      assert.equal(rejected?.action, 'rejected');
+      assert.ok(rejected?.diagnostic_codes.includes('P012_TEXT_INVALID'));
+      assert.equal(createValidatedP012CandidateView(source, artifacts, result).length, 48);
+    },
+    (rows) => {
+      const row = rows.get('monthly_revenue')?.[48];
+      const itemCode = row?.raw_payload.cells.find(({ column_letter }) => column_letter === 'D');
+      assert.ok(itemCode);
+      itemCode.value = '\tITEM-46\t';
+    },
+  );
+});
+
+test('P012 deriva 48 tentativas da autoridade P010 e fecha provenance P011/P012', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const artifacts = resolvedBetaArtifacts(source);
+    const publicRows = source.rows;
+    const publicMonthly = Map.prototype.get.call(publicRows, 'monthly_revenue') as P010Row[];
+    const publicQuantity = publicMonthly[3]?.raw_payload.cells.find(
+      ({ column_letter }) => column_letter === 'F',
+    );
+    assert.ok(publicQuantity);
+    publicQuantity.value = 999;
+    publicQuantity.round_trip_text = '999';
+    (publicRows as unknown as { get: () => P010Row[] }).get = () => [];
+    (publicRows as unknown as { entries: () => IterableIterator<[SheetKey, P010Row[]]> }).entries =
+      function* () {
+        yield ['monthly_revenue', []];
+      };
+
+    const result = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+    assert.equal(result.summary.attempted_rows, 48);
+    assert.equal(result.candidates.length, 48);
+    assert.equal(new Set(result.candidates.map(({ source_line_key }) => source_line_key)).size, 48);
+    assert.ok(new Set(result.candidates.map(({ item_code }) => item_code)).size < 48);
+    assert.equal(
+      result.candidates.find(({ source_item_number }) => source_item_number === 1)?.quantity,
+      '1.0000',
+    );
+    const incomplete = result.candidates.find(
+      ({ source_item_number }) => source_item_number === 45,
+    );
+    assert.equal(incomplete?.item_code, null);
+    assert.equal(incomplete?.description, null);
+    assert.equal(createValidatedP012CandidateView(source, artifacts, result).length, 48);
+
+    for (const forgedSource of [
+      { ...source },
+      Object.assign({}, source),
+      JSON.parse(JSON.stringify(source)) as unknown,
+      { manifest: source.manifest, rows: source.rows },
+    ]) {
+      assert.throws(
+        () =>
+          normalizeP012Items(
+            forgedSource as typeof source,
+            artifacts,
+            emptyP012ExistingItemsSnapshot(),
+          ),
+        /P011_SOURCE_PROVENANCE_REQUIRED/u,
+      );
+    }
+    for (const forgedArtifacts of [
+      { ...artifacts },
+      Object.assign({}, artifacts),
+      JSON.parse(JSON.stringify(artifacts)) as unknown,
+      {},
+    ]) {
+      assert.throws(
+        () =>
+          normalizeP012Items(
+            source,
+            forgedArtifacts as typeof artifacts,
+            emptyP012ExistingItemsSnapshot(),
+          ),
+        /P012_PROJECT_PROVENANCE_REQUIRED/u,
+      );
+    }
+    const rebuilt = structuredClone(result);
+    assert.throws(
+      () => createValidatedP012CandidateView(source, artifacts, rebuilt),
+      /P012_SOURCE_PROVENANCE_REQUIRED/u,
+    );
+    const withExtra = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+    Object.assign(withExtra.candidates[0]!, { caller_field: true });
+    assert.throws(
+      () => createValidatedP012CandidateView(source, artifacts, withExtra),
+      /P012_CANDIDATE_SCHEMA_INVALID/u,
+    );
+    const withNestedExtra = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+    Object.assign(withNestedExtra.candidates[0]!.project, { caller_field: true });
+    assert.throws(
+      () => createValidatedP012CandidateView(source, artifacts, withNestedExtra),
+      /P012_CANDIDATE_SCHEMA_INVALID/u,
+    );
+
+    const authentic = result.candidates[0];
+    assert.ok(authentic?.origins[0]);
+    authentic.origins[0].row_hash = 'f'.repeat(64);
+    authentic.candidate_hash = sha256Canonical({ ...authentic, candidate_hash: undefined });
+    result.candidate_set_hash = sha256Canonical(
+      result.candidates.map(({ candidate_id, candidate_hash }) => ({
+        candidate_id,
+        candidate_hash,
+      })),
+    );
+    assert.throws(
+      () => createValidatedP012CandidateView(source, artifacts, result),
+      /P012_(?:SOURCE_PROVENANCE_MISMATCH|CANDIDATE_SCHEMA_INVALID)/u,
+    );
+  });
+});
+
+test('P012 rejeita duplicidade estrutural e erros factuais sem reparar a fonte', async () => {
+  await withFixture(
+    async (root) => {
+      const source = await loadP010Source(root);
+      const artifacts = resolvedBetaArtifacts(source);
+      assert.throws(
+        () => normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot()),
+        /P012_SOURCE_LINE_DUPLICATE/u,
+      );
+    },
+    (rows) => {
+      const monthly = rows.get('monthly_revenue') ?? [];
+      const first = monthly[3]?.raw_payload.cells.find(
+        ({ column_letter }) => column_letter === 'A',
+      );
+      const second = monthly[4]?.raw_payload.cells.find(
+        ({ column_letter }) => column_letter === 'A',
+      );
+      assert.ok(first && second);
+      second.value = first.value;
+      if (first.round_trip_text === undefined) delete second.round_trip_text;
+      else second.round_trip_text = first.round_trip_text;
+    },
+  );
+
+  for (const [column, value, roundTrip, expected, rowIndex, itemNumber] of [
+    ['F', 0.00001, '0.00001', 'P012_DECIMAL_INVALID', 48, 46],
+    ['I', 1000, '1e3', 'P012_DECIMAL_INVALID', 48, 46],
+    ['H', 'USD', undefined, 'P012_CURRENCY_UNRESOLVED', 3, 1],
+    ['G', 'UND', undefined, 'P012_UNIT_UNRESOLVED', 48, 46],
+  ] as const) {
+    await withFixture(
+      async (root) => {
+        const source = await loadP010Source(root);
+        const artifacts = resolvedBetaArtifacts(source);
+        const result = normalizeP012Items(source, artifacts, emptyP012ExistingItemsSnapshot());
+        const candidate = result.candidates.find(
+          ({ source_item_number }) => source_item_number === itemNumber,
+        );
+        assert.equal(candidate?.action, 'rejected');
+        assert.equal(createValidatedP012CandidateView(source, artifacts, result).length, 48);
+        assert.ok(candidate?.diagnostic_codes.includes(expected));
+      },
+      (rows) => {
+        const target = rows
+          .get('monthly_revenue')
+          ?.[rowIndex]?.raw_payload.cells.find(({ column_letter }) => column_letter === column);
+        assert.ok(target);
+        target.value = value;
+        if (roundTrip === undefined) delete target.round_trip_text;
+        else target.round_trip_text = roundTrip;
+      },
+    );
+  }
+});
+
+test('P012 snapshot fechado reconcilia insert, no_op e conflict sem update/delete', async () => {
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const insertedArtifacts = resolvedBetaArtifacts(source);
+    const insertedProject = insertedArtifacts.projects.find(
+      ({ project_code }) => project_code === '2025-08-14656',
+    );
+    const insertedClient = insertedArtifacts.clients.find(
+      ({ candidate_id }) => candidate_id === insertedProject?.client_candidate_id,
+    );
+    assert.ok(
+      insertedProject &&
+        insertedClient &&
+        insertedProject.classification &&
+        insertedProject.currency &&
+        insertedProject.contract_value,
+    );
+    assert.equal(insertedProject.action, 'insert');
+    assert.equal(insertedProject.legacy_import_batch_reference?.kind, 'planned');
+    if (insertedProject.legacy_import_batch_reference?.kind !== 'planned') {
+      throw new Error('Fixture P012 sem lote planejado.');
+    }
+    const clientId = '00000000-0000-4000-8000-000000000081';
+    const projectId = '00000000-0000-4000-8000-000000000082';
+    const batchId = '00000000-0000-4000-8000-000000000083';
+    const p011Snapshot: ExistingSnapshot = {
+      ...emptySnapshot(),
+      clients: [
+        {
+          id: clientId,
+          legal_name: insertedClient.normalized_name,
+          display_name: insertedClient.normalized_name,
+          tax_id: null,
+          active: true,
+          deleted_at: null,
+          row_version: 1,
+        },
+      ],
+      import_batches: [
+        {
+          id: batchId,
+          idempotency_key: insertedProject.legacy_import_batch_reference.idempotency_key,
+          source_hash: insertedProject.legacy_import_batch_reference.source_hash,
+        },
+      ],
+      projects: [
+        {
+          id: projectId,
+          project_code: insertedProject.project_code,
+          project_name: 'Projeto sintético P012',
+          client_id: clientId,
+          classification: insertedProject.classification,
+          status: 'active',
+          base_currency: insertedProject.currency,
+          contract_value: insertedProject.contract_value,
+          data_reference_date: null,
+          legacy_import_batch_id: batchId,
+          deleted_at: null,
+          version: 1,
+        },
+      ],
+    };
+    const persistedArtifacts = resolvedBetaArtifacts(source, p011Snapshot);
+    const persistedProject = persistedArtifacts.projects.find(
+      ({ project_code }) => project_code === insertedProject.project_code,
+    );
+    assert.ok(persistedProject);
+    assert.equal(persistedProject.action, 'no_op');
+    const emptyItemSnapshot = p012Snapshot(persistedProject, projectId);
+    const first = normalizeP012Items(source, persistedArtifacts, emptyItemSnapshot);
+    const insert = first.candidates.find(({ source_item_number }) => source_item_number === 46);
+    assert.ok(insert);
+    assert.equal(insert.action, 'insert');
+    assert.equal(createValidatedP012CandidateView(source, persistedArtifacts, first).length, 48);
+
+    const existing = snapshotItem(insert, projectId);
+    const identicalSnapshot = p012Snapshot(persistedProject, projectId, [existing]);
+    const snapshotBefore = canonicalJson(identicalSnapshot);
+    const identical = normalizeP012Items(source, persistedArtifacts, identicalSnapshot);
+    assert.equal(canonicalJson(identicalSnapshot), snapshotBefore);
+    const noOp = identical.candidates.find(
+      ({ candidate_id }) => candidate_id === insert.candidate_id,
+    );
+    assert.equal(noOp?.action, 'no_op');
+    assert.equal(
+      createValidatedP012CandidateView(source, persistedArtifacts, identical).length,
+      48,
+    );
+    assert.equal(noOp?.target_id, existing.id);
+
+    const conflictSnapshot = p012Snapshot(persistedProject, projectId, [
+      { ...existing, description: `${existing.description ?? ''} divergente` },
+    ]);
+    const conflicted = normalizeP012Items(source, persistedArtifacts, conflictSnapshot);
+    assert.equal(
+      conflicted.candidates.find(({ candidate_id }) => candidate_id === insert.candidate_id)
+        ?.action,
+      'conflict',
+    );
+    assert.equal(
+      createValidatedP012CandidateView(source, persistedArtifacts, conflicted).length,
+      48,
+    );
+
+    for (const invalid of [
+      { ...identicalSnapshot, unexpected: true },
+      {
+        ...identicalSnapshot,
+        items: [existing, { ...existing, id: '00000000-0000-4000-8000-000000000092' }],
+      },
+      {
+        ...identicalSnapshot,
+        projects: [
+          {
+            ...identicalSnapshot.projects[0]!,
+            id: 'AAAAAAAA-0000-4000-8000-000000000082',
+          },
+        ],
+        items: [{ ...existing, project_id: 'AAAAAAAA-0000-4000-8000-000000000082' }],
+      },
+      { ...identicalSnapshot, items: [{ ...existing, line_number: existing.line_number + 1 }] },
+      { ...identicalSnapshot, items: [{ ...existing, total_amount: '1.00' }] },
+      {
+        ...identicalSnapshot,
+        currencies: [...identicalSnapshot.currencies, { code: 'USD', active: true }],
+        items: [{ ...existing, currency_code: 'USD' }],
+      },
+      {
+        ...identicalSnapshot,
+        items: [
+          {
+            ...existing,
+            source_line_key: createSourceLineKey(persistedProject.project_code, 47),
+          },
+          {
+            ...existing,
+            id: '00000000-0000-4000-8000-000000000092',
+            line_number: 47,
+          },
+        ],
+      },
+    ]) {
+      assert.throws(() => parseP012ExistingItemsSnapshot(invalid), /P012_SNAPSHOT_INVALID/u);
+    }
+
+    for (const divergent of [
+      { ...existing, quantity: '2.0000' },
+      { ...existing, unit_code: 'US' as const },
+      { ...existing, unit_price: '1.0000', total_amount: '1.00' },
+      { ...existing, active: false },
+      { ...existing, deleted_at: '2026-08-14T00:00:00.000Z' },
+    ]) {
+      const result = normalizeP012Items(
+        source,
+        persistedArtifacts,
+        p012Snapshot(persistedProject, projectId, [divergent]),
+      );
+      assert.equal(
+        result.candidates.find(({ candidate_id }) => candidate_id === insert.candidate_id)?.action,
+        'conflict',
+      );
+    }
+  });
+});
+
+test('P012 ignora fatos P013 na identidade e bloqueia catálogo indisponível', async () => {
+  const run = async (p013Value: number) =>
+    withFixture(
+      async (root) => {
+        const source = await loadP010Source(root);
+        const artifacts = resolvedBetaArtifacts(source);
+        return normalizeP012Items(
+          source,
+          artifacts,
+          emptyP012ExistingItemsSnapshot(),
+        ).candidates.find(({ source_item_number }) => source_item_number === 46);
+      },
+      (rows) => {
+        const row = rows.get('monthly_revenue')?.[48];
+        assert.ok(row);
+        row.raw_payload.cells.push(rawCell('K', 49, p013Value));
+      },
+    );
+  const left = await run(10);
+  const right = await run(20);
+  assert.ok(left && right);
+  assert.equal(left.source_line_key, right.source_line_key);
+  assert.deepEqual(
+    {
+      item_code: left.item_code,
+      description: left.description,
+      quantity: left.quantity,
+      unit_code: left.unit_code,
+      currency_code: left.currency_code,
+      unit_price: left.unit_price,
+      total_amount: left.total_amount,
+    },
+    {
+      item_code: right.item_code,
+      description: right.description,
+      quantity: right.quantity,
+      unit_code: right.unit_code,
+      currency_code: right.currency_code,
+      unit_price: right.unit_price,
+      total_amount: right.total_amount,
+    },
+  );
+
+  await withFixture(async (root) => {
+    const source = await loadP010Source(root);
+    const artifacts = resolvedBetaArtifacts(source);
+    const snapshot = emptyP012ExistingItemsSnapshot();
+    snapshot.units = snapshot.units.map((entry) =>
+      entry.code === 'SERV' ? { ...entry, active: false } : entry,
+    );
+    const result = normalizeP012Items(source, artifacts, snapshot);
+    const blocked = result.candidates.find(({ source_item_number }) => source_item_number === 46);
+    assert.equal(blocked?.action, 'pending_decision');
+    assert.ok(blocked?.diagnostic_codes.includes('P012_UNIT_CATALOG_UNAVAILABLE'));
+    assert.equal(createValidatedP012CandidateView(source, artifacts, result).length, 48);
+
+    const currencySnapshot = emptyP012ExistingItemsSnapshot();
+    currencySnapshot.currencies = [{ code: 'BRL', active: false }];
+    const currencyResult = normalizeP012Items(source, artifacts, currencySnapshot);
+    const currencyBlocked = currencyResult.candidates.find(
+      ({ source_item_number }) => source_item_number === 46,
+    );
+    assert.equal(currencyBlocked?.action, 'pending_decision');
+    assert.ok(currencyBlocked?.diagnostic_codes.includes('P012_CURRENCY_CATALOG_UNAVAILABLE'));
+    assert.equal(createValidatedP012CandidateView(source, artifacts, currencyResult).length, 48);
   });
 });
 

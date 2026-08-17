@@ -297,3 +297,128 @@ export interface P011Artifacts {
   resolutionSummary?: ResolutionSummary;
   report: string;
 }
+
+export type P012ItemStatus =
+  'persistence_ready' | 'unchanged' | 'blocked' | 'requires_review' | 'rejected';
+
+export const P012_ITEM_DIAGNOSTIC_CODES = [
+  'P012_TEXT_INVALID',
+  'P012_DECIMAL_INVALID',
+  'P012_UNIT_UNRESOLVED',
+  'P012_CURRENCY_UNRESOLVED',
+  'P012_TOTAL_EVIDENCE_MISMATCH',
+  'P012_UNIT_CATALOG_UNAVAILABLE',
+  'P012_CURRENCY_CATALOG_UNAVAILABLE',
+  'P012_PROJECT_NOT_ELIGIBLE',
+  'P012_PROJECT_TARGET_UNRESOLVED',
+  'P012_ITEM_CONFLICT',
+] as const;
+
+export type P012ItemDiagnosticCode = (typeof P012_ITEM_DIAGNOSTIC_CODES)[number];
+
+export interface P012ItemProjectReference {
+  project_candidate_id: string;
+  project_candidate_hash: string;
+  project_code: string;
+  project_action: PlanAction;
+  project_target_id: string | null;
+}
+
+export interface P012ItemCellEvidence {
+  column: 'A' | 'B' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J';
+  address: string;
+  raw_value: string | number | boolean | null;
+  round_trip_text: string | null;
+  formatted_text: string | null;
+  number_format: string | null;
+}
+
+export interface P012ItemSourceLineage {
+  p010_manifest_hash: string;
+  input_hash: string;
+  workbook_hash: string;
+  sheet_key: 'monthly_revenue';
+  sheet_name: string;
+  physical_row: number;
+  source_range: string;
+  row_hash: string;
+  source_item_number: number;
+  project_candidate_id: string;
+  project_candidate_hash: string;
+  source_line_key: string;
+}
+
+export interface ItemCandidate {
+  contract: 'ltcm.p012.item-candidate.v1';
+  payload_schema_version: 1;
+  candidate_id: string;
+  source_line_key: string;
+  source_item_number: number;
+  line_number: number;
+  project: P012ItemProjectReference;
+  item_code: string | null;
+  description: string | null;
+  quantity: string | null;
+  unit_code: 'UN' | 'SERV' | 'US' | null;
+  currency_code: string | null;
+  unit_price: string | null;
+  total_amount: string | null;
+  action: PlanAction;
+  status: P012ItemStatus;
+  target_id: string | null;
+  diagnostic_codes: P012ItemDiagnosticCode[];
+  origins: SourceCoordinate[];
+  evidence: P012ItemCellEvidence[];
+  source_lineage: P012ItemSourceLineage;
+  candidate_hash: string;
+}
+
+export interface P012ExistingItemsSnapshot {
+  contract: 'ltcm.p012.existing-items-snapshot.v1';
+  currencies: Array<{ code: string; active: boolean }>;
+  units: Array<{ code: 'UN' | 'SERV' | 'US'; active: boolean }>;
+  projects: Array<{
+    id: string;
+    project_candidate_id: string;
+    project_code: string;
+    currency_code: string;
+    active: boolean;
+    deleted_at: string | null;
+  }>;
+  items: Array<{
+    id: string;
+    project_id: string;
+    source_line_key: string;
+    line_number: number;
+    item_code: string | null;
+    description: string | null;
+    quantity: string;
+    unit_code: 'UN' | 'SERV' | 'US';
+    currency_code: string;
+    unit_price: string;
+    total_amount: string;
+    active: boolean;
+    deleted_at: string | null;
+    row_version: number;
+  }>;
+}
+
+export interface P012ItemCandidateSet {
+  contract: 'ltcm.p012.item-candidate-set.v1';
+  payload_schema_version: 1;
+  p010_manifest_hash: string;
+  input_hash: string;
+  p011_artifacts_hash: string;
+  snapshot_hash: string;
+  candidate_set_hash: string;
+  candidates: ItemCandidate[];
+  summary: {
+    attempted_rows: number;
+    candidate_count: number;
+    action_counts: Record<PlanAction, number>;
+    persistence_ready: boolean;
+    remote_access: false;
+    p013_fields_consumed: 0;
+    p014_fields_consumed: 0;
+  };
+}

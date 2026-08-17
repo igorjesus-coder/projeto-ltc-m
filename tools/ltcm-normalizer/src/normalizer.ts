@@ -11,6 +11,7 @@ import {
 import {
   applyReviewedResolutions,
   createReviewBinding,
+  createSnapshotHash,
   matchProjectLineage,
   parseCandidateSetForSnapshotReconciliation,
   parseValidatedCandidateSet,
@@ -42,6 +43,125 @@ import {
 const PROJECT_CODE = /^\d{4}-\d{2}-\d{5}$/u;
 const PROJECT_PREFIX = /^\s*(\d{4}-\d{2}-\d{5})/u;
 const CLASSIFICATION_SUFFIX = /\s+\((demanda|saldo|contrato)\)\s*$/iu;
+const SHA256 = /^[0-9a-f]{64}$/u;
+
+interface P011ArtifactsProvenanceRecord {
+  sourceIdentity: LoadedSource;
+  p010ManifestHash: string;
+  workbookHash: string;
+  inputHash: string;
+  snapshotHash: string;
+  candidateSetHash: string;
+  reviewBindingHash: string;
+  projectsFingerprint: string;
+  projects: ProjectCandidate[];
+  artifactsFingerprint: string;
+}
+
+export interface ValidatedP011ProjectView {
+  projects: ProjectCandidate[];
+  p010ManifestHash: string;
+  inputHash: string;
+  snapshotHash: string;
+  reviewBindingHash: string;
+  artifactsHash: string;
+}
+
+const p011ArtifactsProvenance = new WeakMap<object, P011ArtifactsProvenanceRecord>();
+
+function artifactsFingerprint(artifacts: P011Artifacts): string {
+  return sha256Canonical(artifacts);
+}
+
+function certifyP011Artifacts(
+  artifacts: P011Artifacts,
+  sourceIdentity: LoadedSource,
+  snapshot: ExistingSnapshot,
+): P011Artifacts {
+  const sourceView = createValidatedSourceView(sourceIdentity);
+  const reviewBinding = artifacts.manifest['review_binding'];
+  if (reviewBinding === null || typeof reviewBinding !== 'object' || Array.isArray(reviewBinding)) {
+    throw new Error('P011_ARTIFACTS_PROVENANCE_MISMATCH: review-binding.');
+  }
+  const binding = reviewBinding as Record<string, unknown>;
+  const inputHash = canonicalInputHash(sourceView.inputHashes);
+  const snapshotHash = createSnapshotHash(snapshot);
+  if (
+    artifacts.manifest['artifact_contract'] !== 'ltcm.p011.normalization-manifest.v2' ||
+    artifacts.manifest['normalizer_version'] !== NORMALIZER_VERSION ||
+    artifacts.manifest['p010_manifest_hash'] !== sourceView.manifestHash ||
+    artifacts.manifest['workbook_hash'] !== sourceView.workbookHash ||
+    artifacts.manifest['input_hash'] !== inputHash ||
+    binding['contract'] !== 'ltcm.p011.review-binding.v1' ||
+    binding['normalizer_version'] !== NORMALIZER_VERSION ||
+    binding['p010_manifest_hash'] !== sourceView.manifestHash ||
+    binding['input_hash'] !== inputHash ||
+    binding['snapshot_hash'] !== snapshotHash ||
+    typeof binding['candidate_set_hash'] !== 'string' ||
+    !SHA256.test(binding['candidate_set_hash'])
+  ) {
+    throw new Error('P011_ARTIFACTS_PROVENANCE_MISMATCH: final-artifacts.');
+  }
+  p011ArtifactsProvenance.set(artifacts, {
+    sourceIdentity,
+    p010ManifestHash: sourceView.manifestHash,
+    workbookHash: sourceView.workbookHash,
+    inputHash,
+    snapshotHash,
+    candidateSetHash: binding['candidate_set_hash'],
+    reviewBindingHash: sha256Canonical(reviewBinding),
+    projectsFingerprint: sha256Canonical(artifacts.projects),
+    projects: structuredClone(artifacts.projects),
+    artifactsFingerprint: artifactsFingerprint(artifacts),
+  });
+  return artifacts;
+}
+
+/** Returns a disposable project view; it never emits or transfers runtime authority. */
+export function createValidatedP011ProjectView(
+  sourceIdentity: unknown,
+  artifacts: unknown,
+): ValidatedP011ProjectView {
+  if (
+    sourceIdentity === null ||
+    typeof sourceIdentity !== 'object' ||
+    artifacts === null ||
+    typeof artifacts !== 'object'
+  ) {
+    throw new Error('P012_PROJECT_PROVENANCE_REQUIRED: final-artifacts.');
+  }
+  const expected = p011ArtifactsProvenance.get(artifacts);
+  if (expected === undefined || expected.sourceIdentity !== sourceIdentity) {
+    throw new Error('P012_PROJECT_PROVENANCE_REQUIRED: final-artifacts.');
+  }
+  const sourceView = createValidatedSourceView(sourceIdentity);
+  const typedArtifacts = artifacts as P011Artifacts;
+  const reviewBinding = typedArtifacts.manifest['review_binding'];
+  if (reviewBinding === null || typeof reviewBinding !== 'object' || Array.isArray(reviewBinding)) {
+    throw new Error('P012_PROJECT_PROVENANCE_MISMATCH: final-artifacts.');
+  }
+  const binding = reviewBinding as Record<string, unknown>;
+  if (
+    expected.p010ManifestHash !== sourceView.manifestHash ||
+    expected.workbookHash !== sourceView.workbookHash ||
+    expected.inputHash !== canonicalInputHash(sourceView.inputHashes) ||
+    expected.snapshotHash !== binding['snapshot_hash'] ||
+    expected.candidateSetHash !== binding['candidate_set_hash'] ||
+    expected.reviewBindingHash !== sha256Canonical(reviewBinding) ||
+    expected.projectsFingerprint !== sha256Canonical(typedArtifacts.projects) ||
+    expected.artifactsFingerprint !== artifactsFingerprint(typedArtifacts)
+  ) {
+    throw new Error('P012_PROJECT_PROVENANCE_MISMATCH: final-artifacts.');
+  }
+  return {
+    projects: structuredClone(expected.projects),
+    p010ManifestHash: expected.p010ManifestHash,
+    inputHash: expected.inputHash,
+    snapshotHash: expected.snapshotHash,
+    reviewBindingHash: expected.reviewBindingHash,
+    artifactsHash: expected.artifactsFingerprint,
+  };
+}
 
 function compare(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -987,7 +1107,7 @@ export function normalizeP011(
     'automático por nome.',
     '',
   ].join('\n');
-  return {
+  const artifacts: P011Artifacts = {
     manifest: {
       artifact_contract: 'ltcm.p011.normalization-manifest.v2',
       generated_at: generatedAt,
@@ -1033,4 +1153,5 @@ export function normalizeP011(
     ...(resolutionSummary === undefined ? {} : { resolutionSummary }),
     report,
   };
+  return certifyP011Artifacts(artifacts, source, snapshotApplication.snapshot);
 }
