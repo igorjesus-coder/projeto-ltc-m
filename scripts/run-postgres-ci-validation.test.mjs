@@ -116,6 +116,18 @@ test('runner separa bootstrap, operador e dois bancos no mesmo cluster', () => {
   assert.match(runner, /ci_admin_phase: 'true'/u);
 });
 
+test('runner ativa P012 somente no banco efêmero antes da concorrência D41', () => {
+  const runner = fs.readFileSync(
+    path.join(process.cwd(), 'scripts', 'run-postgres-ci-validation.mjs'),
+    'utf8',
+  );
+  assert.match(runner, /runStage\('p012_persistence'/u);
+  assert.match(runner, /LTCM_P012_INTEGRATION: '1'/u);
+  assert.match(runner, /PGDATABASE: 'ltcm_ci_concurrency'/u);
+  assert.ok(runner.indexOf("runStage('p012_persistence'") < runner.indexOf('runConcurrencyTest()'));
+  assert.doesNotMatch(runner, /LTCM_P012_INTEGRATION[\s\S]{0,200}SUPABASE/iu);
+});
+
 test('estado final lê locale do catálogo do banco PostgreSQL', () => {
   const finalState = fs.readFileSync(
     path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-final-state.sql'),

@@ -32,6 +32,17 @@ import {
 } from '../src/item-contracts.js';
 import { createValidatedP012CandidateView, normalizeP012Items } from '../src/item-normalizer.js';
 import {
+  applyP012PersistencePlan,
+  assertP012PersistencePlan,
+  computeP012PersistencePlanHash,
+  createP012PersistenceDryRun,
+  prepareP012PersistencePlan,
+  type P012ActorContext,
+  type P012ImportBatchBinding,
+  type P012PersistenceOperation,
+  type P012PersistencePort,
+} from '../src/item-persistence.js';
+import {
   applyExistingSnapshot,
   clientMatchKey,
   normalizeClientName,
@@ -5544,5 +5555,386 @@ test('writer gerenciado produz bytes idênticos A/B e recusa diretório não ger
     } finally {
       await rm(parent, { recursive: true, force: true });
     }
+  });
+});
+
+async function p012PersistenceFixture(root: string) {
+  const source = await loadP010Source(root);
+  const initialArtifacts = resolvedBetaArtifacts(source);
+  const initialProject = initialArtifacts.projects.find(
+    ({ project_code }) => project_code === '2025-08-14656',
+  );
+  const initialClient = initialArtifacts.clients.find(
+    ({ candidate_id }) => candidate_id === initialProject?.client_candidate_id,
+  );
+  assert.ok(
+    initialProject &&
+      initialClient &&
+      initialProject.classification &&
+      initialProject.currency &&
+      initialProject.contract_value &&
+      initialProject.legacy_import_batch_reference?.kind === 'planned',
+  );
+  if (initialProject.legacy_import_batch_reference?.kind !== 'planned') {
+    throw new Error('Fixture P012 persistence sem lote planejado.');
+  }
+  const projectId = '00000000-0000-4000-8000-000000000182';
+  const clientId = '00000000-0000-4000-8000-000000000181';
+  const batch: P012ImportBatchBinding = {
+    id: '00000000-0000-4000-8000-000000000183',
+    idempotency_key: initialProject.legacy_import_batch_reference.idempotency_key,
+    source_hash: initialProject.legacy_import_batch_reference.source_hash,
+  };
+  const persistedArtifacts = resolvedBetaArtifacts(source, {
+    ...emptySnapshot(),
+    clients: [
+      {
+        id: clientId,
+        legal_name: initialClient.normalized_name,
+        display_name: initialClient.normalized_name,
+        tax_id: null,
+        active: true,
+        deleted_at: null,
+        row_version: 1,
+      },
+    ],
+    import_batches: [batch],
+    projects: [
+      {
+        id: projectId,
+        project_code: initialProject.project_code,
+        project_name: 'Projeto sintético P012',
+        client_id: clientId,
+        classification: initialProject.classification,
+        status: 'active',
+        base_currency: initialProject.currency,
+        contract_value: initialProject.contract_value,
+        data_reference_date: null,
+        legacy_import_batch_id: batch.id,
+        deleted_at: null,
+        version: 1,
+      },
+    ],
+  });
+  const project = persistedArtifacts.projects.find(
+    ({ project_code }) => project_code === initialProject.project_code,
+  );
+  assert.ok(project && project.action === 'no_op');
+  const snapshot = p012Snapshot(project, projectId);
+  const candidateSet = normalizeP012Items(source, persistedArtifacts, snapshot);
+  const plan = prepareP012PersistencePlan(source, persistedArtifacts, candidateSet, snapshot, {
+    logicalEnvironment: 'test',
+    batch,
+  });
+  return { source, persistedArtifacts, batch, snapshot, candidateSet, plan };
+}
+
+const P012_TEST_ACTOR: P012ActorContext = {
+  appUserId: '00000000-0000-4000-8000-000000000180',
+  authSubject: 'test|p012-admin',
+  requestId: 'p012-d12-unit',
+  justification: 'Fixture sintética P012 D12',
+  source: 'import',
+};
+
+function insertedSnapshotItem(
+  operation: P012PersistenceOperation,
+  id: string,
+): P012ExistingItemsSnapshot['items'][number] {
+  return {
+    id,
+    project_id: operation.project_id,
+    source_line_key: operation.source_line_key,
+    line_number: operation.line_number,
+    item_code: operation.item_code,
+    description: operation.description,
+    quantity: operation.quantity,
+    unit_code: operation.unit_code,
+    currency_code: operation.currency_code,
+    unit_price: operation.unit_price,
+    total_amount: operation.total_amount,
+    active: true,
+    deleted_at: null,
+    row_version: 1,
+  };
+}
+
+test('P012 persistence plan fecha hash, dry-run, apply, retry e rerun no-op', async () => {
+  await withFixture(async (root) => {
+    const fixture = await p012PersistenceFixture(root);
+    assert.ok(fixture.plan.operations.length > 0);
+    assert.equal(fixture.plan.expected_counts.attempted, 48);
+    assert.equal(fixture.plan.expected_counts.conflict, 0);
+    assert.doesNotThrow(() => assertP012PersistencePlan(fixture.plan));
+
+    const tampered = structuredClone(fixture.plan);
+    tampered.expected_counts.attempted += 1;
+    assert.throws(() => assertP012PersistencePlan(tampered), /P012_PERSISTENCE_PLAN_MISMATCH/u);
+    const alternatePlan = prepareP012PersistencePlan(
+      fixture.source,
+      fixture.persistedArtifacts,
+      fixture.candidateSet,
+      fixture.snapshot,
+      {
+        logicalEnvironment: 'test',
+        batch: { ...fixture.batch, id: '00000000-0000-4000-8000-000000000184' },
+      },
+    );
+    assert.notEqual(alternatePlan.plan_hash, fixture.plan.plan_hash);
+    const planMutations = [
+      (value: typeof fixture.plan) => {
+        value.snapshot_hash = '1'.repeat(64);
+      },
+      (value: typeof fixture.plan) => {
+        value.p012_candidate_set_hash = '2'.repeat(64);
+      },
+      (value: typeof fixture.plan) => {
+        value.operations[0]!.description = 'mudança semântica';
+      },
+      (value: typeof fixture.plan) => {
+        value.operations[0]!.expected_target_id = '00000000-0000-4000-8000-000000000199';
+      },
+      (value: typeof fixture.plan) => {
+        value.operations[0]!.expected_row_version = 2;
+      },
+      (value: typeof fixture.plan) => {
+        value.expected_counts.attempted += 1;
+      },
+      (value: typeof fixture.plan) => {
+        value.batch.id = '00000000-0000-4000-8000-000000000198';
+      },
+    ];
+    for (const mutate of planMutations) {
+      const changed = structuredClone(fixture.plan);
+      mutate(changed);
+      assert.notEqual(computeP012PersistencePlanHash(changed), fixture.plan.plan_hash);
+    }
+    const incidentalSnapshot = structuredClone(fixture.snapshot);
+    incidentalSnapshot.currencies.reverse();
+    incidentalSnapshot.units.reverse();
+    const incidentalCandidates = normalizeP012Items(
+      fixture.source,
+      fixture.persistedArtifacts,
+      incidentalSnapshot,
+    );
+    const incidentalPlan = prepareP012PersistencePlan(
+      fixture.source,
+      fixture.persistedArtifacts,
+      incidentalCandidates,
+      incidentalSnapshot,
+      { logicalEnvironment: 'test', batch: fixture.batch },
+    );
+    assert.equal(incidentalPlan.plan_hash, fixture.plan.plan_hash);
+
+    let dryRunWrites = 0;
+    const dryRunPort: P012PersistencePort = {
+      async readExistingItemsSnapshot() {
+        return structuredClone(fixture.snapshot);
+      },
+      async serializableTransaction() {
+        dryRunWrites += 1;
+        throw new Error('write inesperado');
+      },
+    };
+    const dryRun = await createP012PersistenceDryRun(
+      dryRunPort,
+      fixture.source,
+      fixture.persistedArtifacts,
+      P012_TEST_ACTOR,
+      { logicalEnvironment: 'test', batch: fixture.batch },
+    );
+    assert.equal(dryRunWrites, 0);
+    assert.equal(dryRun.plan.plan_hash, fixture.plan.plan_hash);
+
+    const insertedItems = fixture.plan.operations.map((operation, index) =>
+      insertedSnapshotItem(
+        operation,
+        `00000000-0000-4000-8001-${String(index + 1).padStart(12, '0')}`,
+      ),
+    );
+    let attempts = 0;
+    let links = 0;
+    const applyPort: P012PersistencePort = {
+      async readExistingItemsSnapshot() {
+        throw new Error('apply não usa snapshot externo');
+      },
+      async serializableTransaction(_environment, _actor, work) {
+        attempts += 1;
+        if (attempts === 1) throw { code: '40001' };
+        return work({
+          async acquireProjectLocks(projectIds) {
+            assert.deepEqual(projectIds, [...projectIds].sort());
+          },
+          async readExistingItemsSnapshot() {
+            return structuredClone(fixture.snapshot);
+          },
+          async validateBatchAndStaging(plan) {
+            return plan.operations.map((operation, index) => ({
+              candidate_id: operation.candidate_id,
+              staging_row_id: `00000000-0000-4000-8002-${String(index + 1).padStart(12, '0')}`,
+              target_table: null,
+              target_record_id: null,
+            }));
+          },
+          async insertItem(operation) {
+            const index = fixture.plan.operations.findIndex(
+              ({ candidate_id }) => candidate_id === operation.candidate_id,
+            );
+            return structuredClone(insertedItems[index]);
+          },
+          async linkStaging() {
+            links += 1;
+          },
+        });
+      },
+    };
+    const receipt = await applyP012PersistencePlan(
+      applyPort,
+      fixture.source,
+      fixture.persistedArtifacts,
+      fixture.plan,
+      P012_TEST_ACTOR,
+    );
+    assert.equal(attempts, 2);
+    assert.equal(receipt.inserted, fixture.plan.operations.length);
+    assert.equal(receipt.no_op, 0);
+    assert.equal(links, fixture.plan.operations.length);
+
+    const rerunSnapshot = { ...fixture.snapshot, items: insertedItems };
+    const rerunCandidates = normalizeP012Items(
+      fixture.source,
+      fixture.persistedArtifacts,
+      rerunSnapshot,
+    );
+    const rerunPlan = prepareP012PersistencePlan(
+      fixture.source,
+      fixture.persistedArtifacts,
+      rerunCandidates,
+      rerunSnapshot,
+      { logicalEnvironment: 'test', batch: fixture.batch },
+    );
+    let rerunInserts = 0;
+    const rerunPort: P012PersistencePort = {
+      async readExistingItemsSnapshot() {
+        throw new Error('apply não usa snapshot externo');
+      },
+      async serializableTransaction(_environment, _actor, work) {
+        return work({
+          async acquireProjectLocks() {},
+          async readExistingItemsSnapshot() {
+            return structuredClone(rerunSnapshot);
+          },
+          async validateBatchAndStaging(plan) {
+            return plan.operations.map((operation, index) => ({
+              candidate_id: operation.candidate_id,
+              staging_row_id: `00000000-0000-4000-8003-${String(index + 1).padStart(12, '0')}`,
+              target_table: 'project_items',
+              target_record_id: operation.expected_target_id,
+            }));
+          },
+          async insertItem() {
+            rerunInserts += 1;
+            throw new Error('no-op tentou insert');
+          },
+          async linkStaging() {},
+        });
+      },
+    };
+    const rerunReceipt = await applyP012PersistencePlan(
+      rerunPort,
+      fixture.source,
+      fixture.persistedArtifacts,
+      rerunPlan,
+      P012_TEST_ACTOR,
+    );
+    assert.equal(rerunInserts, 0);
+    assert.equal(rerunReceipt.inserted, 0);
+    assert.equal(rerunReceipt.no_op, rerunPlan.operations.length);
+    assert.deepEqual(
+      rerunReceipt.targets.map(({ target_id }) => target_id),
+      insertedItems.map(({ id }) => id),
+    );
+  });
+});
+
+test('P012 persistence fecha plan antigo e 23505 sem sucesso silencioso', async () => {
+  await withFixture(async (root) => {
+    const fixture = await p012PersistenceFixture(root);
+    const changedSnapshot = {
+      ...fixture.snapshot,
+      items: [
+        insertedSnapshotItem(fixture.plan.operations[0]!, '00000000-0000-4000-8004-000000000001'),
+      ],
+    };
+    const portFor = (
+      snapshot: P012ExistingItemsSnapshot,
+      uniqueViolation: boolean,
+    ): P012PersistencePort => ({
+      async readExistingItemsSnapshot() {
+        return snapshot;
+      },
+      async serializableTransaction(_environment, _actor, work) {
+        return work({
+          async acquireProjectLocks() {},
+          async readExistingItemsSnapshot() {
+            return snapshot;
+          },
+          async validateBatchAndStaging(plan) {
+            return plan.operations.map((operation, index) => ({
+              candidate_id: operation.candidate_id,
+              staging_row_id: `00000000-0000-4000-8005-${String(index + 1).padStart(12, '0')}`,
+              target_table: null,
+              target_record_id: null,
+            }));
+          },
+          async insertItem() {
+            if (uniqueViolation) throw { code: '23505' };
+            throw new Error('insert não deve ser alcançado');
+          },
+          async linkStaging() {},
+        });
+      },
+    });
+    await assert.rejects(
+      applyP012PersistencePlan(
+        portFor(changedSnapshot, false),
+        fixture.source,
+        fixture.persistedArtifacts,
+        fixture.plan,
+        P012_TEST_ACTOR,
+      ),
+      /P012_PERSISTENCE_SNAPSHOT_CHANGED/u,
+    );
+    await assert.rejects(
+      applyP012PersistencePlan(
+        portFor(fixture.snapshot, true),
+        fixture.source,
+        fixture.persistedArtifacts,
+        fixture.plan,
+        P012_TEST_ACTOR,
+      ),
+      /P012_PERSISTENCE_IDENTITY_CONFLICT/u,
+    );
+    let deadlockAttempts = 0;
+    const deadlockPort: P012PersistencePort = {
+      async readExistingItemsSnapshot() {
+        return fixture.snapshot;
+      },
+      async serializableTransaction() {
+        deadlockAttempts += 1;
+        throw { code: '40P01' };
+      },
+    };
+    await assert.rejects(
+      applyP012PersistencePlan(
+        deadlockPort,
+        fixture.source,
+        fixture.persistedArtifacts,
+        fixture.plan,
+        P012_TEST_ACTOR,
+      ),
+      /P012_PERSISTENCE_SERIALIZATION_RETRY_EXHAUSTED/u,
+    );
+    assert.equal(deadlockAttempts, 2);
   });
 });

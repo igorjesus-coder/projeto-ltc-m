@@ -155,7 +155,14 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
     static_gates: { npm_run_check: 0 },
     exit_codes: {},
     stages: [],
-    regressions: { p006: false, p007: false, p008: false, p009_phase_a: false, p009: false },
+    regressions: {
+      p006: false,
+      p007: false,
+      p008: false,
+      p009_phase_a: false,
+      p009: false,
+      p012_persistence: false,
+    },
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
     postgres: null,
@@ -342,6 +349,32 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
 
     runStage('d40_d41', () => postgresFile(path.join('database', 'audit', 'ltcm-d40-tests.sql')));
     evidence.d40_d41 = { scenarios: '47/47', passed: true };
+
+    runStage('p012_persistence', () =>
+      runProcess(
+        'node',
+        [
+          '--test',
+          path.join(
+            'tools',
+            'ltcm-normalizer',
+            'dist',
+            'test',
+            'postgres-item-persistence.integration.test.js',
+          ),
+        ],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P012_INTEGRATION: '1',
+            PGDATABASE: 'ltcm_ci_concurrency',
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p012_persistence = true;
 
     evidence.concurrency = await runConcurrencyTest();
     concurrencyDatabaseCreated = false;
