@@ -189,6 +189,119 @@ normalizadores devolvem cópias. Não existe parser público que certifique `Ite
 contextual não aceita hashes recalculados como substituto de authority ou causalidade. Freeze não é
 usado como substituto de provenance.
 
-Esta camada permanece exclusivamente programática e local. Um adapter futuro precisa de nova
-decisão, snapshot real autorizado, transação e controles P007/P008/P009; a capability local não
-autoriza aplicação nem acesso remoto.
+O core permanece programático e independente de PostgreSQL. A D12 acrescentou um port mínimo e um
+adapter PostgreSQL local/test; essa capability não autoriza aplicação remota.
+
+## Plano de persistência D12
+
+`ltcm.p012.persistence-plan.v1` é produzido somente de um candidate set certificado e do mesmo
+snapshot que participou da derivação. O plano contém ambiente lógico, lote P009/P011, hashes P010,
+P011 e P012, snapshot, targets dos projetos, operações ordenadas e contagens. Não contém DSN,
+segredo, timestamp incidental, workbook ou evidence bruta.
+
+O `plan_hash` é o SHA-256 do JSON canônico do plano sem o próprio hash. Ele cobre batch, source,
+snapshot, candidate set, targets, operações, IDs e `row_version` esperados. Reordenação já
+normalizada pelo contrato não muda o hash; qualquer mudança semântica muda. Hash continua sendo
+prova de integridade, não substitui provenance runtime: antes de aplicar, o core revalida a source
+P010, os artefatos P011 e o candidate set P012.
+
+Somente candidates `insert` e `no_op` geram operações. `rejected` e `pending_decision` permanecem
+nas contagens e não geram SQL. A presença de `conflict` impede o apply inteiro. UPDATE factual,
+DELETE, soft delete, undelete e upsert não existem no port P012.
+
+## Reader e port PostgreSQL
+
+O port separa leitura e transação. O reader consulta em lote os projetos envolvidos, moedas,
+unidades P012 e todos os itens desses projetos, inclusive inativos e soft-deleted. Valores
+`numeric` permanecem strings, `bigint` só é convertido depois da prova de safe integer e timestamps
+são serializados em ISO UTC. O objeto montado pelo adapter continua `unknown` até atravessar
+`parseP012ExistingItemsSnapshot`; o formato do driver nunca é confiado diretamente pelo core.
+
+O primeiro reader/apply real exige ator sintético ou operacional `Admin`: a RLS vigente oculta
+inativos/deletados de `Editor`, enquanto a reconciliação precisa enxergá-los para falhar fechado. A
+transação chama `ltc_m.set_actor_context` e confirma `authorization_context()` antes de ler ou
+escrever.
+
+O writer PostgreSQL de integração usa `pg`, SQL qualificado com `ltc_m.` e parâmetros posicionais
+para todos os valores. Ele fica confinado ao suporte de testes, fora do grafo e dos exports do
+módulo de produção. O core não recebe `Pool`, `PoolClient` ou SQL, e nenhum helper, capability,
+adapter ou callback de writer test-only é importável pela superfície normal do package.
+
+## Transação, locks e idempotência
+
+Todos os itens P012 write-eligible de um workbook/lote são aplicados em uma transação
+`SERIALIZABLE`. Os UUIDs dos projetos são ordenados canonicamente e cada projeto recebe um lock
+transacional derivado por:
+
+```text
+pg_advisory_xact_lock(
+  hashtextextended('ltc_m.p012.project:' || project_uuid, 0)
+)
+```
+
+Depois dos locks, o adapter lê novo snapshot e o core rederiva candidates e plano. Divergência do
+hash revisado retorna `P012_PERSISTENCE_SNAPSHOT_CHANGED` antes dos inserts. Os índices únicos
+parciais de `(project_id, source_line_key)` e `(project_id, line_number)` continuam a barreira final
+contra writers que não cooperam com o advisory lock.
+
+INSERT omite `id`, `total_amount`, timestamps e `row_version`. O banco gera esses valores; o
+`RETURNING` é novamente convertido pelo contrato P012 e o total gerado é comparado textualmente ao
+total exato derivado. No-op exige equivalência integral e faz zero INSERT/UPDATE/DELETE em
+`project_items`.
+
+`23505` nunca vira sucesso silencioso: a transação reverte e retorna conflito de identidade. Erros
+`40001` e `40P01` aceitam no máximo duas tentativas totais; cada tentativa abre nova transação e
+rederiva o plano. Se o plano mudar, o apply para e exige novo dry-run/confirmação.
+
+Falha em qualquer item reverte todos os itens e vínculos do lote. Crash antes do commit reverte;
+resposta perdida depois do commit é recuperada por novo dry-run, que encontra os mesmos targets e
+produz no-ops sem alterar `row_version`.
+
+## Batch e provenance P009
+
+O lote deve existir e coincidir exatamente em UUID, `idempotency_key` e `source_hash`. A aba
+`monthly_revenue` e cada staging row write-eligible devem existir com o mesmo physical row e
+`row_hash` P010. O adapter liga a linha a `target_table = 'project_items'` e ao UUID gerado pelo
+banco. O vínculo é idempotente; target preexistente divergente aborta o lote. Raw payload e evidence
+não são copiados para `project_items`.
+
+## Dry-run, ambientes e testes
+
+Dry-run é o default: lê snapshot, normaliza, produz plano/hash/summary e abre zero transação de
+escrita. O writer existe somente no harness compilado de testes; seu pool e sua authority opaca são
+criados juntos depois da validação estrita da URL e não podem ser fornecidos por caller de produto.
+Plano, operação e hashes recalculados continuam sendo dados, nunca authority. A CLI continua
+recusando `--apply` com `REMOTE_APPLY_NOT_AUTHORIZED`; não existe flag ou variável de produto para
+habilitar escrita.
+
+O guard test-only aceita apenas hostname literal `127.0.0.1`, `localhost` ou `::1`, porta PostgreSQL
+padrão, banco sintético allowlisted e URL sem query ou fragment. Depois da conexão, atesta o peer
+efetivo do socket TCP como IPv4 ou IPv6 loopback e consulta o servidor para confirmar o database.
+RFC1918, ULA, socket, hostname parecido, DNS de `localhost` resolvido para endereço não loopback e
+qualquer host remoto falham fechado. Essa separação preserva o port mapping local do Docker, cujo
+endereço interno do servidor pertence à rede privada do container sem transformar essa rede em
+authority.
+
+Os testes unitários cobrem as 48 tentativas sintéticas, plano/hash, tampering, snapshot antigo,
+retry, `23505`, rerun, fechamento dos exports e a matriz adversarial de URL. O gate PostgreSQL efêmero
+aplica as 11 migrations reais e executa rollback tardio no item 47, 48 inserts, dois writers
+concorrentes, ordem inversa de locks de dois projetos, rerun com 48 no-ops, totals gerados, SQL
+parametrizado, staging e repetição legítima de `item_code`. A
+suíte não depende de internet nem de Supabase remoto. Quando não existe PostgreSQL local, o teste
+de integração permanece explicitamente skipped; o job efêmero o ativa com
+`LTCM_P012_INTEGRATION=1`.
+
+Para a validação D12A em PostgreSQL 17 local, o harness consome exclusivamente
+`process.env.LTCM_P012_TEST_DATABASE_URL`. Antes de aplicar qualquer migration ou fixture, ele
+exige host literal e efetivo `127.0.0.1`, `localhost` ou `::1`, database `ltcm_test`, URL sem query
+ou fragment, usuário `postgres` e `SUPERUSER`/`BYPASSRLS`. A connection string nunca integra código, evidência
+ou logs. O caminho local não configura TLS permissivo e não reconhece Render, Supabase ou banco
+remoto.
+
+Nesse fluxo, banco limpo recebe exatamente as 11 migrations versionadas; banco já migrado passa
+pela atestação integral de tabelas, RLS/FORCE RLS, funções, total gerado, constraints, índices e
+triggers. A cobertura PostgreSQL também comprova actor context, leitura tipada do snapshot,
+`SERIALIZABLE`, advisory locks em commit/rollback, `40001`, `40P01`, `23505`, FKs, limites
+numéricos, rollback tardio, dry-run sem mutação, concorrência idêntica/divergente, 48 inserts,
+staging e rerun com UUID/`row_version` estáveis. Fixtures, memberships transitórias, conexões e
+locks são limpos no `finally`; o schema migrado pode permanecer.

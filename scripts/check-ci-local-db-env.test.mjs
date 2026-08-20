@@ -211,7 +211,7 @@ test('parser YAML expõe exatamente o valor canônico sem tag', async () => {
   assert.deepEqual(values, [CI_POSTGRES_IMAGE]);
 });
 
-test('package-lock permanece no hash aprovado pela D45', () => {
+test('package-lock permanece no hash atualizado pela D12', () => {
   const hash = crypto
     .createHash('sha256')
     .update(fs.readFileSync(path.join(process.cwd(), 'package-lock.json')))
