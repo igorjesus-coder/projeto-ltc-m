@@ -644,8 +644,6 @@ async function assertRealDeadlock(pool: Pool): Promise<void> {
   try {
     await first.query('begin');
     await second.query('begin');
-    await first.query(`set local deadlock_timeout = '100ms'`);
-    await second.query(`set local deadlock_timeout = '100ms'`);
     await first.query(`select pg_catalog.pg_advisory_xact_lock(12001)`);
     await second.query(`select pg_catalog.pg_advisory_xact_lock(12002)`);
     const firstWait = first.query(`select pg_catalog.pg_advisory_xact_lock(12002)`);
