@@ -13,6 +13,9 @@ import { renderComprehensiveP008, renderComprehensiveP009 } from './sql-renderin
 const D40_MIGRATION = '20260804120000_add_legacy_project_reference_date_exception.sql';
 const D40_SHA256 = '4FA11A1D2AB1AA437593BFA1535348048B34E96E33051E6E637FCB26EF84813C';
 const EVIDENCE_PATH = path.join('.tmp', 'ci-evidence', 'ltcm-postgres-validation.json');
+const P013_DATABASE = 'ltcm_test';
+const P013_PASSWORD = 'ltcm_ci_p013_only';
+const P013_USER = 'postgres';
 
 function sha256File(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toUpperCase();
@@ -63,7 +66,19 @@ function runProcess(command, args, options = {}) {
   };
 }
 
-function psqlArguments({ database, user, file, command, variables = {} }) {
+function isLoopbackHost(host) {
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+}
+
+function psqlArguments({
+  database,
+  user,
+  file,
+  command,
+  variables = {},
+  host = process.env.PGHOST,
+  port = process.env.PGPORT,
+}) {
   const args = [
     '-X',
     '--no-psqlrc',
@@ -72,9 +87,9 @@ function psqlArguments({ database, user, file, command, variables = {} }) {
     '--tuples-only',
     '--quiet',
     '--host',
-    process.env.PGHOST,
+    host,
     '--port',
-    process.env.PGPORT,
+    String(port),
     '--dbname',
     database,
     '--username',
@@ -86,11 +101,90 @@ function psqlArguments({ database, user, file, command, variables = {} }) {
   return args;
 }
 
-function executePsql({ database, user, password, file, command, variables, timeoutMs }) {
-  return runProcess('psql', psqlArguments({ database, user, file, command, variables }), {
-    env: { ...process.env, PGPASSWORD: password },
-    timeoutMs,
-  });
+function executePsql({
+  database,
+  user,
+  password,
+  file,
+  command,
+  variables,
+  timeoutMs,
+  host,
+  port,
+}) {
+  return runProcess(
+    'psql',
+    psqlArguments({ database, user, file, command, variables, host, port }),
+    {
+      env: { ...process.env, PGPASSWORD: password },
+      timeoutMs,
+    },
+  );
+}
+
+export function assertP013ClusterIsolation({
+  mainHost,
+  mainPort,
+  p013Host,
+  p013Port,
+  p013Database,
+  currentUser,
+  serverVersionNum,
+  runtimeRoleExists,
+  runtimeMembershipCount,
+  ltcMSchemaExists,
+}) {
+  if (!isLoopbackHost(p013Host)) throw new Error('P013_CLUSTER_HOST_NOT_LOOPBACK');
+  if (String(p013Database) !== P013_DATABASE) throw new Error('P013_CLUSTER_DATABASE_UNEXPECTED');
+  if (String(currentUser) !== P013_USER) throw new Error('P013_CLUSTER_USER_UNEXPECTED');
+  if (!String(serverVersionNum).startsWith('17')) throw new Error('P013_CLUSTER_MAJOR_UNEXPECTED');
+  if (Boolean(runtimeRoleExists)) throw new Error('P013_CLUSTER_RUNTIME_ROLE_PREEXISTS');
+  if (Number(runtimeMembershipCount) !== 0) throw new Error('P013_CLUSTER_MEMBERSHIP_PREEXISTS');
+  if (Boolean(ltcMSchemaExists)) throw new Error('P013_CLUSTER_SCHEMA_PREEXISTS');
+  if (
+    isLoopbackHost(mainHost) &&
+    isLoopbackHost(p013Host) &&
+    String(mainPort) === String(p013Port)
+  ) {
+    throw new Error('P013_CLUSTER_REUSED_MAIN_CLUSTER');
+  }
+}
+
+function parseDockerPort(stdout) {
+  const value = stdout
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  const match = value?.match(/^(127\.0\.0\.1|localhost|\[::1\]|::1):(\d+)$/u);
+  if (!match) throw new Error('P013_CLUSTER_PORT_UNSAFE');
+  return { host: match[1].replaceAll(/\[|\]/gu, ''), port: match[2] };
+}
+
+function waitForP013Postgres({ host, port }) {
+  const startedAt = Date.now();
+  let lastResult = { code: 1, stdout: '', stderr: '' };
+  while (Date.now() - startedAt < 60_000) {
+    lastResult = runProcess(
+      'pg_isready',
+      ['--host', host, '--port', String(port), '--username', P013_USER, '--dbname', P013_DATABASE],
+      { timeoutMs: 5_000 },
+    );
+    if (lastResult.code === 0) {
+      return {
+        code: 0,
+        stdout: lastResult.stdout,
+        stderr: lastResult.stderr,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
+  }
+  return {
+    code: lastResult.code || 1,
+    stdout: lastResult.stdout,
+    stderr: lastResult.stderr || 'P013 isolated PostgreSQL did not become ready',
+    durationMs: Date.now() - startedAt,
+  };
 }
 
 function parseLastJson(stdout) {
@@ -182,7 +276,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
   const runStage = stageRunner(evidence);
   let d27Granted = false;
   let concurrencyDatabaseCreated = false;
-  let p013DatabaseCreated = false;
+  let p013ContainerName = null;
 
   const postgresFile = (relativePath, options = {}) =>
     executePsql({
@@ -194,17 +288,93 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
     });
 
   const runP013PostgresStage = () => {
-    runStage('create_p013_database', () =>
+    p013ContainerName = `ltcm-p013-${commit.slice(0, 12).toLowerCase()}-${process.pid}`;
+    runStage('p013_cluster_start', () =>
+      runProcess(
+        'docker',
+        [
+          'run',
+          '--detach',
+          '--rm',
+          '--name',
+          p013ContainerName,
+          '--env',
+          `POSTGRES_DB=${P013_DATABASE}`,
+          '--env',
+          `POSTGRES_USER=${P013_USER}`,
+          '--env',
+          `POSTGRES_PASSWORD=${P013_PASSWORD}`,
+          '--env',
+          'POSTGRES_INITDB_ARGS=--encoding=UTF8',
+          '--publish',
+          '127.0.0.1::5432',
+          CI_POSTGRES_IMAGE,
+        ],
+        { timeoutMs: 120_000 },
+      ),
+    );
+
+    const portResult = runStage('p013_cluster_port', () =>
+      runProcess('docker', ['port', p013ContainerName, '5432/tcp'], { timeoutMs: 10_000 }),
+    );
+    const p013Endpoint = parseDockerPort(portResult.stdout);
+    assertP013ClusterIsolation({
+      mainHost: process.env.PGHOST,
+      mainPort: process.env.PGPORT,
+      p013Host: p013Endpoint.host,
+      p013Port: p013Endpoint.port,
+      p013Database: P013_DATABASE,
+      currentUser: P013_USER,
+      serverVersionNum: '17',
+      runtimeRoleExists: false,
+      runtimeMembershipCount: 0,
+      ltcMSchemaExists: false,
+    });
+
+    runStage('p013_cluster_ready', () => waitForP013Postgres(p013Endpoint));
+    const preflightResult = runStage('p013_cluster_preflight', () =>
       executePsql({
-        database: 'postgres',
-        user: 'postgres',
-        password: postgresPassword,
-        command: 'create database ltcm_test owner postgres',
+        database: P013_DATABASE,
+        user: P013_USER,
+        password: P013_PASSWORD,
+        host: p013Endpoint.host,
+        port: p013Endpoint.port,
+        command: `select json_build_object(
+          'database', current_database(),
+          'current_user', current_user,
+          'server_version_num', current_setting('server_version_num'),
+          'runtime_role_exists', exists (
+            select 1 from pg_catalog.pg_roles where rolname = 'ltc_m_runtime'
+          ),
+          'runtime_membership_count', (
+            select count(*)::integer
+              from pg_catalog.pg_auth_members
+              join pg_catalog.pg_roles as member_role on member_role.oid = pg_auth_members.member
+              join pg_catalog.pg_roles as granted_role on granted_role.oid = pg_auth_members.roleid
+             where member_role.rolname = 'ltc_m_runtime'
+                or granted_role.rolname = 'ltc_m_runtime'
+          ),
+          'ltc_m_schema_exists', exists (
+            select 1 from information_schema.schemata where schema_name = 'ltc_m'
+          )
+        )::text`,
       }),
     );
-    p013DatabaseCreated = true;
+    const p013Preflight = parseLastJson(preflightResult.stdout);
+    assertP013ClusterIsolation({
+      mainHost: process.env.PGHOST,
+      mainPort: process.env.PGPORT,
+      p013Host: p013Endpoint.host,
+      p013Port: p013Endpoint.port,
+      p013Database: p013Preflight.database,
+      currentUser: p013Preflight.current_user,
+      serverVersionNum: p013Preflight.server_version_num,
+      runtimeRoleExists: p013Preflight.runtime_role_exists,
+      runtimeMembershipCount: p013Preflight.runtime_membership_count,
+      ltcMSchemaExists: p013Preflight.ltc_m_schema_exists,
+    });
 
-    const p013DatabaseUrl = `postgresql://postgres:${postgresPassword}@127.0.0.1:5432/ltcm_test`;
+    const p013DatabaseUrl = `postgresql://${P013_USER}:${P013_PASSWORD}@${p013Endpoint.host}:${p013Endpoint.port}/${P013_DATABASE}`;
     runStage('p013_postgres_build', () =>
       runProcess('npm', ['run', 'build', '--workspace', '@ltcm/normalizer', '--silent'], {
         cwd: rootDirectory,
@@ -238,8 +408,17 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
     evidence.regressions.p013_postgres = true;
     evidence.p013_postgres = {
       passed: true,
-      database: 'ltcm_test',
-      host: '127.0.0.1',
+      cluster_mode: 'isolated_docker',
+      database: P013_DATABASE,
+      host_class: 'loopback',
+      port: Number(p013Endpoint.port),
+      same_cluster_as_main: false,
+      postgres_major: 17,
+      preflight: {
+        runtime_role_exists: false,
+        runtime_membership_count: 0,
+        ltc_m_schema_exists: false,
+      },
       command:
         'node --test tools/ltcm-normalizer/dist/test/postgres-monthly-foundation.integration.test.js',
       coverage: [
@@ -252,6 +431,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         'idempotency',
         'rollback_cleanup',
       ],
+      cleanup: 'pending',
     };
   };
 
@@ -473,16 +653,16 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }
     }
 
-    if (p013DatabaseCreated) {
-      const dropP013Database = executePsql({
-        database: 'postgres',
-        user: 'postgres',
-        password: postgresPassword,
-        command: 'drop database if exists ltcm_test with (force)',
+    if (p013ContainerName) {
+      const removeP013Container = runProcess('docker', ['rm', '--force', p013ContainerName], {
+        timeoutMs: 30_000,
       });
-      evidence.exit_codes.p013_database_cleanup = dropP013Database.code;
-      if (dropP013Database.code !== 0) {
-        evidence.first_error ??= `p013_database_cleanup: ${sanitizeProcessFailure(dropP013Database)}`;
+      evidence.exit_codes.p013_cluster_cleanup = removeP013Container.code;
+      if (evidence.p013_postgres) {
+        evidence.p013_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
+      }
+      if (removeP013Container.code !== 0) {
+        evidence.first_error ??= `p013_cluster_cleanup: ${sanitizeProcessFailure(removeP013Container)}`;
       }
     }
 
