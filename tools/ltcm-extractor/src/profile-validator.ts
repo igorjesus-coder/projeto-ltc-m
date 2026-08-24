@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 
 import { canonicalJson } from './canonical-json.js';
+import { evaluateP013MonthlySource } from './p013-source-gate.js';
 import {
   DOCUMENTARY_SHEET_NAME,
   OPERATIONAL_SHEETS,
@@ -37,9 +38,9 @@ const EXPECTED_COMPETENCIES = [
   '2027-03-01',
 ] as const;
 
-const EXPECTED_FORMULA_DEFINITIONS: Record<SheetKey, number> = {
+const EXPECTED_FORMULA_DEFINITIONS: Record<SheetKey, number | null> = {
   project_values: 10,
-  monthly_revenue: 24,
+  monthly_revenue: null,
   curve_s: 30,
 };
 
@@ -315,16 +316,32 @@ export function validateLtcmProfile(options: {
 
   for (const definition of OPERATIONAL_SHEETS) {
     const metadata = options.packageMetadata.get(definition.name);
+    const expectedFormulaDefinitions = EXPECTED_FORMULA_DEFINITIONS[definition.key];
+    if (expectedFormulaDefinitions === null) continue;
     addCheck(
       `FORMULA_DEFINITIONS_${definition.key.toUpperCase()}`,
-      metadata?.formulaDefinitions === EXPECTED_FORMULA_DEFINITIONS[definition.key],
+      metadata?.formulaDefinitions === expectedFormulaDefinitions,
       `A aba ${definition.name} deve preservar a quantidade esperada de definições de fórmula.`,
       definition.name,
       null,
       metadata?.formulaDefinitions ?? null,
-      EXPECTED_FORMULA_DEFINITIONS[definition.key],
+      expectedFormulaDefinitions,
     );
   }
+
+  const p013SourceGate = evaluateP013MonthlySource(
+    monthlyRows,
+    options.packageMetadata.get('Prev. Receita Mensal'),
+  );
+  addCheck(
+    'MONTHLY_SOURCE_SEMANTICS',
+    p013SourceGate.ok,
+    'A origem mensal deve satisfazer o contrato semântico P013 sem depender da topologia OOXML.',
+    'Prev. Receita Mensal!A1:T52',
+    null,
+    p013SourceGate.ok ? p013SourceGate.semantic_fingerprint : p013SourceGate.diagnostics,
+    p013SourceGate.ok ? 'valid_semantic_fingerprint' : 'valid_monthly_source',
+  );
 
   const requireFormulaCache = (sheetKey: SheetKey, address: string): void => {
     const rows = options.rowsBySheet.get(sheetKey) ?? [];

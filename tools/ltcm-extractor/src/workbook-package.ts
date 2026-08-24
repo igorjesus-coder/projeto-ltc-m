@@ -4,6 +4,13 @@ export interface WorksheetPackageMetadata {
   worksheetRange: string | null;
   formulaCells: number;
   formulaDefinitions: number;
+  cells: ReadonlyMap<string, WorksheetPackageCellMetadata>;
+}
+
+export interface WorksheetPackageCellMetadata {
+  valueText: string | null;
+  formulaPresent: boolean;
+  material: boolean;
 }
 
 function entryText(container: unknown, target: string): string {
@@ -41,6 +48,24 @@ function rangeFromReferences(xml: string): string | null {
   });
 }
 
+function cellMetadata(xml: string): ReadonlyMap<string, WorksheetPackageCellMetadata> {
+  const result = new Map<string, WorksheetPackageCellMetadata>();
+  for (const match of xml.matchAll(/<(?:\w+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/gu)) {
+    const values = attributes(match[1] ?? '');
+    const address = values.get('r');
+    if (address === undefined) continue;
+    const body = match[2] ?? '';
+    const valueText = /<(?:\w+:)?v>([\s\S]*?)<\/(?:\w+:)?v>/u.exec(body)?.[1] ?? null;
+    const formulaPresent = /<(?:\w+:)?f\b/u.test(body);
+    result.set(address, {
+      valueText,
+      formulaPresent,
+      material: valueText !== null || formulaPresent || /<(?:\w+:)?is\b/u.test(body),
+    });
+  }
+  return result;
+}
+
 export function inspectWorkbookPackage(inputBytes: Buffer): Map<string, WorksheetPackageMetadata> {
   const container: unknown = XLSX.CFB.read(inputBytes, { type: 'buffer' });
   const workbookXml = entryText(container, '/xl/workbook.xml');
@@ -70,6 +95,7 @@ export function inspectWorkbookPackage(inputBytes: Buffer): Map<string, Workshee
       worksheetRange: rangeFromReferences(xml),
       formulaCells: formulaTags.length,
       formulaDefinitions: formulaTags.length - sharedFollowers,
+      cells: cellMetadata(xml),
     });
   }
   return result;

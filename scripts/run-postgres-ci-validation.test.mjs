@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { migrationInventory, sanitizeProcessFailure } from './run-postgres-ci-validation.mjs';
+import {
+  assertP013ClusterIsolation,
+  migrationInventory,
+  sanitizeProcessFailure,
+} from './run-postgres-ci-validation.mjs';
 
 function migrationDirectory() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ltcm-ci-runner-test-'));
@@ -126,6 +130,84 @@ test('runner ativa P012 somente no banco efêmero antes da concorrência D41', (
   assert.match(runner, /PGDATABASE: 'ltcm_ci_concurrency'/u);
   assert.ok(runner.indexOf("runStage('p012_persistence'") < runner.indexOf('runConcurrencyTest()'));
   assert.doesNotMatch(runner, /LTCM_P012_INTEGRATION[\s\S]{0,200}SUPABASE/iu);
+});
+
+test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir com sucesso', () => {
+  const runner = fs.readFileSync(
+    path.join(process.cwd(), 'scripts', 'run-postgres-ci-validation.mjs'),
+    'utf8',
+  );
+  assert.match(runner, /runStage\('p013_cluster_start'/u);
+  assert.match(runner, /docker'[\s\S]*'run'[\s\S]*'--detach'/u);
+  assert.match(runner, /CI_POSTGRES_IMAGE/u);
+  assert.match(runner, /'--publish'[\s\S]*'127\.0\.0\.1::5432'/u);
+  assert.match(runner, /runStage\('p013_cluster_port'/u);
+  assert.match(runner, /runStage\('p013_cluster_ready'/u);
+  assert.match(runner, /runStage\('p013_cluster_preflight'/u);
+  assert.match(runner, /runStage\('p013_postgres_build'/u);
+  assert.match(runner, /runStage\('p013_postgres'/u);
+  assert.match(runner, /LTCM_P013_INTEGRATION: '1'/u);
+  assert.match(runner, /LTCM_P013_ISOLATED_CLUSTER: '1'/u);
+  assert.match(runner, /LTCM_P012_TEST_DATABASE_URL: p013DatabaseUrl/u);
+  assert.match(runner, /postgres-monthly-foundation\.integration\.test\.js/u);
+  assert.match(runner, /evidence\.regressions\.p013_postgres = true/u);
+  assert.match(runner, /p013_postgres: false/u);
+  assert.match(runner, /Object\.values\(evidence\.regressions\)\.every\(Boolean\)/u);
+  assert.match(runner, /same_cluster_as_main: false/u);
+  assert.match(runner, /runtime_role_exists: false/u);
+  assert.match(runner, /runtime_membership_count: 0/u);
+  assert.match(runner, /docker'[\s\S]*'rm'[\s\S]*'--force'/u);
+  assert.ok(runner.indexOf("runStage('p013_postgres'") < runner.indexOf('runConcurrencyTest()'));
+  assert.ok(runner.indexOf('runP013PostgresStage()') < runner.indexOf("runStage('bootstrap_d26'"));
+  assert.ok(runner.indexOf('runP013PostgresStage()') < runner.indexOf("runStage('d27_grant'"));
+  assert.doesNotMatch(
+    runner,
+    /\.local-source|LTCM_P013_D03_INTEGRATION|LTCM_P013_D05_INTEGRATION/u,
+  );
+});
+
+test('contrato P013 exige cluster isolado, loopback, PostgreSQL 17 e estado from-zero', () => {
+  const valid = {
+    mainHost: '127.0.0.1',
+    mainPort: '5432',
+    p013Host: '127.0.0.1',
+    p013Port: '55432',
+    p013Database: 'ltcm_test',
+    currentUser: 'postgres',
+    serverVersionNum: '170006',
+    runtimeRoleExists: false,
+    runtimeMembershipCount: 0,
+    ltcMSchemaExists: false,
+  };
+  assert.doesNotThrow(() => assertP013ClusterIsolation(valid));
+  assert.throws(
+    () => assertP013ClusterIsolation({ ...valid, p013Port: '5432' }),
+    /P013_CLUSTER_REUSED_MAIN_CLUSTER/u,
+  );
+  assert.throws(
+    () => assertP013ClusterIsolation({ ...valid, p013Database: 'ltcm_ci' }),
+    /P013_CLUSTER_DATABASE_UNEXPECTED/u,
+  );
+  assert.throws(
+    () => assertP013ClusterIsolation({ ...valid, runtimeRoleExists: true }),
+    /P013_CLUSTER_RUNTIME_ROLE_PREEXISTS/u,
+  );
+  assert.throws(
+    () => assertP013ClusterIsolation({ ...valid, runtimeMembershipCount: 1 }),
+    /P013_CLUSTER_MEMBERSHIP_PREEXISTS/u,
+  );
+  assert.throws(
+    () => assertP013ClusterIsolation({ ...valid, serverVersionNum: '160010' }),
+    /P013_CLUSTER_MAJOR_UNEXPECTED/u,
+  );
+  assert.throws(
+    () => assertP013ClusterIsolation({ ...valid, p013Host: '192.0.2.10' }),
+    /P013_CLUSTER_HOST_NOT_LOOPBACK/u,
+  );
+  assert.throws(
+    () => assertP013ClusterIsolation({ ...valid, ltcMSchemaExists: true }),
+    /P013_CLUSTER_SCHEMA_PREEXISTS/u,
+  );
 });
 
 test('estado final lê locale do catálogo do banco PostgreSQL', () => {

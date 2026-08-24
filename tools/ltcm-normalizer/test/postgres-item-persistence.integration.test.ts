@@ -29,7 +29,8 @@ import {
 const D12A_DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const D12A_LOCAL = D12A_DATABASE_URL !== undefined && D12A_DATABASE_URL !== '';
 const ENABLED = process.env['LTCM_P012_INTEGRATION'] === '1';
-const EXPECTED_MIGRATION_COUNT = 11;
+const EXPECTED_MIGRATION_COUNT = 12;
+const EXPECTED_TABLE_COUNT = 19;
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const ADMIN_ID = '00000000-0000-4000-8000-000000012001';
 const CLIENT_ID = '00000000-0000-4000-8000-000000012002';
@@ -138,7 +139,7 @@ async function applyD12AMigrations(pool: Pool): Promise<boolean> {
          from pg_catalog.pg_tables
         where schemaname = 'ltc_m'`,
     );
-    assert.equal(result.rows[0]?.['table_count'], 15);
+    assert.equal(result.rows[0]?.['table_count'], 19);
     return createdSchema;
   } finally {
     client.release();
@@ -226,9 +227,9 @@ async function assertMigratedSchema(pool: Pool): Promise<void> {
           and target.relkind = 'r'`,
     );
     assert.deepEqual(tables.rows[0], {
-      table_count: EXPECTED_MIGRATION_COUNT + 4,
-      rls_count: EXPECTED_MIGRATION_COUNT + 4,
-      force_rls_count: EXPECTED_MIGRATION_COUNT + 4,
+      table_count: EXPECTED_TABLE_COUNT,
+      rls_count: EXPECTED_TABLE_COUNT,
+      force_rls_count: EXPECTED_TABLE_COUNT,
     });
     const objects = await client.query(
       `select
@@ -678,19 +679,19 @@ async function assertConcurrentDivergentIdentity(pool: Pool): Promise<void> {
       quantity: '1.0000',
       unitPrice: '1.0000',
     });
-    const competingInsert = insertDirectItem(second, {
-      sourceLineKey,
-      lineNumber: 961,
-      quantity: '2.0000',
-      unitPrice: '3.0000',
-    });
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await first.query('commit');
-    await assert.rejects(
-      competingInsert,
+    const competingInsertAssertion = assert.rejects(
+      insertDirectItem(second, {
+        sourceLineKey,
+        lineNumber: 961,
+        quantity: '2.0000',
+        unitPrice: '3.0000',
+      }),
       (error: unknown) =>
         error !== null && typeof error === 'object' && 'code' in error && error.code === '23505',
     );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await first.query('commit');
+    await competingInsertAssertion;
     await second.query('rollback');
     const final = await pool.query(
       `select count(*)::integer as item_count,

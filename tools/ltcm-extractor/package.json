@@ -3,6 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./p013": {
+      "types": "./types/p013.d.ts",
+      "default": "./dist/src/p013-monthly-source.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "extract": "npm run build --silent && node dist/src/cli.js",

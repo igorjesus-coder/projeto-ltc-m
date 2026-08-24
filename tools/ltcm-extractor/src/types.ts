@@ -172,7 +172,7 @@ export interface ProfileReport {
     extracted_rows: number;
     serialized_formula_cells: number;
     formula_definitions: number;
-    expected_formula_definitions: number;
+    expected_formula_definitions: number | null;
   }>;
   projects: {
     count: number;

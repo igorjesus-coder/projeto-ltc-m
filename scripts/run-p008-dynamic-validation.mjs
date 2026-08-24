@@ -717,8 +717,8 @@ async function runLive(rootDirectory, runId, gateManifest, actualGate, artifactD
             rootDirectory,
             SQL_FILES.postcheck,
             [
-              '"policy_count": 41',
-              '"rls_force_table_count": 15',
+              '"policy_count": 49',
+              '"rls_force_table_count": 19',
               '"runtime_function_count": 9',
               '"unsafe_policy_count": 0',
             ],

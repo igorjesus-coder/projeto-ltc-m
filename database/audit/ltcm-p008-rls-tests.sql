@@ -4,6 +4,11 @@
 do $catalog_security$
 declare
     v_count integer;
+    v_expected_count integer;
+    v_actual_count integer;
+    v_missing_count integer;
+    v_unexpected_count integer;
+    v_changed_count integer;
 begin
     if not exists (
         select 1
@@ -119,43 +124,239 @@ begin
         raise exception 'P008 falhou: runtime pode criar objetos em ltc_m.';
     end if;
 
-    select count(*)
-    into v_count
-    from pg_catalog.pg_class
-    join pg_catalog.pg_namespace
-        on pg_namespace.oid = pg_class.relnamespace
-    where
-        pg_namespace.nspname = 'ltc_m'
-        and pg_class.relkind = 'r'
-        and pg_class.relname in (
-            'app_users',
-            'currencies',
-            'units',
-            'clients',
-            'projects',
-            'project_items',
-            'plan_versions',
-            'financial_plan_scopes',
-            'financial_plan_lines',
-            'financial_actual_events',
-            'import_batches',
-            'import_batch_sheets',
-            'import_staging_rows',
-            'import_row_errors',
-            'audit_log'
+    with expected_tables (tablename) as (
+        select pg_catalog.jsonb_array_elements_text(
+            '
+            [
+              "app_users", "currencies", "units", "clients", "projects",
+              "project_items", "plan_versions", "financial_plan_scopes",
+              "financial_plan_lines", "financial_actual_events", "import_batches",
+              "import_batch_sheets", "import_staging_rows", "import_row_errors",
+              "audit_log", "monthly_source_artifacts", "monthly_plan_baselines",
+              "monthly_plan_import_executions", "monthly_plan_cells"
+            ]
+            '::jsonb
         )
-        and pg_class.relrowsecurity
-        and pg_class.relforcerowsecurity;
-    if v_count <> 15 then
-        raise exception 'P008 falhou: RLS e FORCE RLS não cobrem as 15 tabelas.';
+    ),
+    actual_tables as (
+        select
+            pg_class.relname as tablename,
+            pg_class.relrowsecurity as rls_enabled,
+            pg_class.relforcerowsecurity as force_rls_enabled
+        from pg_catalog.pg_class
+        join pg_catalog.pg_namespace
+            on pg_namespace.oid = pg_class.relnamespace
+        where
+            pg_namespace.nspname = 'ltc_m'
+            and pg_class.relkind = 'r'
+    )
+    select
+        (select count(*) from expected_tables),
+        (select count(*) from actual_tables),
+        (
+            select count(*)
+            from expected_tables
+            where not exists (
+                select 1
+                from actual_tables
+                where actual_tables.tablename = expected_tables.tablename
+            )
+        ),
+        (
+            select count(*)
+            from actual_tables
+            where not exists (
+                select 1
+                from expected_tables
+                where expected_tables.tablename = actual_tables.tablename
+            )
+        ),
+        (
+            select count(*)
+            from expected_tables
+            join actual_tables using (tablename)
+            where
+                not actual_tables.rls_enabled
+                or not actual_tables.force_rls_enabled
+        )
+    into
+        v_expected_count,
+        v_actual_count,
+        v_missing_count,
+        v_unexpected_count,
+        v_changed_count;
+    if
+        v_missing_count <> 0
+        or v_unexpected_count <> 0
+        or v_changed_count <> 0
+    then
+        raise exception
+            'P008 falhou: inventário RLS/FORCE divergente (expected %, actual %, missing %, unexpected %, changed %).',
+            v_expected_count,
+            v_actual_count,
+            v_missing_count,
+            v_unexpected_count,
+            v_changed_count;
     end if;
 
-    select count(*)
-    into v_count
-    from pg_catalog.pg_policies
-    where pg_policies.schemaname = 'ltc_m';
-    if v_count <> 41 then
-        raise exception 'P008 falhou: inventário de policies divergente (%).', v_count;
+    with expected_policies as (
+        select *
+        from pg_catalog.jsonb_to_recordset(
+            '
+            [
+{"schemaname":"ltc_m","tablename":"app_users","policyname":"app_users_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
+{"schemaname":"ltc_m","tablename":"app_users","policyname":"app_users_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"20e95a3739a4783610028009b4d5bfc5","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"app_users","policyname":"app_users_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"b8e8fac0047b1d3cf781a94a5f46c433","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
+{"schemaname":"ltc_m","tablename":"clients","policyname":"clients_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"cc5122562461ce1005582aa3a962c44e"},
+{"schemaname":"ltc_m","tablename":"clients","policyname":"clients_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"4231ffa7bd1ae6a0cb1fdd50802b83e3","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"clients","policyname":"clients_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"cc5122562461ce1005582aa3a962c44e","with_check_md5":"cc5122562461ce1005582aa3a962c44e"},
+{"schemaname":"ltc_m","tablename":"currencies","policyname":"currencies_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
+{"schemaname":"ltc_m","tablename":"currencies","policyname":"currencies_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"e7809db2abd45631be170ea3d918f3ba","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"currencies","policyname":"currencies_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"b8e8fac0047b1d3cf781a94a5f46c433","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
+{"schemaname":"ltc_m","tablename":"financial_actual_events","policyname":"financial_actual_events_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"financial_actual_events","policyname":"financial_actual_events_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"4e6b1c5aea7d8db68a02ba49f549406b","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"financial_actual_events","policyname":"financial_actual_events_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"financial_plan_lines","policyname":"financial_plan_lines_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"6b1b24d3a1ac9e12c39840aad503453a"},
+{"schemaname":"ltc_m","tablename":"financial_plan_lines","policyname":"financial_plan_lines_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"eda16de36788650e99d4f3a12a87957a","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"financial_plan_lines","policyname":"financial_plan_lines_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"6b1b24d3a1ac9e12c39840aad503453a","with_check_md5":"6b1b24d3a1ac9e12c39840aad503453a"},
+{"schemaname":"ltc_m","tablename":"financial_plan_scopes","policyname":"financial_plan_scopes_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"f9ff3b595664304e71a5190c4e77bec4"},
+{"schemaname":"ltc_m","tablename":"financial_plan_scopes","policyname":"financial_plan_scopes_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"4659d334833071b1654fd6e2ef688786","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"financial_plan_scopes","policyname":"financial_plan_scopes_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"f9ff3b595664304e71a5190c4e77bec4","with_check_md5":"f9ff3b595664304e71a5190c4e77bec4"},
+{"schemaname":"ltc_m","tablename":"import_batch_sheets","policyname":"import_batch_sheets_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"import_batch_sheets","policyname":"import_batch_sheets_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"import_batch_sheets","policyname":"import_batch_sheets_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"import_batches","policyname":"import_batches_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"import_batches","policyname":"import_batches_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"import_batches","policyname":"import_batches_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"import_row_errors","policyname":"import_row_errors_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"import_row_errors","policyname":"import_row_errors_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"import_staging_rows","policyname":"import_staging_rows_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"import_staging_rows","policyname":"import_staging_rows_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"import_staging_rows","policyname":"import_staging_rows_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"816b88de0692ca5268626a753932a10e"},
+{"schemaname":"ltc_m","tablename":"monthly_plan_baselines","policyname":"monthly_plan_baselines_insert_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"95661b7c37f9ac418a9bbcc221f404d8"},
+{"schemaname":"ltc_m","tablename":"monthly_plan_baselines","policyname":"monthly_plan_baselines_select_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"737a5cc408fc7907cc6a32d4da7d0896","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"monthly_plan_cells","policyname":"monthly_plan_cells_insert_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"57bfc049c39f0d6d9455e84a581efac6"},
+{"schemaname":"ltc_m","tablename":"monthly_plan_cells","policyname":"monthly_plan_cells_select_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"5b1eb87a1538e400913e8ec41505c532","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"monthly_plan_import_executions","policyname":"monthly_executions_insert_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"f01d4082a8a33c6d6690ef460b779357"},
+{"schemaname":"ltc_m","tablename":"monthly_plan_import_executions","policyname":"monthly_executions_select_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"monthly_source_artifacts","policyname":"monthly_source_artifacts_insert_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"e3636f3174a72a6c96788bd5dc8d9edc"},
+{"schemaname":"ltc_m","tablename":"monthly_source_artifacts","policyname":"monthly_source_artifacts_select_p013","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"816b88de0692ca5268626a753932a10e","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"plan_versions","policyname":"plan_versions_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"1c29e919dab9dc7a8d7a4adfef3b3309"},
+{"schemaname":"ltc_m","tablename":"plan_versions","policyname":"plan_versions_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"b3ce9481d06fddf0e8f9af31b46186cc","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"plan_versions","policyname":"plan_versions_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"1c29e919dab9dc7a8d7a4adfef3b3309","with_check_md5":"1c29e919dab9dc7a8d7a4adfef3b3309"},
+{"schemaname":"ltc_m","tablename":"project_items","policyname":"project_items_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"89d6fddcca6cec18567af106f0e9c3d1"},
+{"schemaname":"ltc_m","tablename":"project_items","policyname":"project_items_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"fe1607e50a91656c2b9b9ed6d9f071b0","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"project_items","policyname":"project_items_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"89d6fddcca6cec18567af106f0e9c3d1","with_check_md5":"89d6fddcca6cec18567af106f0e9c3d1"},
+{"schemaname":"ltc_m","tablename":"projects","policyname":"projects_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"553432f6082bd8c47e800bfb848a3de4"},
+{"schemaname":"ltc_m","tablename":"projects","policyname":"projects_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"00d9b2c3141c83010d374638d68e50c0","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"projects","policyname":"projects_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"553432f6082bd8c47e800bfb848a3de4","with_check_md5":"553432f6082bd8c47e800bfb848a3de4"},
+{"schemaname":"ltc_m","tablename":"units","policyname":"units_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
+{"schemaname":"ltc_m","tablename":"units","policyname":"units_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"138ad046ca72a6835f35ec82fb9bf9b5","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
+{"schemaname":"ltc_m","tablename":"units","policyname":"units_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"b8e8fac0047b1d3cf781a94a5f46c433","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"}
+            ]
+            '::jsonb
+        ) as expected_policies (
+            schemaname text,
+            tablename text,
+            policyname text,
+            permissive text,
+            roles text,
+            cmd text,
+            qual_md5 text,
+            with_check_md5 text
+        )
+    ),
+    actual_policies as (
+        select
+            pg_policies.schemaname::text as schemaname,
+            pg_policies.tablename::text as tablename,
+            pg_policies.policyname::text as policyname,
+            pg_policies.permissive::text as permissive,
+            pg_policies.roles::text as roles,
+            pg_policies.cmd::text as cmd,
+            pg_catalog.md5(
+                pg_catalog.regexp_replace(
+                    pg_catalog.btrim(coalesce(pg_policies.qual, '')),
+                    E'\\s+',
+                    ' ',
+                    'g'
+                )
+            ) as qual_md5,
+            pg_catalog.md5(
+                pg_catalog.regexp_replace(
+                    pg_catalog.btrim(coalesce(pg_policies.with_check, '')),
+                    E'\\s+',
+                    ' ',
+                    'g'
+                )
+            ) as with_check_md5
+        from pg_catalog.pg_policies
+        where pg_policies.schemaname = 'ltc_m'
+    )
+    select
+        (select count(*) from expected_policies),
+        (select count(*) from actual_policies),
+        (
+            select count(*)
+            from expected_policies
+            where not exists (
+                select 1
+                from actual_policies
+                where
+                    actual_policies.schemaname = expected_policies.schemaname
+                    and actual_policies.tablename = expected_policies.tablename
+                    and actual_policies.policyname = expected_policies.policyname
+            )
+        ),
+        (
+            select count(*)
+            from actual_policies
+            where not exists (
+                select 1
+                from expected_policies
+                where
+                    expected_policies.schemaname = actual_policies.schemaname
+                    and expected_policies.tablename = actual_policies.tablename
+                    and expected_policies.policyname = actual_policies.policyname
+            )
+        ),
+        (
+            select count(*)
+            from expected_policies
+            join actual_policies using (schemaname, tablename, policyname)
+            where
+                row(
+                    expected_policies.permissive,
+                    expected_policies.roles,
+                    expected_policies.cmd,
+                    expected_policies.qual_md5,
+                    expected_policies.with_check_md5
+                ) is distinct from row(
+                    actual_policies.permissive,
+                    actual_policies.roles,
+                    actual_policies.cmd,
+                    actual_policies.qual_md5,
+                    actual_policies.with_check_md5
+                )
+        )
+    into
+        v_expected_count,
+        v_actual_count,
+        v_missing_count,
+        v_unexpected_count,
+        v_changed_count;
+    if
+        v_missing_count <> 0
+        or v_unexpected_count <> 0
+        or v_changed_count <> 0
+    then
+        raise exception
+            'P008 falhou: inventário de policies divergente (expected %, actual %, missing %, unexpected %, changed %).',
+            v_expected_count,
+            v_actual_count,
+            v_missing_count,
+            v_unexpected_count,
+            v_changed_count;
     end if;
 
     if exists (

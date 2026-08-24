@@ -266,6 +266,60 @@ model e riscos estão em
 [`p011-normalizer.md`](docs/import/p011-normalizer.md); o dry-run real sanitizado está em
 [`p011-validation-report.md`](docs/import/p011-validation-report.md).
 
+## Fundação do baseline mensal (P013 D02)
+
+O P013 D02 acrescenta somente schema, proveniência, identidade semântica, idempotência e o gate da
+fonte mensal. O gate troca a contagem incidental de fórmulas OOXML por um fingerprint semântico
+fail-closed, preserva `blank` distinto de zero explícito e congela o arredondamento decimal por
+célula. Não há importer/applier mensal nem acesso remoto. Contrato, tabelas e testes estão em
+[`p013-monthly-baseline-foundation.md`](docs/import/p013-monthly-baseline-foundation.md).
+
+```powershell
+npm run p013:check
+npm run test:p013:static
+$env:LTCM_P013_INTEGRATION = '1'
+npm run test:p013:postgres
+```
+
+## Plano canônico e dry-run mensal (P013 D03)
+
+A D03 consome o XLSX somente por uma fonte runtime certificada pelo gate D02, resolve as
+identidades P012 contra um snapshot PostgreSQL imutável e produz o plano mensal e seu recibo apenas
+em memória. O adapter executa uma transação `REPEATABLE READ READ ONLY`, um único `SELECT` e
+`ROLLBACK`; não existe comando de apply ou writer mensal. Contrato, estados, threat model e
+validação estão em
+[`p013-monthly-baseline-plan-dry-run.md`](docs/import/p013-monthly-baseline-plan-dry-run.md).
+
+```powershell
+npm run test:p013:d03
+$env:LTCM_P013_D03_INTEGRATION = '1'
+npm run test:p013:d03:postgres
+```
+
+## Persistência/apply mensal local (P013 D05)
+
+A D05 acrescenta uma capability de apply somente à suíte local de testes. Os hardenings D06A/D06C
+mantêm o emissor em escopo léxico dessa suíte e separam import de execução: package imports,
+entrypoints `.test` e imports diretos do support compilado são inertes, com namespace vazio e sem
+factory, harness, writer, capability mint ou registro em `node:test`. Somente os scripts D05
+executam explicitamente o próprio support como entrypoint de um worker real do `node --test`; a
+flag de integração apenas seleciona o caso PostgreSQL depois dessa fronteira e não concede
+authority a um import. O resultado original do dry-run é ligado por identidade process-local ao
+source, adapter, snapshot, plano e harness; o writer não integra `src`, scripts, apps ou frontend e
+não aceita pool, client ou SQL do caller. Configuração e ator caller-authored são copiados e
+sanitizados antes do fluxo interno. O fluxo usa PostgreSQL 17 `ltcm_test`, `SERIALIZABLE`, locks
+advisory em ordem canônica,
+`ltc_m_runtime`, RLS/FORCE RLS, releitura de freshness e persistência atômica/idempotente das 432
+células e 102 linhas materiais. Generic CLI/remote/production apply permanece proibido. Detalhes e
+limites estão em
+[`p013-monthly-baseline-local-apply.md`](docs/import/p013-monthly-baseline-local-apply.md).
+
+```powershell
+npm run test:p013:d05
+$env:LTCM_P013_D05_INTEGRATION = '1'
+npm run test:p013:d05:postgres
+```
+
 ## Estrutura
 
 ```text
