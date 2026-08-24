@@ -18,11 +18,55 @@ const ALLOWED_MUTATION_TABLES = new Set([
   'ltc_m.import_row_errors',
 ]);
 
+const POLICY_INVENTORY_FIELDS = [
+  'schemaname',
+  'tablename',
+  'policyname',
+  'permissive',
+  'roles',
+  'cmd',
+  'qual_md5',
+  'with_check_md5',
+];
+
+const P013_POLICIES = new Set([
+  'monthly_source_artifacts.monthly_source_artifacts_select_p013',
+  'monthly_source_artifacts.monthly_source_artifacts_insert_p013',
+  'monthly_plan_baselines.monthly_plan_baselines_select_p013',
+  'monthly_plan_baselines.monthly_plan_baselines_insert_p013',
+  'monthly_plan_import_executions.monthly_executions_select_p013',
+  'monthly_plan_import_executions.monthly_executions_insert_p013',
+  'monthly_plan_cells.monthly_plan_cells_select_p013',
+  'monthly_plan_cells.monthly_plan_cells_insert_p013',
+]);
+
+const PROTECTED_TABLES = new Set([
+  'app_users',
+  'currencies',
+  'units',
+  'clients',
+  'projects',
+  'project_items',
+  'plan_versions',
+  'financial_plan_scopes',
+  'financial_plan_lines',
+  'financial_actual_events',
+  'import_batches',
+  'import_batch_sheets',
+  'import_staging_rows',
+  'import_row_errors',
+  'audit_log',
+  'monthly_source_artifacts',
+  'monthly_plan_baselines',
+  'monthly_plan_import_executions',
+  'monthly_plan_cells',
+]);
+
 const REQUIRED_SCENARIOS = [
   ['atributos da runtime', /atributos seguros da role runtime ausentes/i],
   ['runtime sem ownership', /runtime recebeu ownership/i],
   ['runtime sem grants externos', /runtime recebeu grant direto em objeto externo/i],
-  ['RLS e FORCE RLS', /RLS e FORCE RLS não cobrem as 15 tabelas/i],
+  ['RLS e FORCE RLS', /inventário RLS\/FORCE divergente/i],
   ['policies exatas', /inventário de policies divergente/i],
   ['sem DELETE', /runtime recebeu privilégio de tabela proibido/i],
   ['allowlist de funções', /allowlist executável contém/i],
@@ -51,6 +95,58 @@ const REQUIRED_SCENARIOS = [
   ['sem auditoria direta', /admin leu audit_log diretamente/i],
 ];
 
+function extractJsonArgument(sql, functionName) {
+  const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const match = sql.match(
+    new RegExp(`${escapedName}\\s*\\(\\s*'\\s*(\\[[\\s\\S]*?\\])\\s*'::jsonb`, 'u'),
+  );
+  if (!match) throw new Error(`inventário ${functionName} ausente`);
+  return JSON.parse(match[1]);
+}
+
+export function extractP008PolicyInventory(sql) {
+  const inventory = extractJsonArgument(sql, 'jsonb_to_recordset');
+  if (!Array.isArray(inventory)) throw new Error('inventário de policies não é array');
+  return inventory;
+}
+
+export function extractP008RlsInventory(sql) {
+  const inventory = extractJsonArgument(sql, 'jsonb_array_elements_text');
+  if (!Array.isArray(inventory)) throw new Error('inventário RLS não é array');
+  return inventory;
+}
+
+function policyIdentity(policy) {
+  return `${policy.schemaname}.${policy.tablename}.${policy.policyname}`;
+}
+
+export function comparePolicyInventories(expected, actual) {
+  const expectedByIdentity = new Map(expected.map((policy) => [policyIdentity(policy), policy]));
+  const actualByIdentity = new Map(actual.map((policy) => [policyIdentity(policy), policy]));
+  const missing = [...expectedByIdentity.keys()].filter((key) => !actualByIdentity.has(key));
+  const unexpected = [...actualByIdentity.keys()].filter((key) => !expectedByIdentity.has(key));
+  const changed = [...expectedByIdentity.keys()].filter((key) => {
+    if (!actualByIdentity.has(key)) return false;
+    const expectedPolicy = expectedByIdentity.get(key);
+    const actualPolicy = actualByIdentity.get(key);
+    return POLICY_INVENTORY_FIELDS.some((field) => expectedPolicy[field] !== actualPolicy[field]);
+  });
+  return { missing, unexpected, changed };
+}
+
+export function compareRlsInventories(expected, actual) {
+  const expectedSet = new Set(expected);
+  const actualByTable = new Map(actual.map((table) => [table.tablename, table]));
+  return {
+    missing: [...expectedSet].filter((table) => !actualByTable.has(table)),
+    unexpected: [...actualByTable.keys()].filter((table) => !expectedSet.has(table)),
+    changed: [...expectedSet].filter((table) => {
+      const actualTable = actualByTable.get(table);
+      return actualTable && (!actualTable.rls_enabled || !actualTable.force_rls_enabled);
+    }),
+  };
+}
+
 function mutationTargets(sql) {
   return [
     ...sql.matchAll(
@@ -62,6 +158,82 @@ function mutationTargets(sql) {
 export function scanP008TestText(sql) {
   const issues = [];
   const stripped = stripSeedNoise(sql);
+
+  let policyInventory = [];
+  try {
+    policyInventory = extractP008PolicyInventory(sql);
+  } catch (error) {
+    issues.push(error.message);
+  }
+  if (policyInventory.length !== 49) {
+    issues.push(`inventário nominal deve conter 49 policies, recebeu ${policyInventory.length}`);
+  }
+  const policyIdentities = policyInventory.map(policyIdentity);
+  if (new Set(policyIdentities).size !== policyIdentities.length) {
+    issues.push('inventário nominal contém identidade duplicada');
+  }
+  for (const policy of policyInventory) {
+    if (POLICY_INVENTORY_FIELDS.some((field) => typeof policy[field] !== 'string')) {
+      issues.push(`policy nominal incompleta: ${policyIdentity(policy)}`);
+      continue;
+    }
+    if (
+      !/^[a-f0-9]{32}$/u.test(policy.qual_md5) ||
+      !/^[a-f0-9]{32}$/u.test(policy.with_check_md5)
+    ) {
+      issues.push(`fingerprint de predicate inválido: ${policyIdentity(policy)}`);
+    }
+  }
+  for (const policy of P013_POLICIES) {
+    if (!policyIdentities.includes(`ltc_m.${policy}`))
+      issues.push(`policy P013 ausente: ${policy}`);
+  }
+  const p013Inventory = policyInventory.filter((policy) =>
+    P013_POLICIES.has(`${policy.tablename}.${policy.policyname}`),
+  );
+  if (
+    p013Inventory.filter((policy) => policy.cmd === 'SELECT').length !== 4 ||
+    p013Inventory.filter((policy) => policy.cmd === 'INSERT').length !== 4 ||
+    p013Inventory.some(
+      (policy) => policy.permissive !== 'PERMISSIVE' || policy.roles !== '{ltc_m_runtime}',
+    )
+  ) {
+    issues.push('contrato nominal das oito policies P013 divergente');
+  }
+
+  let rlsInventory = [];
+  try {
+    rlsInventory = extractP008RlsInventory(sql);
+  } catch (error) {
+    issues.push(error.message);
+  }
+  if (
+    rlsInventory.length !== PROTECTED_TABLES.size ||
+    new Set(rlsInventory).size !== rlsInventory.length ||
+    [...PROTECTED_TABLES].some((table) => !rlsInventory.includes(table))
+  ) {
+    issues.push('inventário RLS/FORCE deve conter exatamente as 19 tabelas protegidas');
+  }
+
+  for (const [pattern, message] of [
+    [/\bjsonb_to_recordset\s*\(/iu, 'comparação nominal de policies ausente'],
+    [/\bexpected_policies\b/iu, 'conjunto esperado de policies ausente'],
+    [/\bactual_policies\b/iu, 'conjunto real de policies ausente'],
+    [/\bv_missing_count\b/iu, 'proteção MISSING ausente'],
+    [/\bv_unexpected_count\b/iu, 'proteção UNEXPECTED ausente'],
+    [/\bv_changed_count\b/iu, 'proteção CHANGED ausente'],
+    [/\bis\s+distinct\s+from\s+row\s*\(/iu, 'comparação semântica CHANGED ausente'],
+    [/\bqual_md5\b/iu, 'fingerprint USING ausente'],
+    [/\bwith_check_md5\b/iu, 'fingerprint WITH CHECK ausente'],
+  ]) {
+    if (!pattern.test(stripped)) issues.push(message);
+  }
+  if ((stripped.match(/\bwhere\s+not\s+exists\s*\(/giu) ?? []).length < 4) {
+    issues.push('comparação bidirecional de inventários ausente');
+  }
+  if (/\bv_count\s*(?:<>|=|>=|<=|>|<)\s*(?:41|49)\b/iu.test(stripped)) {
+    issues.push('contagem literal cega de policies proibida');
+  }
 
   if (!stripped.replace(/[\s;]+/g, '')) issues.push('teste SQL vazio');
   if ((stripped.match(/\bbegin\s*;/gi) ?? []).length !== 1) {
