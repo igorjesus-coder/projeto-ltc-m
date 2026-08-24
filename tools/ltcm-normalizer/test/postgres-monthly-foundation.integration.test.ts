@@ -10,6 +10,7 @@ import { parseP012LoopbackDatabaseUrlForTestHarness } from './support/postgres-i
 
 const DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const ENABLED = process.env['LTCM_P013_INTEGRATION'] === '1';
+const ISOLATED_CLUSTER = process.env['LTCM_P013_ISOLATED_CLUSTER'] === '1';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const EXPECTED_MIGRATION_COUNT = 12;
 const ADMIN_ID = '00000000-0000-4000-8000-000000013001';
@@ -32,11 +33,58 @@ const SOURCE_SEMANTIC = 'b'.repeat(64);
 const BASELINE_SEMANTIC = 'c'.repeat(64);
 const SOURCE_LINE_KEY = `p012-item-v1:${'d'.repeat(64)}`;
 
+function rawHostname(value: string): string {
+  const protocolEnd = value.indexOf('://');
+  const authorityEndCandidates = [
+    value.indexOf('/', protocolEnd + 3),
+    value.indexOf('?', protocolEnd + 3),
+    value.indexOf('#', protocolEnd + 3),
+  ].filter((index) => index >= 0);
+  const authorityEnd =
+    authorityEndCandidates.length === 0 ? value.length : Math.min(...authorityEndCandidates);
+  const authority = value.slice(protocolEnd + 3, authorityEnd);
+  const hostAndPort = authority.slice(authority.lastIndexOf('@') + 1);
+  if (hostAndPort.startsWith('[')) {
+    const closingBracket = hostAndPort.indexOf(']');
+    return closingBracket < 0 ? hostAndPort : hostAndPort.slice(0, closingBracket + 1);
+  }
+  const colon = hostAndPort.lastIndexOf(':');
+  return colon < 0 ? hostAndPort : hostAndPort.slice(0, colon);
+}
+
+function parseP013IsolatedClusterUrlForTestHarness(value: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error('P013_POSTGRES_ENV_MISSING');
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const suppliedHostname = rawHostname(value).toLowerCase();
+  const databaseName = decodeURIComponent(parsed.pathname.slice(1));
+  const port = Number(parsed.port);
+  if (
+    !['postgres:', 'postgresql:'].includes(parsed.protocol) ||
+    !['127.0.0.1', 'localhost', '[::1]'].includes(hostname) ||
+    suppliedHostname !== hostname ||
+    databaseName !== 'ltcm_test' ||
+    parsed.pathname !== '/ltcm_test' ||
+    !Number.isSafeInteger(port) ||
+    port < 1024 ||
+    port > 65535 ||
+    parsed.search !== '' ||
+    parsed.hash !== ''
+  ) {
+    throw new Error('P013_POSTGRES_ENV_MISSING');
+  }
+}
+
 function databaseUrl(): string {
   if (DATABASE_URL === undefined || DATABASE_URL === '') {
     throw new Error('P013_POSTGRES_ENV_MISSING');
   }
-  parseP012LoopbackDatabaseUrlForTestHarness(DATABASE_URL);
+  if (ISOLATED_CLUSTER) parseP013IsolatedClusterUrlForTestHarness(DATABASE_URL);
+  else parseP012LoopbackDatabaseUrlForTestHarness(DATABASE_URL);
   return DATABASE_URL;
 }
 

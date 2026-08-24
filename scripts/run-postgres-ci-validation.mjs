@@ -399,6 +399,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
           env: {
             ...process.env,
             LTCM_P013_INTEGRATION: '1',
+            LTCM_P013_ISOLATED_CLUSTER: '1',
             LTCM_P012_TEST_DATABASE_URL: p013DatabaseUrl,
           },
           timeoutMs: 120_000,

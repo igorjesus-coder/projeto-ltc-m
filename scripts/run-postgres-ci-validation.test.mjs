@@ -147,6 +147,7 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   assert.match(runner, /runStage\('p013_postgres_build'/u);
   assert.match(runner, /runStage\('p013_postgres'/u);
   assert.match(runner, /LTCM_P013_INTEGRATION: '1'/u);
+  assert.match(runner, /LTCM_P013_ISOLATED_CLUSTER: '1'/u);
   assert.match(runner, /LTCM_P012_TEST_DATABASE_URL: p013DatabaseUrl/u);
   assert.match(runner, /postgres-monthly-foundation\.integration\.test\.js/u);
   assert.match(runner, /evidence\.regressions\.p013_postgres = true/u);
