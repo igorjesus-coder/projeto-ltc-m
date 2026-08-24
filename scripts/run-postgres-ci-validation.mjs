@@ -162,7 +162,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       p009_phase_a: false,
       p009: false,
       p012_persistence: false,
+      p013_postgres: false,
     },
+    p013_postgres: null,
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
     postgres: null,
@@ -180,6 +182,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
   const runStage = stageRunner(evidence);
   let d27Granted = false;
   let concurrencyDatabaseCreated = false;
+  let p013DatabaseCreated = false;
 
   const postgresFile = (relativePath, options = {}) =>
     executePsql({
@@ -376,6 +379,66 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
     );
     evidence.regressions.p012_persistence = true;
 
+    runStage('create_p013_database', () =>
+      executePsql({
+        database: 'postgres',
+        user: 'postgres',
+        password: postgresPassword,
+        command: 'create database ltcm_test owner postgres',
+      }),
+    );
+    p013DatabaseCreated = true;
+
+    const p013DatabaseUrl = `postgresql://postgres:${postgresPassword}@127.0.0.1:5432/ltcm_test`;
+    runStage('p013_postgres_build', () =>
+      runProcess('npm', ['run', 'build', '--workspace', '@ltcm/normalizer', '--silent'], {
+        cwd: rootDirectory,
+        timeoutMs: 120_000,
+      }),
+    );
+    runStage('p013_postgres', () =>
+      runProcess(
+        'node',
+        [
+          '--test',
+          path.join(
+            'tools',
+            'ltcm-normalizer',
+            'dist',
+            'test',
+            'postgres-monthly-foundation.integration.test.js',
+          ),
+        ],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P013_INTEGRATION: '1',
+            LTCM_P012_TEST_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p013_postgres = true;
+    evidence.p013_postgres = {
+      passed: true,
+      database: 'ltcm_test',
+      host: '127.0.0.1',
+      command:
+        'node --test tools/ltcm-normalizer/dist/test/postgres-monthly-foundation.integration.test.js',
+      coverage: [
+        'migrations_from_zero',
+        'p013_foundation_schema',
+        'rls',
+        'force_rls',
+        'runtime_role_behavior',
+        'provenance_constraints',
+        'idempotency',
+        'rollback_cleanup',
+      ],
+    };
+
     evidence.concurrency = await runConcurrencyTest();
     concurrencyDatabaseCreated = false;
     evidence.exit_codes.concurrency = 0;
@@ -403,6 +466,19 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       evidence.exit_codes.concurrency_database_cleanup = dropConcurrencyDatabase.code;
       if (dropConcurrencyDatabase.code !== 0) {
         evidence.first_error ??= `concurrency_database_cleanup: ${sanitizeProcessFailure(dropConcurrencyDatabase)}`;
+      }
+    }
+
+    if (p013DatabaseCreated) {
+      const dropP013Database = executePsql({
+        database: 'postgres',
+        user: 'postgres',
+        password: postgresPassword,
+        command: 'drop database if exists ltcm_test with (force)',
+      });
+      evidence.exit_codes.p013_database_cleanup = dropP013Database.code;
+      if (dropP013Database.code !== 0) {
+        evidence.first_error ??= `p013_database_cleanup: ${sanitizeProcessFailure(dropP013Database)}`;
       }
     }
 

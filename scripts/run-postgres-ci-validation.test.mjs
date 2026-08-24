@@ -128,6 +128,29 @@ test('runner ativa P012 somente no banco efêmero antes da concorrência D41', (
   assert.doesNotMatch(runner, /LTCM_P012_INTEGRATION[\s\S]{0,200}SUPABASE/iu);
 });
 
+test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir com sucesso', () => {
+  const runner = fs.readFileSync(
+    path.join(process.cwd(), 'scripts', 'run-postgres-ci-validation.mjs'),
+    'utf8',
+  );
+  assert.match(runner, /runStage\('create_p013_database'/u);
+  assert.match(runner, /create database ltcm_test owner postgres/u);
+  assert.match(runner, /runStage\('p013_postgres_build'/u);
+  assert.match(runner, /runStage\('p013_postgres'/u);
+  assert.match(runner, /LTCM_P013_INTEGRATION: '1'/u);
+  assert.match(runner, /LTCM_P012_TEST_DATABASE_URL: p013DatabaseUrl/u);
+  assert.match(runner, /postgres-monthly-foundation\.integration\.test\.js/u);
+  assert.match(runner, /evidence\.regressions\.p013_postgres = true/u);
+  assert.match(runner, /p013_postgres: false/u);
+  assert.match(runner, /Object\.values\(evidence\.regressions\)\.every\(Boolean\)/u);
+  assert.match(runner, /drop database if exists ltcm_test with \(force\)/u);
+  assert.ok(runner.indexOf("runStage('p013_postgres'") < runner.indexOf('runConcurrencyTest()'));
+  assert.doesNotMatch(
+    runner,
+    /\.local-source|LTCM_P013_D03_INTEGRATION|LTCM_P013_D05_INTEGRATION/u,
+  );
+});
+
 test('estado final lê locale do catálogo do banco PostgreSQL', () => {
   const finalState = fs.readFileSync(
     path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-final-state.sql'),
