@@ -145,6 +145,8 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   assert.match(runner, /Object\.values\(evidence\.regressions\)\.every\(Boolean\)/u);
   assert.match(runner, /drop database if exists ltcm_test with \(force\)/u);
   assert.ok(runner.indexOf("runStage('p013_postgres'") < runner.indexOf('runConcurrencyTest()'));
+  assert.ok(runner.indexOf('runP013PostgresStage()') < runner.indexOf("runStage('bootstrap_d26'"));
+  assert.ok(runner.indexOf('runP013PostgresStage()') < runner.indexOf("runStage('d27_grant'"));
   assert.doesNotMatch(
     runner,
     /\.local-source|LTCM_P013_D03_INTEGRATION|LTCM_P013_D05_INTEGRATION/u,

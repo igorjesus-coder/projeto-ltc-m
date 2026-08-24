@@ -193,6 +193,68 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       timeoutMs: options.timeoutMs,
     });
 
+  const runP013PostgresStage = () => {
+    runStage('create_p013_database', () =>
+      executePsql({
+        database: 'postgres',
+        user: 'postgres',
+        password: postgresPassword,
+        command: 'create database ltcm_test owner postgres',
+      }),
+    );
+    p013DatabaseCreated = true;
+
+    const p013DatabaseUrl = `postgresql://postgres:${postgresPassword}@127.0.0.1:5432/ltcm_test`;
+    runStage('p013_postgres_build', () =>
+      runProcess('npm', ['run', 'build', '--workspace', '@ltcm/normalizer', '--silent'], {
+        cwd: rootDirectory,
+        timeoutMs: 120_000,
+      }),
+    );
+    runStage('p013_postgres', () =>
+      runProcess(
+        'node',
+        [
+          '--test',
+          path.join(
+            'tools',
+            'ltcm-normalizer',
+            'dist',
+            'test',
+            'postgres-monthly-foundation.integration.test.js',
+          ),
+        ],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P013_INTEGRATION: '1',
+            LTCM_P012_TEST_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p013_postgres = true;
+    evidence.p013_postgres = {
+      passed: true,
+      database: 'ltcm_test',
+      host: '127.0.0.1',
+      command:
+        'node --test tools/ltcm-normalizer/dist/test/postgres-monthly-foundation.integration.test.js',
+      coverage: [
+        'migrations_from_zero',
+        'p013_foundation_schema',
+        'rls',
+        'force_rls',
+        'runtime_role_behavior',
+        'provenance_constraints',
+        'idempotency',
+        'rollback_cleanup',
+      ],
+    };
+  };
+
   try {
     runStage('bootstrap_roles', () =>
       executePsql({
@@ -223,6 +285,8 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }),
     );
     concurrencyDatabaseCreated = true;
+
+    runP013PostgresStage();
 
     for (const migration of initialMigrations) {
       runStage(`migration_${migration.order}`, () =>
@@ -378,66 +442,6 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       ),
     );
     evidence.regressions.p012_persistence = true;
-
-    runStage('create_p013_database', () =>
-      executePsql({
-        database: 'postgres',
-        user: 'postgres',
-        password: postgresPassword,
-        command: 'create database ltcm_test owner postgres',
-      }),
-    );
-    p013DatabaseCreated = true;
-
-    const p013DatabaseUrl = `postgresql://postgres:${postgresPassword}@127.0.0.1:5432/ltcm_test`;
-    runStage('p013_postgres_build', () =>
-      runProcess('npm', ['run', 'build', '--workspace', '@ltcm/normalizer', '--silent'], {
-        cwd: rootDirectory,
-        timeoutMs: 120_000,
-      }),
-    );
-    runStage('p013_postgres', () =>
-      runProcess(
-        'node',
-        [
-          '--test',
-          path.join(
-            'tools',
-            'ltcm-normalizer',
-            'dist',
-            'test',
-            'postgres-monthly-foundation.integration.test.js',
-          ),
-        ],
-        {
-          cwd: rootDirectory,
-          env: {
-            ...process.env,
-            LTCM_P013_INTEGRATION: '1',
-            LTCM_P012_TEST_DATABASE_URL: p013DatabaseUrl,
-          },
-          timeoutMs: 120_000,
-        },
-      ),
-    );
-    evidence.regressions.p013_postgres = true;
-    evidence.p013_postgres = {
-      passed: true,
-      database: 'ltcm_test',
-      host: '127.0.0.1',
-      command:
-        'node --test tools/ltcm-normalizer/dist/test/postgres-monthly-foundation.integration.test.js',
-      coverage: [
-        'migrations_from_zero',
-        'p013_foundation_schema',
-        'rls',
-        'force_rls',
-        'runtime_role_behavior',
-        'provenance_constraints',
-        'idempotency',
-        'rollback_cleanup',
-      ],
-    };
 
     evidence.concurrency = await runConcurrencyTest();
     concurrencyDatabaseCreated = false;
