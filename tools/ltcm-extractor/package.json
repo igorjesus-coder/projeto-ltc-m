@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     "./p013": {
-      "types": "./dist/src/p013-monthly-source.d.ts",
+      "types": "./types/p013.d.ts",
       "default": "./dist/src/p013-monthly-source.js"
     }
   },

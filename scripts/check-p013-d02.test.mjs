@@ -7,6 +7,25 @@ import { checkP013D02, P013_MIGRATION, scanP013D02 } from './check-p013-d02.mjs'
 
 const repositoryRoot = path.resolve('.');
 
+test('rejeita export de tipos P013 dependente de dist mesmo com artefato residual', () => {
+  const input = sources();
+  input.extractorPackage = input.extractorPackage.replace(
+    './types/p013.d.ts',
+    './dist/src/p013-monthly-source.d.ts',
+  );
+  const issues = scanP013D02(input);
+
+  assert.ok(issues.some((issue) => issue.includes('contrato TypeScript versionado')));
+});
+
+test('rejeita ausência do target versionado do export de tipos P013', () => {
+  const input = sources();
+  input.extractorTypesTargetExists = false;
+  const issues = scanP013D02(input);
+
+  assert.ok(issues.some((issue) => issue.includes('target versionado')));
+});
+
 function sources() {
   const read = (...segments) => fs.readFileSync(path.join(repositoryRoot, ...segments), 'utf8');
   return {
@@ -16,6 +35,8 @@ function sources() {
     monthlyContract: read('tools', 'ltcm-normalizer', 'src', 'monthly-baseline.ts'),
     certifiedSource: read('tools', 'ltcm-extractor', 'src', 'p013-monthly-source.ts'),
     monthlyPlan: read('tools', 'ltcm-normalizer', 'src', 'monthly-baseline-plan.ts'),
+    extractorPackage: read('tools', 'ltcm-extractor', 'package.json'),
+    extractorTypesTargetExists: true,
   };
 }
 

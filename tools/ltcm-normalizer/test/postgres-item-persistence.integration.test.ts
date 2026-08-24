@@ -679,19 +679,19 @@ async function assertConcurrentDivergentIdentity(pool: Pool): Promise<void> {
       quantity: '1.0000',
       unitPrice: '1.0000',
     });
-    const competingInsert = insertDirectItem(second, {
-      sourceLineKey,
-      lineNumber: 961,
-      quantity: '2.0000',
-      unitPrice: '3.0000',
-    });
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await first.query('commit');
-    await assert.rejects(
-      competingInsert,
+    const competingInsertAssertion = assert.rejects(
+      insertDirectItem(second, {
+        sourceLineKey,
+        lineNumber: 961,
+        quantity: '2.0000',
+        unitPrice: '3.0000',
+      }),
       (error: unknown) =>
         error !== null && typeof error === 'object' && 'code' in error && error.code === '23505',
     );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await first.query('commit');
+    await competingInsertAssertion;
     await second.query('rollback');
     const final = await pool.query(
       `select count(*)::integer as item_count,

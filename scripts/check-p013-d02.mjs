@@ -27,6 +27,8 @@ export function scanP013D02({
   monthlyContract,
   certifiedSource = '',
   monthlyPlan = '',
+  extractorPackage = '',
+  extractorTypesTargetExists = false,
 }) {
   const issues = scanMigrationText(migration, { migrationName: P013_MIGRATION }).map(
     (issue) => `migration: ${issue}`,
@@ -147,6 +149,22 @@ export function scanP013D02({
     issues.push('D03 expõe caminho de apply/writer/persistência');
   }
 
+  try {
+    const manifest = JSON.parse(extractorPackage);
+    const p013Export = manifest?.exports?.['./p013'];
+    if (p013Export?.types !== './types/p013.d.ts') {
+      issues.push('export de tipos P013 deve apontar para contrato TypeScript versionado');
+    }
+    if (p013Export?.default !== './dist/src/p013-monthly-source.js') {
+      issues.push('export runtime P013 deve permanecer no JavaScript compilado');
+    }
+  } catch {
+    issues.push('package manifest do extractor inválido');
+  }
+  if (!extractorTypesTargetExists) {
+    issues.push('target versionado do export de tipos P013 ausente');
+  }
+
   return [...new Set(issues)];
 }
 
@@ -159,6 +177,10 @@ export function checkP013D02(repositoryRoot) {
     monthlyContract: read('tools', 'ltcm-normalizer', 'src', 'monthly-baseline.ts'),
     certifiedSource: read('tools', 'ltcm-extractor', 'src', 'p013-monthly-source.ts'),
     monthlyPlan: read('tools', 'ltcm-normalizer', 'src', 'monthly-baseline-plan.ts'),
+    extractorPackage: read('tools', 'ltcm-extractor', 'package.json'),
+    extractorTypesTargetExists: fs.existsSync(
+      path.join(repositoryRoot, 'tools', 'ltcm-extractor', 'types', 'p013.d.ts'),
+    ),
   });
 }
 
