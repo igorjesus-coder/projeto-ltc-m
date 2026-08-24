@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const MIGRATION_NAME = /^(\d{14})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$/;
 const P009_MIGRATION_NAME = '20260731130000_add_ltcm_import_staging.sql';
 const D40_MIGRATION_NAME = '20260804120000_add_legacy_project_reference_date_exception.sql';
+const P013_MIGRATION_NAME = '20260820120000_add_p013_monthly_baseline_foundation.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -177,6 +178,28 @@ const P008_RLS_TABLES = new Set([
 
 const P009_RLS_TABLES = new Set([...P008_RLS_TABLES, 'import_batch_sheets', 'import_staging_rows']);
 
+const P013_TABLES = new Set([
+  'monthly_source_artifacts',
+  'monthly_plan_baselines',
+  'monthly_plan_import_executions',
+  'monthly_plan_cells',
+]);
+
+const P013_ALTER_TABLES = new Set([
+  'import_batches',
+  'import_batch_sheets',
+  'import_staging_rows',
+  'financial_plan_lines',
+]);
+
+const P013_RLS_TABLES = new Set([...P009_RLS_TABLES, ...P013_TABLES]);
+
+function rlsTablesForScope(scope) {
+  if (scope === 'p013') return P013_RLS_TABLES;
+  if (scope === 'p009') return P009_RLS_TABLES;
+  return P008_RLS_TABLES;
+}
+
 function consumeDollarTag(sql, index) {
   const match = sql.slice(index).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/);
   return match?.[0] ?? null;
@@ -306,6 +329,10 @@ function requireAdditiveAlterTables(sql, issues, scope) {
     }
 
     const tableName = tableMatch[1].toLowerCase();
+    if (scope === 'p013' && !P013_ALTER_TABLES.has(tableName) && !P013_TABLES.has(tableName)) {
+      issues.push(`ALTER TABLE fora da allowlist nominal P013: ltc_m.${tableName}`);
+      continue;
+    }
     const allowedColumns =
       scope === 'd40'
         ? D40_COLUMNS.get(tableName)
@@ -328,7 +355,7 @@ function requireAdditiveAlterTables(sql, issues, scope) {
     }
     if (/\b(?:enable|force)\s+row\s+level\s+security\s*;/i.test(statement)) {
       if (
-        !(scope === 'p009' ? P009_RLS_TABLES : P008_RLS_TABLES).has(tableName) ||
+        !rlsTablesForScope(scope).has(tableName) ||
         !/^\s*alter\s+table\s+ltc_m\.[a-z_][a-z0-9_]*\s+(?:enable|force)\s+row\s+level\s+security\s*;/i.test(
           statement,
         )
@@ -338,6 +365,13 @@ function requireAdditiveAlterTables(sql, issues, scope) {
         );
       }
       continue;
+    }
+
+    if (
+      scope === 'p013' &&
+      !/^\s*alter\s+table\s+ltc_m\.[a-z_][a-z0-9_]*\s+add\s+constraint\b/i.test(statement)
+    ) {
+      issues.push('ALTER TABLE P013 permite apenas constraints aditivas e ativação de RLS');
     }
 
     for (const columnMatch of statement.matchAll(/\badd\s+column\s+([a-z_][a-z0-9_]*)\b/gi)) {
@@ -520,7 +554,7 @@ function requireP008Security(sql, stripped, issues, scope) {
     const [, , tableNameRaw, commandRaw] = header;
     const tableName = tableNameRaw.toLowerCase();
     const command = commandRaw.toLowerCase();
-    const allowedRlsTables = scope === 'p009' ? P009_RLS_TABLES : P008_RLS_TABLES;
+    const allowedRlsTables = rlsTablesForScope(scope);
     if (!allowedRlsTables.has(tableName)) {
       issues.push(`policy fora das tabelas ltc_m aprovadas para ${scope.toUpperCase()}`);
     }
@@ -694,9 +728,11 @@ export function scanMigrationText(sql, options = {}) {
   const scope =
     options.migrationName === D40_MIGRATION_NAME
       ? 'd40'
-      : options.migrationName === P009_MIGRATION_NAME
-        ? 'p009'
-        : 'p007';
+      : options.migrationName === P013_MIGRATION_NAME
+        ? 'p013'
+        : options.migrationName === P009_MIGRATION_NAME
+          ? 'p009'
+          : 'p007';
   const stripped = stripSqlNoise(sql);
   const semanticSql = stripped.replace(/\b(?:begin|commit|rollback)\b/gi, '').replace(/[;\s]/g, '');
 

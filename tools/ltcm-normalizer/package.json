@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "eslint . --max-warnings 0",
-    "test": "npm run build --silent && node --test dist/test/*.test.js",
+    "test": "npm run build --silent && node --test dist/test/*.test.js dist/test/support/postgres-monthly-baseline-apply.js",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -24,6 +24,7 @@
     "npm": ">=11"
   },
   "dependencies": {
+    "@ltcm/extractor": "0.1.0",
     "pg": "^8.16.3"
   }
 }

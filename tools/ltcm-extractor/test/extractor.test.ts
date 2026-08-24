@@ -13,7 +13,12 @@ import { writeArtifacts } from '../src/artifact-writer.js';
 import { canonicalJson, sha256Canonical } from '../src/canonical-json.js';
 import { parseArguments } from '../src/cli.js';
 import { extractWorkbook, worksheetRangeCellCount } from '../src/extractor.js';
+import {
+  assertP013MonthlySourceFingerprint,
+  evaluateP013MonthlySource,
+} from '../src/p013-source-gate.js';
 import { OPERATIONAL_SHEETS, type StagingRowArtifact } from '../src/types.js';
+import { inspectWorkbookPackage } from '../src/workbook-package.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -115,7 +120,20 @@ function ltcmProfileWorkbook(
   projectValues['!ref'] = 'A1:K10';
 
   const monthly = XLSX.utils.aoa_to_sheet([]);
-  monthly.A3 = { t: 's', v: 'Item' };
+  for (const [column, value] of Object.entries({
+    A: 'Item',
+    B: 'Projeto LTC-M',
+    C: 'Cliente',
+    D: 'Código',
+    E: 'Descrição',
+    F: 'Quantidade',
+    G: 'UN',
+    H: 'Moeda',
+    I: 'Preço Unitário',
+    J: 'Preço Total',
+  })) {
+    monthly[`${column}3`] = { t: 's', v: value };
+  }
   periods.forEach((serial, index) => {
     monthly[`${XLSX.utils.encode_col(index + 10)}3`] = { t: 'n', v: serial, z: 'mmm-yy' };
   });
@@ -127,18 +145,24 @@ function ltcmProfileWorkbook(
       monthly[`D${row}`] = { t: 's', v: `ITEM-${(row - 4) % 5}` };
       monthly[`E${row}`] = { t: 's', v: 'Descrição sintética' };
     }
+    for (let column = 10; column <= 18; column += 1) {
+      monthly[`${XLSX.utils.encode_col(column)}${row}`] = { t: 'z', z: '0.00' };
+    }
   }
+  monthly.K4 = { t: 'n', v: 0, z: '0.00' };
+  monthly.L4 = { t: 'n', v: 10, z: '0.00' };
+  monthly.M4 = { t: 'n', v: 20.005, f: '10+10.005', z: '0.00' };
   monthly.B45 = { t: 's', v: '2024-02-10990-SINTÉTICO' };
   monthly.B51 = { t: 's', v: '2026-04-16531-SINTÉTICO' };
   for (let row = 4; row <= 14; row += 1) monthly[`J${row}`] = { t: 'n', v: 1, f: '1+0' };
   monthly.J45 = { t: 'n', v: 369749.1735, f: '1+0', z: '0.0000' };
   monthly.J51 = { t: 'n', v: 164000, f: '1+0', z: '0' };
-  const totals = periods.map((_, index) => index + 1);
+  const totals = periods.map((_, index) => [0, 10, 20.005][index] ?? 0);
   totals.forEach((value, index) => {
     monthly[`${XLSX.utils.encode_col(index + 10)}52`] = { t: 'n', v: value, f: '1+0' };
   });
   monthly.J52 = { t: 'n', v: 45, f: 'SUM(J4:J51)' };
-  monthly.T52 = { t: 'n', v: 45, f: 'SUM(K52:S52)' };
+  monthly.T52 = { t: 'n', v: 30.005, f: 'SUM(K52:S52)' };
   monthly['!ref'] = 'A1:T52';
 
   const curve = XLSX.utils.aoa_to_sheet([]);
@@ -157,7 +181,7 @@ function ltcmProfileWorkbook(
     };
     curve[`${XLSX.utils.encode_col(index + 2)}10`] = { t: 'n', v: 1, f: '1+0' };
   });
-  curve.L8 = { t: 'n', v: 45, f: 'SUM(C8:K8)' };
+  curve.L8 = { t: 'n', v: 30.005, f: 'SUM(C8:K8)' };
   curve.L9 = { t: 'n', v: 45, f: '1+0' };
   curve.L10 = { t: 'n', v: 1, f: '1+0' };
   curve['!ref'] = 'A1:L16';
@@ -487,7 +511,7 @@ test('valida o perfil LTC-M sintético e mantém warning de negócio aprovado se
     ]),
     [
       ['A1:K10', 10, 10],
-      ['A1:T52', 52, 24],
+      ['A1:T52', 52, 25],
       ['A1:L16', 16, 30],
     ],
   );
@@ -516,6 +540,144 @@ test('valida o perfil LTC-M sintético e mantém warning de negócio aprovado se
   );
   assert.equal(result.profileReport.documentary_sheet.staging_row_count, 0);
   assert.equal(result.rowsBySheet.has('documentary' as never), false);
+});
+
+async function p013GateForWorkbook(directory: string, workbook: XLSX.WorkBook) {
+  const input = await writeWorkbook(directory, workbook);
+  const bytes = await readFile(input);
+  const result = await extractWorkbook({
+    inputPath: input,
+    outputDir: path.join(directory, 'out'),
+    strict: true,
+  });
+  return {
+    extraction: result,
+    gate: evaluateP013MonthlySource(
+      result.rowsBySheet.get('monthly_revenue') ?? [],
+      inspectWorkbookPackage(bytes).get('Prev. Receita Mensal'),
+    ),
+  };
+}
+
+test('gate P013 usa fingerprint semântico e ignora formatação, fórmula e topologia OOXML', async (context) => {
+  const temporary = await temporaryDirectory();
+  context.after(() => rm(temporary, { recursive: true, force: true }));
+  const originalRun = await p013GateForWorkbook(
+    await mkdtemp(path.join(temporary, 'original-')),
+    ltcmProfileWorkbook(),
+  );
+  assert.equal(originalRun.gate.ok, true, JSON.stringify(originalRun.gate.diagnostics));
+  assert.equal(originalRun.gate.cell_count, 432);
+  assert.throws(
+    () => assertP013MonthlySourceFingerprint(originalRun.gate),
+    /P013_SOURCE_SEMANTIC_FINGERPRINT_MISMATCH/u,
+  );
+
+  const cosmetic = ltcmProfileWorkbook();
+  const cosmeticMonthly = cosmetic.Sheets[OPERATIONAL_SHEETS[1].name];
+  assert.ok(cosmeticMonthly);
+  cosmeticMonthly.M4 = { t: 'n', v: 20.005, f: '20.005+0', z: '#,##0.0000' };
+  const cosmeticRun = await p013GateForWorkbook(
+    await mkdtemp(path.join(temporary, 'cosmetic-')),
+    cosmetic,
+  );
+  assert.equal(cosmeticRun.gate.ok, true, JSON.stringify(cosmeticRun.gate.diagnostics));
+  assert.equal(cosmeticRun.gate.semantic_fingerprint, originalRun.gate.semantic_fingerprint);
+
+  const metadata = inspectWorkbookPackage(
+    await readFile(await writeWorkbook(await mkdtemp(path.join(temporary, 'topology-')), cosmetic)),
+  ).get('Prev. Receita Mensal');
+  assert.ok(metadata);
+  const topologyOnly = {
+    ...metadata,
+    formulaDefinitions: metadata.formulaDefinitions + 99,
+  };
+  const topologyGate = evaluateP013MonthlySource(
+    cosmeticRun.extraction.rowsBySheet.get('monthly_revenue') ?? [],
+    topologyOnly,
+  );
+  assert.equal(topologyGate.semantic_fingerprint, originalRun.gate.semantic_fingerprint);
+});
+
+test('gate P013 rejeita mutações estruturais, de identidade, estado, valor e cache', async (context) => {
+  const temporary = await temporaryDirectory();
+  context.after(() => rm(temporary, { recursive: true, force: true }));
+  const baseline = await p013GateForWorkbook(
+    await mkdtemp(path.join(temporary, 'baseline-')),
+    ltcmProfileWorkbook(),
+  );
+  const expected = baseline.gate.semantic_fingerprint ?? '';
+  const mutations: Array<[string, (sheet: XLSX.WorkSheet) => void]> = [
+    ['header', (sheet) => (sheet.A3 = { t: 's', v: 'Outro' })],
+    ['competence', (sheet) => (sheet.K3 = { t: 'n', v: 46205, z: 'mmm-yy' })],
+    ['missing-competence', (sheet) => (sheet.K3 = { t: 'z' })],
+    ['extra-competence', (sheet) => (sheet.T3 = { t: 'n', v: 46478, z: 'mmm-yy' })],
+    ['missing-row', (sheet) => (sheet.A51 = { t: 'z' })],
+    [
+      'extra-row',
+      (sheet) => {
+        sheet.A53 = { t: 'n', v: 50 };
+        sheet['!ref'] = 'A1:T53';
+      },
+    ],
+    ['value', (sheet) => (sheet.L4 = { t: 'n', v: 11, z: '0.00' })],
+    ['zero-to-blank', (sheet) => (sheet.K4 = { t: 'z', z: '0.00' })],
+    ['blank-to-zero', (sheet) => (sheet.N4 = { t: 'n', v: 0, z: '0.00' })],
+    ['cache', (sheet) => (sheet.M4 = { t: 'n', v: 20.015, f: '10+10.015', z: '0.00' })],
+    ['aggregate-cache', (sheet) => (sheet.T52 = { t: 'n', v: 31, f: 'SUM(K52:S52)' })],
+    ['formula-error', (sheet) => (sheet.M4 = { t: 'e', v: 7, f: '1/0', w: '#DIV/0!' })],
+    ['missing-cache', (sheet) => (sheet.M4 = { t: 'n', f: '10+10.005', z: '0.00' })],
+    ['item-identity', (sheet) => (sheet.A4 = { t: 'n', v: 999 })],
+  ];
+  for (const [name, mutate] of mutations) {
+    const workbook = ltcmProfileWorkbook();
+    const monthly = workbook.Sheets[OPERATIONAL_SHEETS[1].name];
+    assert.ok(monthly);
+    mutate(monthly);
+    const run = await p013GateForWorkbook(
+      await mkdtemp(path.join(temporary, `${name}-`)),
+      workbook,
+    );
+    assert.notEqual(run.gate.semantic_fingerprint, expected, name);
+  }
+
+  const renamed = ltcmProfileWorkbook();
+  const monthlyIndex = renamed.SheetNames.indexOf(OPERATIONAL_SHEETS[1].name);
+  const renamedSheet = renamed.Sheets[OPERATIONAL_SHEETS[1].name];
+  assert.ok(renamedSheet);
+  renamed.SheetNames[monthlyIndex] = 'Prev. Receita Renomeada';
+  delete renamed.Sheets[OPERATIONAL_SHEETS[1].name];
+  renamed.Sheets['Prev. Receita Renomeada'] = renamedSheet;
+  const renamedRun = await p013GateForWorkbook(
+    await mkdtemp(path.join(temporary, 'wrong-worksheet-')),
+    renamed,
+  );
+  assert.notEqual(renamedRun.gate.semantic_fingerprint, expected);
+});
+
+test('gate P013 aceita o candidato D01A local por semântica quando disponível', async (context) => {
+  const repositoryRoot = fileURLToPath(new URL('../../../..', import.meta.url));
+  const sourceDirectory = path.join(repositoryRoot, '.local-source');
+  const sources = await readdir(sourceDirectory).catch(() => []);
+  const source = sources.find((name) => name.endsWith('.xlsx'));
+  if (source === undefined) {
+    context.skip('Fonte D01A local não está disponível.');
+    return;
+  }
+  const input = path.join(sourceDirectory, source);
+  const bytes = await readFile(input);
+  const result = await extractWorkbook({ inputPath: input, outputDir: '<unused>', strict: true });
+  const gate = evaluateP013MonthlySource(
+    result.rowsBySheet.get('monthly_revenue') ?? [],
+    inspectWorkbookPackage(bytes).get('Prev. Receita Mensal'),
+  );
+  assert.equal(gate.blank_count, 330);
+  assert.equal(gate.explicit_zero_count, 1);
+  assert.equal(gate.non_zero_count, 101);
+  assert.equal(gate.canonical_total, '2800460.18');
+  assert.equal(gate.aggregate_raw_rounded_total, '2800460.15');
+  assert.equal(gate.rounding_residual, '0.03');
+  assertP013MonthlySourceFingerprint(gate);
 });
 
 test('detecta competência duplicada, ordem de abas divergente e abas extras vazia e não vazia', async (context) => {
