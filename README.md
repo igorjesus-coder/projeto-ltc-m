@@ -320,6 +320,22 @@ $env:LTCM_P013_D05_INTEGRATION = '1'
 npm run test:p013:d05:postgres
 ```
 
+## Descoberta de realizados e impossibilidade controlada (P014 D01)
+
+O P014 D01 aplica a definição aprovada de Realizado à fonte real. A planilha prova valores
+`billing_actual` em dois grãos incompletos para `financial_actual_events`: agregado por projeto sem
+competência e agregado mensal de portfólio sem projeto. O gate e o dry-run produzem um relatório
+determinístico com proveniência e zero writes; nenhuma alocação por previsto foi introduzida.
+
+```powershell
+npm run ltcm:analyze-realized -- `
+  "--input=.local-source\Previsão_de_Receita_-_LTC-M_com_Curva_S_atualizada.xlsx"
+npm run test:p014
+```
+
+Contrato, evidências e dados necessários para desbloquear uma importação segura estão em
+[`docs/import/p014-realized-import-foundation.md`](docs/import/p014-realized-import-foundation.md).
+
 ## Estrutura
 
 ```text

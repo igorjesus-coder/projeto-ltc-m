@@ -7,6 +7,10 @@
     "./p013": {
       "types": "./types/p013.d.ts",
       "default": "./dist/src/p013-monthly-source.js"
+    },
+    "./p014": {
+      "types": "./types/p014.d.ts",
+      "default": "./dist/src/p014-realized-source.js"
     }
   },
   "scripts": {
