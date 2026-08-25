@@ -336,6 +336,21 @@ npm run test:p014
 Contrato, evidências e dados necessários para desbloquear uma importação segura estão em
 [`docs/import/p014-realized-import-foundation.md`](docs/import/p014-realized-import-foundation.md).
 
+## Reconciliação e relatório de inconsistências (P015 D01)
+
+O P015 compara snapshots explícitos de projetos, itens, baseline mensal, banco e evidência de
+realizado sem criar autoridade de escrita. O relatório é determinístico, preserva proveniência,
+expõe decisões pendentes e mantém os dez fatos P014 como evidência de grão insuficiente — nunca como
+eventos fabricados.
+
+```powershell
+npm run p015:check
+npm run test:p015
+```
+
+O contrato, os 17 códigos de finding, a ordem canônica e as regras de compatibilidade de grão estão
+em [`docs/reconciliation/p015-reconciliation.md`](docs/reconciliation/p015-reconciliation.md).
+
 ## Estrutura
 
 ```text
