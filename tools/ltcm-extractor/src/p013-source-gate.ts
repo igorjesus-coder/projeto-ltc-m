@@ -89,7 +89,7 @@ function projectCode(value: unknown): string | null {
   return value.trim().match(/^\d{4}-\d{2}-\d{5}/u)?.[0] ?? null;
 }
 
-function canonicalMoney(rawDecimal: string): string | null {
+export function canonicalizeP013FinancialDecimal(rawDecimal: string): string | null {
   const matched = DECIMAL.exec(rawDecimal);
   if (matched === null) return null;
   let integer = matched[1] ?? '0';
@@ -218,7 +218,7 @@ export function evaluateP013MonthlySource(
         diagnostics.push('P013_SOURCE_INVALID_MONTHLY_VALUE');
         continue;
       }
-      const canonicalAmount = canonicalMoney(packageCell.valueText);
+      const canonicalAmount = canonicalizeP013FinancialDecimal(packageCell.valueText);
       const rawAmount = scaled14(packageCell.valueText);
       if (canonicalAmount === null || rawAmount === null) {
         diagnostics.push('P013_SOURCE_INVALID_DECIMAL');
@@ -247,7 +247,7 @@ export function evaluateP013MonthlySource(
     const cachedTotal =
       packageCell?.valueText === null || packageCell?.valueText === undefined
         ? null
-        : canonicalMoney(packageCell.valueText);
+        : canonicalizeP013FinancialDecimal(packageCell.valueText);
     if (
       candidate?.state !== 'formula' ||
       candidate.cached_result_present !== true ||
@@ -266,7 +266,7 @@ export function evaluateP013MonthlySource(
     aggregateCandidate.cached_result_present !== true ||
     aggregatePackage?.formulaPresent !== true ||
     aggregatePackage.valueText === null ||
-    canonicalMoney(aggregatePackage.valueText) !== aggregateExpected
+    canonicalizeP013FinancialDecimal(aggregatePackage.valueText) !== aggregateExpected
   ) {
     diagnostics.push('P013_SOURCE_AGGREGATE_RECONCILIATION');
   }
@@ -319,7 +319,7 @@ export function materializeP013MonthlySourceCellFacts(
     }
     const itemTotalNumericText = metadata.cells.get(`J${rowNumber}`)?.valueText ?? null;
     const itemTotalCanonicalAmount =
-      itemTotalNumericText === null ? null : canonicalMoney(itemTotalNumericText);
+      itemTotalNumericText === null ? null : canonicalizeP013FinancialDecimal(itemTotalNumericText);
     if (itemTotalNumericText !== null && itemTotalCanonicalAmount === null) {
       throw new Error('P013_SOURCE_INVALID_ITEM_DIAGNOSTIC_TOTAL');
     }
@@ -332,7 +332,8 @@ export function materializeP013MonthlySourceCellFacts(
         throw new Error('P013_SOURCE_MISSING_MONTHLY_CELL');
       }
       const sourceNumericText = cell.state === 'blank' ? null : packageCell.valueText;
-      const canonicalAmount = sourceNumericText === null ? null : canonicalMoney(sourceNumericText);
+      const canonicalAmount =
+        sourceNumericText === null ? null : canonicalizeP013FinancialDecimal(sourceNumericText);
       if (cell.state !== 'blank' && canonicalAmount === null) {
         throw new Error('P013_SOURCE_INVALID_DECIMAL');
       }
