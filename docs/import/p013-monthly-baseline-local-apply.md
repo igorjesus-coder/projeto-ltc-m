@@ -72,7 +72,7 @@ $env:LTCM_P013_D05_INTEGRATION = '1'
 npm run test:p013:d05:postgres
 ```
 
-O teste PostgreSQL recria as 12 migrations, usa a XLSX certificada somente para leitura, instala
+O teste PostgreSQL recria as 13 migrations atuais, usa a XLSX certificada somente para leitura, instala
 fixtures e login exclusivamente sintéticos e restaura o schema migrado limpo no `finally`.
 As regressões D06C importam support e entrypoints compilados em processos novos, por ESM,
 CommonJS, caminho relativo, file URL e query de cache busting; elas inspecionam namespace,

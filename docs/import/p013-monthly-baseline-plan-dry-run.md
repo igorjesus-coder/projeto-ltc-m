@@ -109,7 +109,7 @@ estrutural fechada. O recibo deriva as contagens de statements das instruções 
 na sessão fechada; não é authority independente. Erros públicos usam códigos P013 estáveis e não
 propagam path, DSN, senha, usuário ou erro cru do driver.
 
-A integração D04A recria as 12 migrations em PostgreSQL 17 local, confirma RLS/FORCE RLS nas quatro
+A integração D04A recria as 13 migrations atuais em PostgreSQL 17 local, confirma RLS/FORCE RLS nas quatro
 tabelas P013 e usa um login temporário não-superuser/non-BYPASSRLS para o fluxo de negócio. Ela
 prova ator admin, viewer bloqueado, READ ONLY real, INSERT rejeitado com SQLSTATE `25006`, zero
 writes antes/depois, no-op íntegro, linha divergente em conflito, baseline cruzado rejeitado e

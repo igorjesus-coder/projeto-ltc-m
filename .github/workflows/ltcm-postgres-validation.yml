@@ -10,6 +10,7 @@ on:
       - 'tools/ltcm-normalizer/**'
       - 'scripts/**'
       - 'docs/database/**'
+      - 'docs/analytics/**'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/ltcm-postgres-validation.yml'

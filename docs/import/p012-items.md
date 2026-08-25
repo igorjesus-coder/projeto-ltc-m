@@ -284,7 +284,7 @@ authority.
 
 Os testes unitários cobrem as 48 tentativas sintéticas, plano/hash, tampering, snapshot antigo,
 retry, `23505`, rerun, fechamento dos exports e a matriz adversarial de URL. O gate PostgreSQL efêmero
-aplica as 12 migrations reais e executa rollback tardio no item 47, 48 inserts, dois writers
+aplica as 13 migrations atuais e executa rollback tardio no item 47, 48 inserts, dois writers
 concorrentes, ordem inversa de locks de dois projetos, rerun com 48 no-ops, totals gerados, SQL
 parametrizado, staging e repetição legítima de `item_code`. A
 suíte não depende de internet nem de Supabase remoto. Quando não existe PostgreSQL local, o teste
@@ -298,7 +298,7 @@ ou fragment, usuário `postgres` e `SUPERUSER`/`BYPASSRLS`. A connection string 
 ou logs. O caminho local não configura TLS permissivo e não reconhece Render, Supabase ou banco
 remoto.
 
-Nesse fluxo, banco limpo recebe exatamente as 12 migrations versionadas; banco já migrado passa
+Nesse fluxo, banco limpo recebe exatamente as 13 migrations versionadas atuais; banco já migrado passa
 pela atestação integral de tabelas, RLS/FORCE RLS, funções, total gerado, constraints, índices e
 triggers. A cobertura PostgreSQL também comprova actor context, leitura tipada do snapshot,
 `SERIALIZABLE`, advisory locks em commit/rollback, `40001`, `40P01`, `23505`, FKs, limites
