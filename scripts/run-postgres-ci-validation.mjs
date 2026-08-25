@@ -258,9 +258,11 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       p012_persistence: false,
       p013_postgres: false,
       p016_postgres: false,
+      p017_postgres: false,
     },
     p013_postgres: null,
     p016_postgres: null,
+    p017_postgres: null,
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
     postgres: null,
@@ -480,6 +482,43 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         'security_invoker_rls',
         'read_only_selects',
         'rollback_cleanup',
+      ],
+      cleanup: 'pending',
+    };
+    runStage('p017_postgres', () =>
+      runProcess(
+        'node',
+        ['--test', path.join('scripts', 'postgres-p017-integrity.integration.test.mjs')],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P017_INTEGRATION: '1',
+            LTCM_P017_ISOLATED_CLUSTER: '1',
+            LTCM_P017_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p017_postgres = true;
+    evidence.p017_postgres = {
+      passed: true,
+      cluster_mode: 'isolated_docker',
+      database: P013_DATABASE,
+      host_class: 'loopback',
+      postgres_major: 17,
+      command: 'node --test scripts/postgres-p017-integrity.integration.test.mjs',
+      coverage: [
+        'two_from_zero_passes',
+        'schema_fingerprint',
+        'seed_and_fixture_rerun',
+        'logical_duplicate_scan',
+        'foreign_key_check_unique_failures',
+        'rls_actor_matrix',
+        'nine_tableau_views',
+        'documentation_inventory',
+        'cleanup',
       ],
       cleanup: 'pending',
     };
@@ -713,6 +752,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }
       if (evidence.p016_postgres) {
         evidence.p016_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
+      }
+      if (evidence.p017_postgres) {
+        evidence.p017_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
       }
       if (removeP013Container.code !== 0) {
         evidence.first_error ??= `p013_cluster_cleanup: ${sanitizeProcessFailure(removeP013Container)}`;

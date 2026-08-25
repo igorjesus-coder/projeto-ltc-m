@@ -366,6 +366,24 @@ npm run test:p016:static
 Grãos, chaves, aditividade, relacionamentos Tableau, segurança e limitações estão em
 [`docs/analytics/p016-tableau-views.md`](docs/analytics/p016-tableau-views.md).
 
+## Integridade global, ERD e dicionário de dados (P017 D01)
+
+O P017 congela o contrato `ltcm.p017.schema-integrity.v1` e um fingerprint SHA-256 canônico do
+schema `ltc_m`. O acceptance usa PostgreSQL 17 isolado em loopback, aplica as 13 migrations do
+zero em dois passes, repete seed e fixture sintética e falha para drift, duplicidade lógica,
+perda de RLS/FORCE RLS, chaves ou propriedades das nove views P016.
+
+```powershell
+npm run p017:check
+npm run test:p017:static
+npm run docs:schema:check
+```
+
+O [ERD](docs/database/erd.md), o [dicionário de dados](docs/database/data-dictionary.md) e o
+[contrato de validação](docs/database/p017-integrity-validation.md) são gerados do mesmo snapshot
+canônico versionado. Use `npm run docs:schema:generate` somente para regenerar os Markdown a partir
+do snapshot; a captura nominal exige o harness local isolado.
+
 ## Estrutura
 
 ```text

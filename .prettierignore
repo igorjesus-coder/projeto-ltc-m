@@ -2,5 +2,9 @@ coverage
 dist
 docs/project-specification.md
 docs/database/inventory-*.json
+docs/database/data-dictionary.md
+docs/database/erd.md
+docs/database/p017-integrity-validation.md
+docs/database/p017-schema-model.json
 node_modules
 package-lock.json
