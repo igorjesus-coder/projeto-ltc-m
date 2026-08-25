@@ -29,7 +29,7 @@ import {
 const D12A_DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const D12A_LOCAL = D12A_DATABASE_URL !== undefined && D12A_DATABASE_URL !== '';
 const ENABLED = process.env['LTCM_P012_INTEGRATION'] === '1';
-const EXPECTED_MIGRATION_COUNT = 12;
+const EXPECTED_MIGRATION_COUNT = 13;
 const EXPECTED_TABLE_COUNT = 19;
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const ADMIN_ID = '00000000-0000-4000-8000-000000012001';

@@ -351,6 +351,21 @@ npm run test:p015
 O contrato, os 17 códigos de finding, a ordem canônica e as regras de compatibilidade de grão estão
 em [`docs/reconciliation/p015-reconciliation.md`](docs/reconciliation/p015-reconciliation.md).
 
+## Views analíticas para Tableau (P016 D01)
+
+O P016 fornece nove views `ltc_m.v_tableau_*` com contrato `ltcm.p016.analytics.v1`. A camada é
+somente leitura, usa `security_invoker`, mantém versão/status/moeda explícitos e pré-agrega ramos
+independentes para impedir dupla contagem. A evidência P014 de grão incompleto não é alocada nem
+transformada em eventos.
+
+```powershell
+npm run p016:check
+npm run test:p016:static
+```
+
+Grãos, chaves, aditividade, relacionamentos Tableau, segurança e limitações estão em
+[`docs/analytics/p016-tableau-views.md`](docs/analytics/p016-tableau-views.md).
+
 ## Estrutura
 
 ```text

@@ -80,3 +80,16 @@ test('checkD28Migrations aceita somente o arquivo esperado', () => {
     assert.deepEqual(checkD28Migrations(directory).issues, []);
   });
 });
+
+test('aceita a migration analítica P016 como sucessora aprovada da D28', () => {
+  withDirectory(
+    {
+      [D28_FILENAME]: validD28,
+      '20260825160000_add_p016_tableau_analytical_views.sql':
+        'create view ltc_m.v_tableau_example as select 1;',
+    },
+    (directory) => {
+      assert.deepEqual(checkD28Migrations(directory).issues, []);
+    },
+  );
+});

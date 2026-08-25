@@ -11,6 +11,7 @@ const APPROVED_SUCCESSORS = new Set([
   '20260731130000_add_ltcm_import_staging.sql',
   '20260804120000_add_legacy_project_reference_date_exception.sql',
   '20260820120000_add_p013_monthly_baseline_foundation.sql',
+  '20260825160000_add_p016_tableau_analytical_views.sql',
 ]);
 
 // D28 is intentionally a one-function corrective ACL.  The trigger path is

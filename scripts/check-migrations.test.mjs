@@ -44,7 +44,7 @@ test('aceita os artefatos RLS P008 versionados', () => {
   const result = checkMigrations(migrationsDirectory);
 
   assert.deepEqual(result.issues, []);
-  assert.equal(result.files.length, 12);
+  assert.equal(result.files.length, 13);
 });
 
 test('aceita somente o contrato nominal da migration D40', () => {
