@@ -12,8 +12,8 @@ Este arquivo define as regras para agentes e contribuidores automatizados neste 
 ## Arquitetura e limites
 
 - `apps/web`: aplicação CRUD React/TypeScript.
-- `apps/api`: futuro backend Node.js LTS/TypeScript/NestJS com Express; não existe até a tarefa de
-  scaffold correspondente.
+- `apps/api`: fundação backend Node.js LTS/TypeScript/NestJS com Express criada pela P019; ainda não
+  implementa Auth0, autorização funcional ou CRUD de domínio.
 - `supabase`: configuração local, migrations, seed e testes de banco.
 - `scripts`: automações reproduzíveis e sem segredos.
 - `docs`: arquitetura, convenções e decisões do projeto.
@@ -123,7 +123,7 @@ destrutivas, objetos fora de `ltc_m`, referências a schemas externos, Supabase 
 grants, extensões, SQL dinâmico e tipos financeiros imprecisos. Exceções exigem decisão
 arquitetural e revisão explícitas antes de alterar o scanner.
 
-Quando `apps/api` existir, mudanças no backend devem cobrir, conforme o comportamento afetado,
+Mudanças no backend devem cobrir, conforme o comportamento afetado,
 testes unitários, integração, autenticação, autorização, contratos, transações e concorrência.
 
 ## Segurança

@@ -128,7 +128,8 @@ apps/
         `-- common/
 ```
 
-Essa estrutura é conceitual; `apps/api` não existe ainda e não será criado por esta atualização.
+Essa estrutura era conceitual quando a decisão foi aprovada. A P019 criou o scaffold mínimo
+`apps/api` e a fundação PostgreSQL server-only, sem antecipar Auth0 ou CRUD de domínio.
 Tipos e schemas compartilhados poderão ficar em pacote dedicado somente quando houver necessidade
 concreta.
 

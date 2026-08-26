@@ -165,6 +165,7 @@ O futuro backend mantém exclusivamente em contexto server-side:
 - `NODE_ENV`;
 - `PORT`;
 - `DATABASE_URL`;
+- `DATABASE_SSL_MODE`, limitado a `disable` local/teste ou `verify-full`, obrigatório em produção;
 - `AUTH0_DOMAIN`;
 - `AUTH0_AUDIENCE`;
 - `CORS_ALLOWED_ORIGINS`.

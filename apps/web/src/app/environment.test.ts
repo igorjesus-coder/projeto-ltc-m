@@ -8,7 +8,7 @@ describe('contrato público de ambiente', () => {
       appEnvironment: 'local',
       apiBaseUrl: 'http://localhost:3000',
     });
-    expect(ENVIRONMENT_CATEGORIES.SERVER_ONLY).toContain('DATABASE_URL');
+    expect(ENVIRONMENT_CATEGORIES.SERVER_ONLY).toContain('database connection configuration');
   });
 
   it('normaliza ambiente e URL pública válidos', () => {
