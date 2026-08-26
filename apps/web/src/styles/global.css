@@ -17,9 +17,13 @@
   box-sizing: border-box;
 }
 
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
 body {
   margin: 0;
-  min-width: 320px;
   min-height: 100vh;
 }
 
@@ -30,7 +34,33 @@ textarea {
   font: inherit;
 }
 
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid #1f6da8;
+  outline-offset: 3px;
+}
+
+.skip-link {
+  background: #ffffff;
+  color: #182127;
+  left: 16px;
+  padding: 10px 14px;
+  position: fixed;
+  top: 12px;
+  transform: translateY(-180%);
+  z-index: 10;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 .app-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
   min-height: 100vh;
 }
 
@@ -39,9 +69,16 @@ textarea {
   background: #182127;
   color: #ffffff;
   display: flex;
-  gap: 12px;
-  min-height: 64px;
+  gap: clamp(16px, 3vw, 36px);
+  min-height: 68px;
   padding: 10px clamp(20px, 5vw, 72px);
+}
+
+.brand {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  text-decoration: none;
 }
 
 .brand-mark {
@@ -56,40 +93,56 @@ textarea {
   width: 36px;
 }
 
-.topbar > div:nth-child(2) {
+.brand-copy {
   display: grid;
   gap: 1px;
 }
 
-.topbar strong {
+.brand-copy strong {
   font-size: 15px;
 }
 
-.topbar span {
-  color: #b9c2c8;
+.brand-copy span,
+.environment {
+  color: #c9d0d4;
   font-size: 12px;
 }
 
-.topbar .environment {
-  border-left: 1px solid #465159;
+.topbar nav {
+  display: flex;
+}
+
+.topbar nav a {
+  border-bottom: 2px solid transparent;
+  padding: 10px 2px 8px;
+  text-decoration: none;
+}
+
+.topbar nav a[aria-current='page'] {
+  border-color: #e3b341;
+}
+
+.environment {
   margin-left: auto;
-  padding-left: 16px;
 }
 
 main {
   margin: 0 auto;
   max-width: 1120px;
   padding: 56px clamp(20px, 5vw, 72px);
+  width: 100%;
 }
 
-.page-heading {
-  max-width: 680px;
+.page-heading,
+.not-found {
+  max-width: 700px;
 }
 
 .eyebrow {
-  color: #a14d31;
+  color: #934126;
   font-size: 12px;
   font-weight: 750;
+  letter-spacing: 0.04em;
   margin: 0 0 8px;
   text-transform: uppercase;
 }
@@ -101,17 +154,18 @@ p {
 }
 
 h1 {
-  font-size: 34px;
+  font-size: clamp(2rem, 5vw, 2.5rem);
   line-height: 1.15;
   margin-bottom: 12px;
 }
 
-.page-heading > p:last-child {
+.page-heading > p:last-child,
+.not-found > p {
   color: #59636a;
   line-height: 1.6;
 }
 
-.status-panel {
+.foundation-panel {
   border: 1px solid #d8dcda;
   margin-top: 40px;
 }
@@ -140,7 +194,7 @@ h1 {
 
 .status-indicator {
   align-items: center;
-  color: #3d594b;
+  color: #315343;
   display: flex;
   font-size: 13px;
   font-weight: 650;
@@ -148,56 +202,78 @@ h1 {
 }
 
 .status-indicator > span {
-  background: #4e8065;
+  background: #3d7457;
   border-radius: 50%;
   height: 8px;
   width: 8px;
 }
 
-.status-table {
+.foundation-list {
   background: #fbfbfa;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.status-row {
-  align-items: center;
+.foundation-list li {
   border-bottom: 1px solid #e2e5e3;
   display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 200px);
-  min-height: 72px;
-  padding: 14px 22px;
+  gap: 4px;
+  padding: 18px 22px;
 }
 
-.status-row:last-child {
+.foundation-list li:last-child {
   border-bottom: 0;
 }
 
-.status-row > div {
-  display: grid;
-  gap: 3px;
-}
-
-.status-row strong {
+.foundation-list strong {
   font-size: 14px;
 }
 
-.status-row span {
+.foundation-list span {
   color: #687279;
   font-size: 13px;
+  line-height: 1.5;
 }
 
-.status-row > span {
-  color: #313b41;
-  text-align: right;
+.primary-link {
+  display: inline-block;
+  font-weight: 700;
+  margin-top: 12px;
 }
 
-@media (max-width: 560px) {
-  main {
-    padding-top: 36px;
+.error-page {
+  margin: 10vh auto;
+  max-width: 680px;
+}
+
+.app-footer {
+  align-items: center;
+  border-top: 1px solid #d8dcda;
+  color: #59636a;
+  display: flex;
+  font-size: 12px;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 18px clamp(20px, 5vw, 72px);
+}
+
+@media (max-width: 620px) {
+  .topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
   }
 
-  .topbar .environment {
+  .environment {
     display: none;
+  }
+
+  .topbar nav {
+    margin-left: auto;
+  }
+
+  main {
+    padding-top: 36px;
   }
 
   .section-heading {
@@ -206,13 +282,9 @@ h1 {
     gap: 12px;
   }
 
-  .status-row {
-    align-items: start;
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .status-row > span {
-    text-align: left;
+  .app-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 }

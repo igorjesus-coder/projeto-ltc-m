@@ -384,6 +384,24 @@ O [ERD](docs/database/erd.md), o [dicionário de dados](docs/database/data-dicti
 canônico versionado. Use `npm run docs:schema:generate` somente para regenerar os Markdown a partir
 do snapshot; a captura nominal exige o harness local isolado.
 
+## Scaffold da aplicação CRUD (P018 D01)
+
+O frontend preserva React, Vite e TypeScript e organiza a fundação em composição da aplicação,
+layouts, rotas e estilos. O shell possui rota raiz, fallback 404, error boundary, contrato público
+de ambiente e baseline semântica de acessibilidade. Ele não implementa CRUD, Auth0, Supabase ou
+acesso à API.
+
+```powershell
+Copy-Item .env.example apps/web/.env.development.local
+npm run dev
+npm run p018:check
+npm run p018:acceptance
+```
+
+O build também funciona sem arquivo `.env` por meio de defaults locais seguros. Estrutura,
+variáveis, testes, comandos e limites P019 estão documentados em
+[`docs/frontend/p018-crud-scaffold.md`](docs/frontend/p018-crud-scaffold.md).
+
 ## Estrutura
 
 ```text
