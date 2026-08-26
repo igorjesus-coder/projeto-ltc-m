@@ -9,12 +9,9 @@ export const ENVIRONMENT_CATEGORIES = Object.freeze({
     'VITE_AUTH0_AUDIENCE',
   ],
   SERVER_ONLY: [
-    'NODE_ENV',
-    'PORT',
-    'CORS_ALLOWED_ORIGINS',
-    'AUTH0_DOMAIN',
-    'AUTH0_AUDIENCE',
-    'DATABASE_URL',
+    'backend runtime configuration',
+    'database connection configuration',
+    'authentication server configuration',
   ],
   NOT_ALLOWED_IN_BROWSER: [
     'database credentials',

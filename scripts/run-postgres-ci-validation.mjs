@@ -259,10 +259,12 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       p013_postgres: false,
       p016_postgres: false,
       p017_postgres: false,
+      p019_postgres: false,
     },
     p013_postgres: null,
     p016_postgres: null,
     p017_postgres: null,
+    p019_postgres: null,
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
     postgres: null,
@@ -522,6 +524,45 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       ],
       cleanup: 'pending',
     };
+    runStage('p019_postgres_build', () =>
+      runProcess('npm', ['run', 'build', '--workspace', '@ltcm/api', '--silent'], {
+        cwd: rootDirectory,
+        timeoutMs: 120_000,
+      }),
+    );
+    runStage('p019_postgres', () =>
+      runProcess(
+        'node',
+        ['--test', path.join('apps', 'api', 'dist', 'test', 'database.integration.test.js')],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P019_INTEGRATION: '1',
+            LTCM_P019_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p019_postgres = true;
+    evidence.p019_postgres = {
+      passed: true,
+      cluster_mode: 'isolated_docker',
+      database: P013_DATABASE,
+      host_class: 'loopback',
+      postgres_major: 17,
+      command: 'node --test apps/api/dist/test/database.integration.test.js',
+      coverage: [
+        'runtime_login_without_superuser_or_bypassrls',
+        'transaction_commit_and_rollback',
+        'actor_context_valid_missing_invalid',
+        'pool_context_isolation',
+        'rls_force_rls',
+        'pool_session_and_lock_cleanup',
+      ],
+      cleanup: 'pending',
+    };
   };
 
   try {
@@ -755,6 +796,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }
       if (evidence.p017_postgres) {
         evidence.p017_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
+      }
+      if (evidence.p019_postgres) {
+        evidence.p019_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
       }
       if (removeP013Container.code !== 0) {
         evidence.first_error ??= `p013_cluster_cleanup: ${sanitizeProcessFailure(removeP013Container)}`;

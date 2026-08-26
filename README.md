@@ -1,7 +1,7 @@
 # LTC-M
 
-Base técnica do sistema de gestão do portfólio LTC-M: frontend React/TypeScript/Vite, backend
-Node.js LTS/TypeScript/NestJS com Express, banco PostgreSQL hospedado no Supabase e camada
+Base técnica do sistema de gestão do portfólio LTC-M: frontend React/TypeScript/Vite, fundação do
+backend Node.js LTS/TypeScript/NestJS com Express, banco PostgreSQL hospedado no Supabase e camada
 analítica para Tableau.
 
 O Auth0 é o mecanismo oficial de autenticação. O frontend será um serviço separado do backend
@@ -26,7 +26,8 @@ cd projeto-ltc-m
 npm ci
 ```
 
-O app inicial ainda não integra Auth0, backend ou banco e não exige credenciais remotas. O
+O frontend ainda não integra Auth0 nem consome a API, e o scaffold backend P019 não exige
+credenciais remotas para build ou testes unitários. O
 `.env.example` documenta as variáveis públicas previstas e as variáveis exclusivamente
 server-side; não preencha segredos no repositório. Quando as integrações existirem, use arquivos
 locais separados por serviço, como `apps/web/.env.development.local` e
@@ -399,14 +400,33 @@ npm run p018:acceptance
 ```
 
 O build também funciona sem arquivo `.env` por meio de defaults locais seguros. Estrutura,
-variáveis, testes, comandos e limites P019 estão documentados em
+variáveis, testes, comandos e limites P018 estão documentados em
 [`docs/frontend/p018-crud-scaffold.md`](docs/frontend/p018-crud-scaffold.md).
+
+## Fundação PostgreSQL server-side (P019 D01)
+
+P019 cria o scaffold mínimo `apps/api` em NestJS/Express, usando `pg` exclusivamente no servidor.
+A camada oferece configuração fail-closed, pool encerrável, transações com commit/rollback/release
+e inicialização parametrizada do contexto P008/RLS na mesma conexão. Não existe cliente Supabase no
+browser, Auth0 implementado, CRUD de domínio ou migration nova.
+
+Os tipos de banco em `apps/api/src/database/generated/database.types.ts` são derivados do snapshot
+e fingerprint P017. `numeric` e `bigint` permanecem strings exatas. Regeneração, drift, isolamento do
+bundle e o contrato completo estão em
+[`docs/backend/p019-server-postgres-access.md`](docs/backend/p019-server-postgres-access.md).
+
+```powershell
+npm.cmd run db:types:check
+npm.cmd run p019:check
+npm.cmd run p019:acceptance
+```
 
 ## Estrutura
 
 ```text
 .
 |-- apps/
+|   |-- api/              # fundação NestJS/Express + PostgreSQL server-only
 |   `-- web/              # aplicação CRUD React/TypeScript
 |-- database/
 |   `-- design/           # desenhos SQL não executáveis como migration
@@ -424,7 +444,7 @@ variáveis, testes, comandos e limites P019 estão documentados em
 `-- package.json
 ```
 
-Quando o backend for implementado, o npm workspace evoluirá conceitualmente para:
+O workspace contém a fundação backend, ainda sem módulos CRUD:
 
 ```text
 apps/
@@ -432,8 +452,8 @@ apps/
 `-- api/                  # backend NestJS/Express
 ```
 
-`apps/api` ainda não existe. Tipos ou schemas compartilhados só serão extraídos para pacote
-dedicado quando houver necessidade concreta.
+`apps/api` existe desde P019. Tipos de banco permanecem server-only nesse workspace; tipos ou
+schemas compartilhados só serão extraídos para pacote dedicado quando houver necessidade concreta.
 
 ## Fluxo de contribuição
 

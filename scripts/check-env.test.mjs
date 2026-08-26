@@ -68,9 +68,29 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 AUTH0_DOMAIN=
 AUTH0_AUDIENCE=
 DATABASE_URL=
+DATABASE_SSL_MODE=disable
 `);
 
   const issues = validateEntries(entries, { scope: 'all', allowEmpty: true, duplicates });
 
   assert.deepEqual(issues, []);
+});
+
+test('rejeita modo TLS inválido e exige verify-full em produção', () => {
+  const backend = new Map([
+    ['NODE_ENV', 'production'],
+    ['PORT', '3000'],
+    ['CORS_ALLOWED_ORIGINS', 'https://web.example.invalid'],
+    ['AUTH0_DOMAIN', 'tenant.example.invalid'],
+    ['AUTH0_AUDIENCE', 'ltcm-api'],
+    ['DATABASE_URL', 'postgresql://synthetic:synthetic@localhost/ltcm_test'],
+    ['DATABASE_SSL_MODE', 'disable'],
+  ]);
+  assert.ok(
+    validateEntries(backend, { scope: 'backend' }).some(
+      (issue) => issue.name === 'DATABASE_SSL_MODE',
+    ),
+  );
+  backend.set('DATABASE_SSL_MODE', 'verify-full');
+  assert.deepEqual(validateEntries(backend, { scope: 'backend' }), []);
 });

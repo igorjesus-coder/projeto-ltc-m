@@ -15,6 +15,7 @@ const REQUIRED_VARIABLES = {
     'NODE_ENV',
     'PORT',
     'DATABASE_URL',
+    'DATABASE_SSL_MODE',
     'AUTH0_DOMAIN',
     'AUTH0_AUDIENCE',
     'CORS_ALLOWED_ORIGINS',
@@ -135,6 +136,14 @@ export function validateEntries(
       .some((origin) => !origin || !isHttpUrl(origin))
   ) {
     issues.push({ name: 'CORS_ALLOWED_ORIGINS', message: 'lista de origens contém URL inválida' });
+  }
+
+  const databaseSslMode = entries.get('DATABASE_SSL_MODE');
+  if (databaseSslMode && !['disable', 'verify-full'].includes(databaseSslMode)) {
+    issues.push({ name: 'DATABASE_SSL_MODE', message: 'modo TLS do PostgreSQL inválido' });
+  }
+  if (nodeEnvironment === 'production' && databaseSslMode && databaseSslMode !== 'verify-full') {
+    issues.push({ name: 'DATABASE_SSL_MODE', message: 'produção exige verificação TLS completa' });
   }
 
   return issues;
