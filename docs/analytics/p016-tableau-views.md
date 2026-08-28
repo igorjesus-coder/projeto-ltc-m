@@ -111,7 +111,7 @@ remoto ou configuração de Tableau integra P016.
 
 ## Reconciliação e testes
 
-O gate PostgreSQL 17 aplica as 13 migrations desde zero e usa fixtures sintéticas para provar:
+O gate PostgreSQL 17 aplica as 14 migrations desde zero e usa fixtures sintéticas para provar:
 
 - unicidade das chaves declaradas;
 - total planejado certificado de regressão `2800460.18` BRL na versão fixture;
