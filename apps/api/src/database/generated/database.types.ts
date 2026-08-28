@@ -5,7 +5,7 @@
  */
 export const P017_SCHEMA_CONTRACT = 'ltcm.p017.schema-integrity.v1' as const;
 export const P017_SCHEMA_FINGERPRINT =
-  '683d0c7e437f9cdb9d20d192a59dce839e453be0b8d29553e3f863e34b339073' as const;
+  'b6d71494c7e561aea68b26ed6f658ed5e25fc72ea6b6b45a1bff4ffbc03f4893' as const;
 export const P019_DATABASE_TYPES_CONTRACT = 'ltcm.p019.database-types.v1' as const;
 
 /** Exact decimal text returned by the P019 pg parser; never an authoritative number. */
@@ -23,7 +23,7 @@ export type ActualFinancialMetricEnum = 'billing_actual' | 'receipt_actual';
 
 export type ActualStatusEnum = 'draft' | 'posted' | 'cancelled';
 
-export type AppRoleEnum = 'viewer' | 'editor' | 'admin';
+export type AppRoleEnum = 'viewer' | 'editor' | 'approver' | 'admin';
 
 export type AuditOperationEnum =
   | 'INSERT'

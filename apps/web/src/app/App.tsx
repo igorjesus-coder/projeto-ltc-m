@@ -1,5 +1,6 @@
 import { AppShell } from '../layouts/AppShell';
 import { ProtectedRoute } from '../auth/ProtectedRoute';
+import { AuthorizationRoute } from '../auth/authorization';
 import { resolveRoute } from './routes';
 
 interface AppProps {
@@ -9,7 +10,9 @@ interface AppProps {
 export function App({ pathname = '/' }: AppProps) {
   const route = resolveRoute(pathname);
   const content = route.protected ? (
-    <ProtectedRoute>{route.content}</ProtectedRoute>
+    <ProtectedRoute>
+      <AuthorizationRoute>{route.content}</AuthorizationRoute>
+    </ProtectedRoute>
   ) : (
     route.content
   );

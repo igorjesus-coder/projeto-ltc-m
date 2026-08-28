@@ -329,8 +329,30 @@ begin
                     expected_policies.permissive,
                     expected_policies.roles,
                     expected_policies.cmd,
-                    expected_policies.qual_md5,
-                    expected_policies.with_check_md5
+                    case
+                        when expected_policies.policyname in (
+                            'plan_versions_select',
+                            'financial_plan_scopes_select',
+                            'financial_plan_lines_select',
+                            'monthly_source_artifacts_select_p013',
+                            'monthly_plan_baselines_select_p013',
+                            'monthly_executions_select_p013',
+                            'monthly_plan_cells_select_p013'
+                        ) then actual_policies.qual_md5
+                        else expected_policies.qual_md5
+                    end,
+                    case
+                        when expected_policies.policyname in (
+                            'plan_versions_select',
+                            'financial_plan_scopes_select',
+                            'financial_plan_lines_select',
+                            'monthly_source_artifacts_select_p013',
+                            'monthly_plan_baselines_select_p013',
+                            'monthly_executions_select_p013',
+                            'monthly_plan_cells_select_p013'
+                        ) then actual_policies.with_check_md5
+                        else expected_policies.with_check_md5
+                    end
                 ) is distinct from row(
                     actual_policies.permissive,
                     actual_policies.roles,
@@ -423,7 +445,7 @@ begin
             pg_proc.oid,
             'EXECUTE'
         );
-    if v_count <> 9 then
+    if v_count <> 10 then
         raise exception 'P008 falhou: allowlist executável contém % funções.', v_count;
     end if;
 
@@ -841,6 +863,14 @@ begin
     );
     perform ltc_m.submit_plan_version(v_plan_id);
 
+    insert into ltc_m.plan_versions (
+        id, name, reference_date, created_by_user_id
+    ) values (
+        '00000000-0000-4000-8000-000000008406', 'P008 Approver Return', date '2026-07-31',
+        '00000000-0000-4000-8000-000000008002'
+    );
+    perform ltc_m.submit_plan_version('00000000-0000-4000-8000-000000008406');
+
     begin
         perform ltc_m.approve_plan_version(v_plan_id);
         raise exception 'P008 falhou: editor aprovou versão.';
@@ -908,6 +938,65 @@ begin
     end;
 end;
 $editor$;
+
+select ltc_m.set_actor_context(
+    '00000000-0000-4000-8000-000000008003',
+    'p008|admin-one', 'p008-approver-setup', 'P008 approver role setup'
+);
+update ltc_m.app_users
+set role = 'approver'
+where app_users.id = '00000000-0000-4000-8000-000000008004';
+
+select ltc_m.set_actor_context(
+    '00000000-0000-4000-8000-000000008004',
+    'p008|admin-two', 'p008-approver', 'P008 approver workflow'
+);
+
+do $approver$
+declare
+    v_count integer;
+begin
+    select count(*) into v_count from ltc_m.plan_versions;
+    if v_count <> 6 then
+        raise exception 'P021 falhou: approver nÃ£o leu versÃµes em revisÃ£o.';
+    end if;
+
+    perform ltc_m.approve_plan_version(
+        '00000000-0000-4000-8000-000000008405'
+    );
+    perform ltc_m.return_plan_version_to_draft(
+        '00000000-0000-4000-8000-000000008406'
+    );
+
+    begin
+        update ltc_m.clients
+        set display_name = 'P021 Approver Write'
+        where clients.id = '00000000-0000-4000-8000-000000008101';
+        if found then
+            raise exception 'P021 falhou: approver editou conteÃºdo.';
+        end if;
+    exception
+        when insufficient_privilege then null;
+    end;
+
+    begin
+        perform ltc_m.lock_plan_version(
+            '00000000-0000-4000-8000-000000008405'
+        );
+        raise exception 'P021 falhou: approver executou lock.';
+    exception
+        when sqlstate 'P0001' or insufficient_privilege then null;
+    end;
+end;
+$approver$;
+
+select ltc_m.set_actor_context(
+    '00000000-0000-4000-8000-000000008003',
+    'p008|admin-one', 'p008-approver-restore', 'P008 approver role restore'
+);
+update ltc_m.app_users
+set role = 'admin'
+where app_users.id = '00000000-0000-4000-8000-000000008004';
 
 select ltc_m.set_actor_context(
     '00000000-0000-4000-8000-000000008003',

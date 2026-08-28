@@ -93,7 +93,7 @@ export function checkP019ServerPostgres(root = process.cwd()) {
   const migrations = fs
     .readdirSync(path.join(root, 'supabase', 'migrations'))
     .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name));
-  if (migrations.length !== 13) issues.push(`P019_MIGRATION_COUNT_UNEXPECTED:${migrations.length}`);
+  if (migrations.length !== 14) issues.push(`P019_MIGRATION_COUNT_UNEXPECTED:${migrations.length}`);
   const docs = source(root, 'docs/backend/p019-server-postgres-access.md') ?? '';
   if (!docs.includes(P019_SERVER_POSTGRES_CONTRACT)) issues.push('P019_CONTRACT_MISSING');
   return [...new Set(issues)].sort();
@@ -110,7 +110,7 @@ function main() {
     return;
   }
   process.stdout.write(
-    `P019 válido: ${P019_SERVER_POSTGRES_CONTRACT}, pg server-only, 13 migrations\n`,
+    `P019 válido: ${P019_SERVER_POSTGRES_CONTRACT}, pg server-only, 14 migrations\n`,
   );
 }
 

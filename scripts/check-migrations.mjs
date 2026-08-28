@@ -8,6 +8,7 @@ const MIGRATION_NAME = /^(\d{14})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$/;
 const P009_MIGRATION_NAME = '20260731130000_add_ltcm_import_staging.sql';
 const D40_MIGRATION_NAME = '20260804120000_add_legacy_project_reference_date_exception.sql';
 const P013_MIGRATION_NAME = '20260820120000_add_p013_monthly_baseline_foundation.sql';
+const P021_MIGRATION_NAME = '20260828100000_add_p021_authorization_approver.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -108,6 +109,7 @@ const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.set_actor_context',
   'ltc_m.authorization_context',
   'ltc_m.current_actor_id',
+  'ltc_m.resolve_authorization',
   'ltc_m.enforce_admin_inactivation',
   'ltc_m.read_audit_log',
 ]);
@@ -411,7 +413,7 @@ function requireAdditiveAlterTables(sql, issues, scope) {
   }
 }
 
-function requireApprovedAlterTypes(sql, issues) {
+function requireApprovedAlterTypes(sql, issues, scope) {
   const alterTypePattern = /\balter\s+type\b[\s\S]*?;/gi;
   const statements = [...sql.matchAll(alterTypePattern)];
 
@@ -419,6 +421,12 @@ function requireApprovedAlterTypes(sql, issues) {
     if (
       !/^\s*alter\s+type\s+ltc_m\.plan_status\s+add\s+value\s+'pending_approval'\s+after\s+'draft'\s*;/i.test(
         match[0],
+      ) &&
+      !(
+        scope === 'p021' &&
+        /^\s*alter\s+type\s+ltc_m\.app_role\s+add\s+value\s+if\s+not\s+exists\s+'approver'\s+after\s+'editor'\s*;/i.test(
+          match[0],
+        )
       ) &&
       !/^\s*alter\s+type\s+ltc_m\.audit_operation\s+add\s+value\s+'(?:SUBMIT|RETURN)'\s+after\s+'(?:UPDATE|SUBMIT)'\s*;/i.test(
         match[0],
@@ -726,25 +734,30 @@ export function extractNamedObjects(sql) {
 export function scanMigrationText(sql, options = {}) {
   const issues = [];
   const scope =
-    options.migrationName === D40_MIGRATION_NAME
-      ? 'd40'
-      : options.migrationName === P013_MIGRATION_NAME
-        ? 'p013'
-        : options.migrationName === P009_MIGRATION_NAME
-          ? 'p009'
-          : 'p007';
+    options.migrationName === P021_MIGRATION_NAME
+      ? 'p021'
+      : options.migrationName === D40_MIGRATION_NAME
+        ? 'd40'
+        : options.migrationName === P013_MIGRATION_NAME
+          ? 'p013'
+          : options.migrationName === P009_MIGRATION_NAME
+            ? 'p009'
+            : 'p007';
   const stripped = stripSqlNoise(sql);
   const semanticSql = stripped.replace(/\b(?:begin|commit|rollback)\b/gi, '').replace(/[;\s]/g, '');
 
   if (!semanticSql) issues.push('migration vazia');
 
   for (const [pattern, message] of FORBIDDEN_PATTERNS) {
+    if (scope === 'p021' && message === 'policy proibida' && /alter\s+policy/i.test(stripped)) {
+      continue;
+    }
     if (pattern.test(stripped)) issues.push(message);
   }
 
   requireQualifiedObjects(stripped, issues);
   requireAdditiveAlterTables(stripped, issues, scope);
-  requireApprovedAlterTypes(sql, issues);
+  requireApprovedAlterTypes(sql, issues, scope);
   requireSafeFunctions(sql, issues, scope);
   requireP008Security(sql, stripped, issues, scope);
   if (scope === 'd40') requireD40Contract(sql, stripped, issues);

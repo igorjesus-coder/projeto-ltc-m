@@ -19,7 +19,7 @@ test('preserva numeric, bigint, nullability e enums sem number inseguro', async 
   assert.match(output, /export type PgBigInt = string;/u);
   assert.match(output, /contract_value: PgNumeric;/u);
   assert.match(output, /opening_balance: PgNumeric \| null;/u);
-  assert.match(output, /export type AppRoleEnum = "viewer" \| "editor" \| "admin";/u);
+  assert.match(output, /export type AppRoleEnum = "viewer" \| "editor" \| "approver" \| "admin";/u);
   assert.doesNotMatch(output, /type PgNumeric = number/u);
 });
 
