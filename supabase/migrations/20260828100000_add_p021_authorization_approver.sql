@@ -30,7 +30,7 @@ using (
     exists (
         select 1
         from ltc_m.authorization_context()
-        where authorization_context.app_role in ('editor', 'approver', 'admin')
+        where authorization_context.app_role::text in ('editor', 'approver', 'admin')
     )
     or plan_versions.status in ('approved', 'locked')
 );
@@ -41,7 +41,7 @@ using (
     exists (
         select 1
         from ltc_m.authorization_context()
-        where authorization_context.app_role in ('editor', 'approver', 'admin')
+        where authorization_context.app_role::text in ('editor', 'approver', 'admin')
     )
     or exists (
         select 1
@@ -58,7 +58,7 @@ using (
     exists (
         select 1
         from ltc_m.authorization_context()
-        where authorization_context.app_role in ('editor', 'approver', 'admin')
+        where authorization_context.app_role::text in ('editor', 'approver', 'admin')
     )
     or exists (
         select 1
@@ -75,7 +75,7 @@ using (
     exists (
         select 1
         from ltc_m.authorization_context()
-        where authorization_context.app_role in ('editor', 'approver', 'admin')
+        where authorization_context.app_role::text in ('editor', 'approver', 'admin')
     )
 );
 
@@ -85,7 +85,7 @@ using (
     exists (
         select 1
         from ltc_m.authorization_context()
-        where authorization_context.app_role in ('editor', 'approver', 'admin')
+        where authorization_context.app_role::text in ('editor', 'approver', 'admin')
     )
     or exists (
         select 1
@@ -102,7 +102,7 @@ using (
     exists (
         select 1
         from ltc_m.authorization_context()
-        where authorization_context.app_role in ('editor', 'approver', 'admin')
+        where authorization_context.app_role::text in ('editor', 'approver', 'admin')
     )
 );
 
@@ -112,7 +112,7 @@ using (
     exists (
         select 1
         from ltc_m.authorization_context()
-        where authorization_context.app_role in ('editor', 'approver', 'admin')
+        where authorization_context.app_role::text in ('editor', 'approver', 'admin')
     )
     or exists (
         select 1
@@ -148,7 +148,7 @@ begin
         where
             app_users.id = v_actor_id
             and app_users.active = true
-            and app_users.role in ('approver', 'admin')
+            and app_users.role::text in ('approver', 'admin')
     ) then
         raise exception using
             errcode = '42501',
@@ -229,7 +229,7 @@ begin
         app_users.id = v_actor_id
         and app_users.active = true;
 
-    if v_actor_role not in ('approver', 'admin') then
+    if v_actor_role::text not in ('approver', 'admin') then
         raise exception using
             errcode = '42501',
             message = 'Aprovação exige approver ou admin ativo.';
@@ -255,7 +255,7 @@ begin
     perform 1
     from ltc_m.app_users
     where
-        app_users.role in ('approver', 'admin')
+        app_users.role::text in ('approver', 'admin')
         and app_users.active = true
     for key share;
 
@@ -263,19 +263,19 @@ begin
     into v_eligible_count
     from ltc_m.app_users
     where
-        app_users.role in ('approver', 'admin')
+        app_users.role::text in ('approver', 'admin')
         and app_users.active = true;
 
     v_self_approval := v_actor_id = v_plan.created_by_user_id
         or v_actor_id = v_plan.updated_by_user_id;
 
-    if v_self_approval and v_actor_role = 'approver' then
+    if v_self_approval and v_actor_role::text = 'approver' then
         raise exception using
             errcode = '42501',
             message = 'Autoaprovação rejeitada para approver.';
     end if;
 
-    if v_self_approval and v_actor_role = 'admin' and v_eligible_count > 1 then
+    if v_self_approval and v_actor_role::text = 'admin' and v_eligible_count > 1 then
         raise exception using
             errcode = '42501',
             message = 'Autoaprovação rejeitada: existe outro aprovador elegível.';
@@ -283,7 +283,7 @@ begin
 
     if v_self_approval then
         perform ltc_m.current_justification(true);
-        if not v_exceptional or v_actor_role <> 'admin' then
+        if not v_exceptional or v_actor_role::text <> 'admin' then
             raise exception using
                 errcode = 'P0001',
                 message = 'Autoaprovação excepcional exige admin único, indicador explícito e justificativa.';
