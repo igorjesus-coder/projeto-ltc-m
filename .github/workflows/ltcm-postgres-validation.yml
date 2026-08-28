@@ -82,6 +82,9 @@ jobs:
       - name: Validate P020 Auth0 authentication and session
         run: npm run p020:acceptance
 
+      - name: Validate P022 layout and design system
+        run: npm run p022:acceptance
+
       - name: Run static gates
         run: npm run check
 

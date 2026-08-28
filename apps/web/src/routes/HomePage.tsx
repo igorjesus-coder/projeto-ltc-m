@@ -4,6 +4,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { publicEnvironment } from '../app/environment';
 import { AuthenticationRequiredError, createAuthenticatedApiClient } from '../auth/api-client';
 import { PermissionGate, useAuthorization } from '../auth/authorization';
+import { Breadcrumbs, Button, PageHeader } from '../components/design-system';
 
 const foundations = [
   {
@@ -57,14 +58,13 @@ export function HomePage() {
 
   return (
     <>
-      <section className="page-heading" aria-labelledby="home-title">
-        <p className="eyebrow">Fundação da aplicação</p>
-        <h1 id="home-title">Estrutura pronta para evoluir</h1>
-        <p>
-          O shell estabelece os limites técnicos do frontend sem antecipar funcionalidades de
-          cadastro ou integrações de dados.
-        </p>
-      </section>
+      <PageHeader
+        eyebrow="Fundação da aplicação"
+        title="Estrutura pronta para evoluir"
+        titleId="home-title"
+        description="O shell estabelece os limites técnicos do frontend sem antecipar funcionalidades de cadastro ou integrações de dados."
+        breadcrumbs={<Breadcrumbs items={[{ label: 'Início', current: true }]} />}
+      />
 
       <section className="foundation-panel" aria-labelledby="foundation-title">
         <div className="section-heading">
@@ -93,26 +93,26 @@ export function HomePage() {
           <p>{user?.name ?? user?.email ?? 'Usuário autenticado'}</p>
         </div>
         <div className="auth-actions">
-          <button type="button" onClick={() => void validateApiSession()}>
+          <Button type="button" onClick={() => void validateApiSession()}>
             Validar sessão na API
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
             onClick={() => void logout({ logoutParams: { returnTo: window.location.origin } })}
           >
             Sair
-          </button>
+          </Button>
         </div>
         {apiStatus ? <p role="status">{apiStatus}</p> : null}
         {sessionExpired ? (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() =>
               void loginWithRedirect({ appState: { returnTo: window.location.pathname } })
             }
           >
             Autenticar novamente
-          </button>
+          </Button>
         ) : null}
       </section>
       <section className="authorization-panel" aria-labelledby="authorization-title">
@@ -128,19 +128,13 @@ export function HomePage() {
         </div>
         <div className="permission-list">
           <PermissionGate capability="users:manage">
-            <button type="button" disabled>
-              Administrar usuários
-            </button>
+            <Button disabled>Administrar usuários</Button>
           </PermissionGate>
           <PermissionGate capability="workflow:approve">
-            <button type="button" disabled>
-              Revisar e aprovar
-            </button>
+            <Button disabled>Revisar e aprovar</Button>
           </PermissionGate>
           <PermissionGate capability="record:edit_draft">
-            <button type="button" disabled>
-              Editar draft
-            </button>
+            <Button disabled>Editar draft</Button>
           </PermissionGate>
         </div>
       </section>
