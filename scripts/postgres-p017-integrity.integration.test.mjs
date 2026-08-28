@@ -36,7 +36,15 @@ function projectP017Baseline(model, baseline) {
     ...model,
     functions: model.functions
       .filter(
-        (routine) => !(routine.schema === 'ltc_m' && routine.name === 'resolve_authorization'),
+        (routine) =>
+          !(
+            routine.schema === 'ltc_m' &&
+            [
+              'resolve_authorization',
+              'return_plan_version_to_draft_as_approver',
+              'approve_plan_version_as_approver',
+            ].includes(routine.name)
+          ),
       )
       .map((routine) => {
         const key = `${routine.schema}.${routine.name}.${routine.identityArguments}`;

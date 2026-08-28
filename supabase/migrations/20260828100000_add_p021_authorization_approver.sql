@@ -123,7 +123,7 @@ using (
     )
 );
 
-create or replace function ltc_m.return_plan_version_to_draft(p_plan_version_id uuid)
+create function ltc_m.return_plan_version_to_draft_as_approver(p_plan_version_id uuid)
 returns table (
     plan_version_id uuid,
     status ltc_m.plan_status,
@@ -191,7 +191,7 @@ begin
 end;
 $function$;
 
-create or replace function ltc_m.approve_plan_version(p_plan_version_id uuid)
+create function ltc_m.approve_plan_version_as_approver(p_plan_version_id uuid)
 returns table (
     plan_version_id uuid,
     status ltc_m.plan_status,
@@ -314,6 +314,10 @@ $function$;
 
 revoke execute on function ltc_m.resolve_authorization(text) from public;
 grant execute on function ltc_m.resolve_authorization(text) to ltc_m_runtime;
+revoke execute on function ltc_m.return_plan_version_to_draft_as_approver(uuid) from public;
+grant execute on function ltc_m.return_plan_version_to_draft_as_approver(uuid) to ltc_m_runtime;
+revoke execute on function ltc_m.approve_plan_version_as_approver(uuid) from public;
+grant execute on function ltc_m.approve_plan_version_as_approver(uuid) to ltc_m_runtime;
 
 comment on function ltc_m.resolve_authorization(text) is
     'Resolve subject Auth0 para usuário LTC-M ativo e role interna, sem expor credenciais.';

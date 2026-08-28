@@ -42,6 +42,7 @@ const APPROVED_SUCCESSORS = new Set([
   '20260804120000_add_legacy_project_reference_date_exception.sql',
   '20260820120000_add_p013_monthly_baseline_foundation.sql',
   '20260825160000_add_p016_tableau_analytical_views.sql',
+  '20260828100000_add_p021_authorization_approver.sql',
 ]);
 const EXPECTED_FUNCTION = 'ltc_m.enforce_admin_inactivation';
 

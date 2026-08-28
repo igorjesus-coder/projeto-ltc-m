@@ -110,6 +110,8 @@ const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.authorization_context',
   'ltc_m.current_actor_id',
   'ltc_m.resolve_authorization',
+  'ltc_m.return_plan_version_to_draft_as_approver',
+  'ltc_m.approve_plan_version_as_approver',
   'ltc_m.enforce_admin_inactivation',
   'ltc_m.read_audit_log',
 ]);

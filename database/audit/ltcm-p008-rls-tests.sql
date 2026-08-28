@@ -445,7 +445,7 @@ begin
             pg_proc.oid,
             'EXECUTE'
         );
-    if v_count <> 10 then
+    if v_count <> 12 then
         raise exception 'P008 falhou: allowlist executável contém % funções.', v_count;
     end if;
 
@@ -961,10 +961,10 @@ begin
         raise exception 'P021 falhou: approver nÃ£o leu versÃµes em revisÃ£o.';
     end if;
 
-    perform ltc_m.approve_plan_version(
+    perform ltc_m.approve_plan_version_as_approver(
         '00000000-0000-4000-8000-000000008405'
     );
-    perform ltc_m.return_plan_version_to_draft(
+    perform ltc_m.return_plan_version_to_draft_as_approver(
         '00000000-0000-4000-8000-000000008406'
     );
 
