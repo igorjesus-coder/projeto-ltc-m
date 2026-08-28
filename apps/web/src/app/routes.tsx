@@ -5,6 +5,16 @@ import { NotFoundPage } from '../routes/NotFoundPage';
 
 export type AppRoute = 'home' | 'not-found';
 
+export interface NavigationItem {
+  readonly route: Exclude<AppRoute, 'not-found'>;
+  readonly label: string;
+  readonly href: string;
+}
+
+export const APP_NAVIGATION: readonly NavigationItem[] = Object.freeze([
+  { route: 'home', label: 'Início', href: '/' },
+]);
+
 export interface ResolvedRoute {
   readonly id: AppRoute;
   readonly content: ReactNode;

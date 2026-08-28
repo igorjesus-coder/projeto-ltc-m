@@ -16,6 +16,7 @@ import { App } from './App';
 import { AppErrorBoundary, AppErrorFallback } from './AppErrorBoundary';
 import { AuthorizationContext } from '../auth/authorization';
 import type { AuthorizationContextValue } from '../auth/authorization';
+import { AppShell } from '../layouts/AppShell';
 
 const readyAuthorization: AuthorizationContextValue = {
   status: 'ready' as const,
@@ -60,5 +61,19 @@ describe('scaffold da aplicação', () => {
     expect(state).toEqual({ hasError: true });
     expect(html).toContain('Não foi possível iniciar o LTC-M');
     expect(html).not.toContain('stack');
+  });
+
+  it('expõe o contrato estrutural da navegação responsiva', () => {
+    const html = renderToStaticMarkup(
+      <AppShell currentRoute="home">
+        <p>Conteúdo</p>
+      </AppShell>,
+    );
+
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-controls="mobile-primary-navigation"');
+    expect(html).toContain('aria-label="Navegação móvel"');
+    expect(html).toContain('aria-label="Navegação principal"');
+    expect(html).toContain('<aside class="desktop-navigation">');
   });
 });
