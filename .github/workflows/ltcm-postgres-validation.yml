@@ -15,6 +15,7 @@ on:
       - 'docs/analytics/**'
       - 'docs/frontend/**'
       - 'docs/backend/**'
+      - 'docs/auth/**'
       - '.env.example'
       - 'README.md'
       - 'package.json'
@@ -77,6 +78,9 @@ jobs:
 
       - name: Validate P019 server PostgreSQL foundation
         run: npm run p019:acceptance
+
+      - name: Validate P020 Auth0 authentication and session
+        run: npm run p020:acceptance
 
       - name: Run static gates
         run: npm run check

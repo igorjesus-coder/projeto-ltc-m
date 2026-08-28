@@ -84,6 +84,8 @@ test(
         CORS_ALLOWED_ORIGINS: 'http://localhost:5173',
         DATABASE_URL: runtimeUrl(adminUrl),
         DATABASE_SSL_MODE: 'disable',
+        AUTH0_ISSUER_BASE_URL: 'https://tenant.example.auth0.com/',
+        AUTH0_AUDIENCE: 'https://api.example.invalid',
       });
       databasePool = createDatabasePool(apiConfig.database);
 

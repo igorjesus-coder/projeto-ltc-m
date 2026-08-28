@@ -1,5 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@auth0/auth0-react', () => ({
+  useAuth0: () => ({
+    getAccessTokenSilently: vi.fn(),
+    isAuthenticated: true,
+    isLoading: false,
+    loginWithRedirect: vi.fn(),
+    logout: vi.fn(),
+    user: { email: 'test@example.invalid' },
+  }),
+}));
 
 import { App } from './App';
 import { AppErrorBoundary, AppErrorFallback } from './AppErrorBoundary';

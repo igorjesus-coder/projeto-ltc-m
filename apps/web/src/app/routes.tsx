@@ -8,6 +8,7 @@ export type AppRoute = 'home' | 'not-found';
 export interface ResolvedRoute {
   readonly id: AppRoute;
   readonly content: ReactNode;
+  readonly protected: boolean;
 }
 
 function normalizePathname(pathname: string) {
@@ -18,8 +19,8 @@ function normalizePathname(pathname: string) {
 
 export function resolveRoute(pathname: string): ResolvedRoute {
   if (normalizePathname(pathname) === '/') {
-    return { id: 'home', content: <HomePage /> };
+    return { id: 'home', content: <HomePage />, protected: true };
   }
 
-  return { id: 'not-found', content: <NotFoundPage /> };
+  return { id: 'not-found', content: <NotFoundPage />, protected: false };
 }

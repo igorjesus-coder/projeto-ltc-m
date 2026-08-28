@@ -1,6 +1,13 @@
 export type NodeEnvironment = 'development' | 'production' | 'test';
 export type DatabaseSslMode = 'disable' | 'verify-full';
 
+export interface AuthConfig {
+  readonly issuerBaseUrl: string;
+  readonly jwksUri: string;
+  readonly audience: string;
+  readonly allowedAlgorithms: readonly ['RS256'];
+}
+
 export interface DatabaseConfig {
   readonly connectionString: string;
   readonly sslMode: DatabaseSslMode;
@@ -15,6 +22,7 @@ export interface ApiConfig {
   readonly port: number;
   readonly corsAllowedOrigins: readonly string[];
   readonly database: DatabaseConfig;
+  readonly auth: AuthConfig;
 }
 
 type EnvironmentSource = Readonly<Record<string, string | undefined>>;
@@ -26,6 +34,12 @@ function fail(code: string): never {
 function required(source: EnvironmentSource, name: string): string {
   const value = source[name]?.trim();
   if (!value) fail(`P019_CONFIG_${name}_MISSING`);
+  return value;
+}
+
+function requiredAuth(source: EnvironmentSource, name: string): string {
+  const value = source[name]?.trim();
+  if (!value) fail(`P020_CONFIG_${name}_MISSING`);
   return value;
 }
 
@@ -102,8 +116,47 @@ function parseSslMode(value: string, nodeEnvironment: NodeEnvironment): Database
   return value;
 }
 
+function parseAuthIssuer(value: string, nodeEnvironment: NodeEnvironment): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return fail('P020_CONFIG_AUTH0_ISSUER_INVALID');
+  }
+  const localHttpAllowed =
+    nodeEnvironment !== 'production' && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
+  if (
+    (url.protocol !== 'https:' && !localHttpAllowed) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== '/'
+  ) {
+    return fail('P020_CONFIG_AUTH0_ISSUER_INVALID');
+  }
+  return url.toString();
+}
+
+function parseAuthAudience(value: string): string {
+  if (!value || value.length > 2_048 || /\s/u.test(value)) {
+    return fail('P020_CONFIG_AUTH0_AUDIENCE_INVALID');
+  }
+  return value;
+}
+
 export function loadApiConfig(source: EnvironmentSource): ApiConfig {
   const nodeEnvironment = parseNodeEnvironment(required(source, 'NODE_ENV'));
+  const issuerBaseUrl = parseAuthIssuer(
+    requiredAuth(source, 'AUTH0_ISSUER_BASE_URL'),
+    nodeEnvironment,
+  );
+  const auth = Object.freeze({
+    issuerBaseUrl,
+    jwksUri: new URL('.well-known/jwks.json', issuerBaseUrl).toString(),
+    audience: parseAuthAudience(requiredAuth(source, 'AUTH0_AUDIENCE')),
+    allowedAlgorithms: ['RS256'] as const,
+  });
   const database = Object.freeze({
     connectionString: parseDatabaseUrl(required(source, 'DATABASE_URL')),
     sslMode: parseSslMode(required(source, 'DATABASE_SSL_MODE'), nodeEnvironment),
@@ -117,5 +170,6 @@ export function loadApiConfig(source: EnvironmentSource): ApiConfig {
     port: parsePort(required(source, 'PORT')),
     corsAllowedOrigins: parseCorsOrigins(required(source, 'CORS_ALLOWED_ORIGINS')),
     database,
+    auth,
   });
 }
