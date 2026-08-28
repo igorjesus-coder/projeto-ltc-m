@@ -24,6 +24,11 @@ const P021_POLICY_NAMES = new Set([
   'monthly_executions_select_p013',
   'monthly_plan_cells_select_p013',
 ]);
+const P021_FUNCTION_NAMES = new Set([
+  'resolve_authorization',
+  'return_plan_version_to_draft_as_approver',
+  'approve_plan_version_as_approver',
+]);
 
 function projectP017Baseline(model, baseline) {
   const baselineFunctions = new Map(
@@ -39,11 +44,7 @@ function projectP017Baseline(model, baseline) {
         (routine) =>
           !(
             routine.schema === 'ltc_m' &&
-            [
-              'resolve_authorization',
-              'return_plan_version_to_draft_as_approver',
-              'approve_plan_version_as_approver',
-            ].includes(routine.name)
+            P021_FUNCTION_NAMES.has(routine.name)
           ),
       )
       .map((routine) => {
@@ -58,7 +59,7 @@ function projectP017Baseline(model, baseline) {
         : policy,
     ),
     grants: model.grants.filter(
-      (grant) => !(grant.schema === 'ltc_m' && grant.object === 'resolve_authorization'),
+      (grant) => !(grant.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(grant.object)),
     ),
     types: model.types,
   };
