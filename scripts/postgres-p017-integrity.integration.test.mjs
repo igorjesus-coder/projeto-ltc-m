@@ -40,13 +40,7 @@ function projectP017Baseline(model, baseline) {
   return {
     ...model,
     functions: model.functions
-      .filter(
-        (routine) =>
-          !(
-            routine.schema === 'ltc_m' &&
-            P021_FUNCTION_NAMES.has(routine.name)
-          ),
-      )
+      .filter((routine) => !(routine.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(routine.name)))
       .map((routine) => {
         const key = `${routine.schema}.${routine.name}.${routine.identityArguments}`;
         return baselineFunctions.get(key) ?? routine;
