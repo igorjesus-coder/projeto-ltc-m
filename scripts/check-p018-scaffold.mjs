@@ -175,7 +175,7 @@ export function checkP018Scaffold(rootDirectory = process.cwd(), { overrides = {
     ? fs.readdirSync(migrationDirectory).filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
         .length
     : 0;
-  if (migrationCount !== 13) issues.push(`P018_MIGRATION_COUNT_UNEXPECTED:${migrationCount}`);
+  if (migrationCount !== 14) issues.push(`P018_MIGRATION_COUNT_UNEXPECTED:${migrationCount}`);
 
   return [...new Set(issues)].sort();
 }
@@ -188,7 +188,7 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`P018 scaffold válido: ${P018_SCAFFOLD_CONTRACT}, 13 migrations, sem P019`);
+  console.log(`P018 scaffold válido: ${P018_SCAFFOLD_CONTRACT}, 14 migrations, sem P019`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

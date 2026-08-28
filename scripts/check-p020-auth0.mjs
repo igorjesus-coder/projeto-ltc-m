@@ -145,7 +145,7 @@ export function checkP020Auth0(root = process.cwd(), { overrides = {} } = {}) {
         .readdirSync(path.join(root, 'supabase', 'migrations'))
         .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name)).length
     : 0;
-  if (migrations !== 13) issues.push(`P020_MIGRATION_COUNT_CHANGED:${migrations}`);
+  if (migrations !== 14) issues.push(`P020_MIGRATION_COUNT_CHANGED:${migrations}`);
 
   return [...new Set(issues)].sort();
 }

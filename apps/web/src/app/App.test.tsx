@@ -14,10 +14,28 @@ vi.mock('@auth0/auth0-react', () => ({
 
 import { App } from './App';
 import { AppErrorBoundary, AppErrorFallback } from './AppErrorBoundary';
+import { AuthorizationContext } from '../auth/authorization';
+import type { AuthorizationContextValue } from '../auth/authorization';
+
+const readyAuthorization: AuthorizationContextValue = {
+  status: 'ready' as const,
+  profile: {
+    authenticated: true as const,
+    user: { id: 'p021-test', displayName: 'P021 Test' },
+    role: 'viewer' as const,
+    capabilities: ['data:read', 'financial:read'] as const,
+  },
+  can: (capability) => ['data:read', 'financial:read'].includes(capability),
+  refresh: () => undefined,
+};
 
 describe('scaffold da aplicação', () => {
   it('renderiza a rota raiz com landmarks e navegação acessível', () => {
-    const html = renderToStaticMarkup(<App pathname="/" />);
+    const html = renderToStaticMarkup(
+      <AuthorizationContext.Provider value={readyAuthorization}>
+        <App pathname="/" />
+      </AuthorizationContext.Provider>,
+    );
 
     expect(html).toContain('<header');
     expect(html).toContain('<nav aria-label="Navegação principal"');

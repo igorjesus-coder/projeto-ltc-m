@@ -3,6 +3,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 
 import { publicEnvironment } from '../app/environment';
 import { AuthenticationRequiredError, createAuthenticatedApiClient } from '../auth/api-client';
+import { PermissionGate, useAuthorization } from '../auth/authorization';
 
 const foundations = [
   {
@@ -23,6 +24,7 @@ export function HomePage() {
   const { getAccessTokenSilently, loginWithRedirect, logout, user } = useAuth0();
   const [apiStatus, setApiStatus] = useState('');
   const [sessionExpired, setSessionExpired] = useState(false);
+  const { profile } = useAuthorization();
   const auth0Audience = publicEnvironment.auth0?.audience;
   const apiClient = useMemo(() => {
     if (!auth0Audience) return null;
@@ -112,6 +114,35 @@ export function HomePage() {
             Autenticar novamente
           </button>
         ) : null}
+      </section>
+      <section className="authorization-panel" aria-labelledby="authorization-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="authorization-title">Permissões LTC-M</h2>
+            <p>Capabilities resolvidas pelo backend para esta sessão</p>
+          </div>
+          <span className="status-indicator">
+            <span aria-hidden="true" />
+            Perfil {profile?.role}
+          </span>
+        </div>
+        <div className="permission-list">
+          <PermissionGate capability="users:manage">
+            <button type="button" disabled>
+              Administrar usuários
+            </button>
+          </PermissionGate>
+          <PermissionGate capability="workflow:approve">
+            <button type="button" disabled>
+              Revisar e aprovar
+            </button>
+          </PermissionGate>
+          <PermissionGate capability="record:edit_draft">
+            <button type="button" disabled>
+              Editar draft
+            </button>
+          </PermissionGate>
+        </div>
       </section>
     </>
   );

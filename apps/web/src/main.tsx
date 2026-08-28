@@ -6,6 +6,7 @@ import { App } from './app/App';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { publicEnvironment, requireAuth0Environment } from './app/environment';
 import { getSafeReturnTo } from './auth/navigation';
+import { AuthorizationProvider } from './auth/authorization';
 import './styles/global.css';
 
 const rootElement = document.getElementById('root');
@@ -30,7 +31,9 @@ createRoot(rootElement).render(
       }}
     >
       <AppErrorBoundary>
-        <App pathname={window.location.pathname} />
+        <AuthorizationProvider>
+          <App pathname={window.location.pathname} />
+        </AuthorizationProvider>
       </AppErrorBoundary>
     </Auth0Provider>
   </StrictMode>,

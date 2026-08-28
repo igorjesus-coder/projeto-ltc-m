@@ -22,7 +22,7 @@ import { parseP012LoopbackDatabaseUrlForTestHarness } from './support/postgres-i
 const DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const ENABLED = process.env['LTCM_P013_D03_INTEGRATION'] === '1';
 const ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
-const EXPECTED_MIGRATIONS = 12;
+const EXPECTED_MIGRATIONS = 14;
 const ADMIN_ID = '00000000-0000-4000-8000-000000013501';
 const CLIENT_ID = '00000000-0000-4000-8000-000000013502';
 const PLAN_ID = '00000000-0000-4000-8000-000000013503';

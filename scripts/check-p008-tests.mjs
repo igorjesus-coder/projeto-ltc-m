@@ -228,6 +228,10 @@ export function scanP008TestText(sql) {
   ]) {
     if (!pattern.test(stripped)) issues.push(message);
   }
+
+  if (!/\bdo\s+\$approver\$/iu.test(sql) || !/P021 falhou/iu.test(sql)) {
+    issues.push('cenário P021 approver ausente');
+  }
   if ((stripped.match(/\bwhere\s+not\s+exists\s*\(/giu) ?? []).length < 4) {
     issues.push('comparação bidirecional de inventários ausente');
   }

@@ -3,12 +3,16 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { AuthTokenVerifier } from './token-verifier.js';
 
 export interface AuthenticatedRequest {
-  readonly headers: { readonly authorization?: string };
+  readonly headers: {
+    readonly authorization?: string;
+    readonly 'x-request-id'?: string;
+  };
   auth?: {
     readonly subject: string;
     readonly issuer: string;
     readonly audience: string | readonly string[];
   };
+  authorization?: import('./authorization.js').AuthorizationProfile;
 }
 
 @Injectable()

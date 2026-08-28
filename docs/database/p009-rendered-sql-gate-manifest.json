@@ -3,7 +3,7 @@
   "decision": "D33",
   "status": "approved",
   "runIds": ["r20991231-gate-a1b2c3d4", "r20000101_gate_00000000"],
-  "sourceHash": "48D4EFB42A126B54838BD552B5CA266591FE7F715954274F4593B5579E27D9E7",
+  "sourceHash": "2702626B7FDBAEFD3F9DD77CE462577C068196F66B1F90B4ADD1266E4E2648A1",
   "sourceFiles": [
     {
       "artifact": "membershipPreflight",
@@ -73,7 +73,7 @@
     {
       "artifact": "p008",
       "path": "database/audit/ltcm-p008-rls-tests.sql",
-      "sha256": "AB0730113267E1D9F7D51B23F8F35FFD21080AF7B73F3E55F8081AA1BC437EFB"
+      "sha256": "87F172081C64C32CB7F0BDDB849CC3DA0C2ED0480C0266BAB8E9209DF28953C0"
     },
     {
       "artifact": "p009Bootstrap",
@@ -104,36 +104,36 @@
   "rendered": [
     {
       "runId": "r20991231-gate-a1b2c3d4",
-      "sha256": "3D589C223FF841D76BD039025BE5C6EF43B7559B5C1EEDFE3EFEDB8B3E43564E",
-      "canonicalSha256": "009D407F24BBE32A5DAB0C22DA9EF7D51195BAEF9304A89F5E92E94B105306A3",
+      "sha256": "706612BC676DBE2EA3A1946C182F8A89D9E631B077C73D67A5EC68B2C73014D6",
+      "canonicalSha256": "6BAE462A9FE2AC04557E6EAE2491D0C20ED3EA1AAE45173156A1E3BD0E264041",
       "metrics": {
-        "statements": 1177,
+        "statements": 1201,
         "statementTypeCounts": {
-          "begin": 165,
+          "begin": 168,
           "commit": 2,
-          "declare": 20,
-          "do": 90,
-          "end": 329,
-          "exception": 81,
+          "declare": 21,
+          "do": 91,
+          "end": 334,
+          "exception": 83,
           "format_type": 1,
           "get": 4,
           "grant": 2,
-          "if": 105,
-          "insert": 59,
-          "perform": 12,
+          "if": 107,
+          "insert": 60,
+          "perform": 15,
           "pg_attribute": 1,
           "pg_get_userbyid": 1,
           "pg_index": 1,
           "pg_policy": 1,
           "pg_proc": 1,
           "pg_type": 1,
-          "raise": 81,
+          "raise": 82,
           "reset": 7,
           "revoke": 2,
           "rollback": 12,
-          "select": 124,
+          "select": 127,
           "set": 12,
-          "update": 40,
+          "update": 42,
           "v_actual_count": 1,
           "v_actual_count_after": 1,
           "v_actual_count_before": 1,
@@ -155,8 +155,8 @@
           "v_updated_at": 1,
           "with": 3
         },
-        "inserts": 76,
-        "tuples": 105,
+        "inserts": 77,
+        "tuples": 106,
         "aliases": 71,
         "ctes": 4,
         "appUsersFixtures": 20,
@@ -360,7 +360,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.app_users",
-          "line": 469,
+          "line": 491,
           "columns": 5,
           "tupleArities": [5, 5, 5, 5, 5],
           "expectedFailure": false
@@ -368,7 +368,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.clients",
-          "line": 477,
+          "line": 499,
           "columns": 5,
           "tupleArities": [5, 5],
           "expectedFailure": false
@@ -376,7 +376,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.projects",
-          "line": 482,
+          "line": 504,
           "columns": 8,
           "tupleArities": [8, 8],
           "expectedFailure": false
@@ -384,7 +384,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.project_items",
-          "line": 495,
+          "line": 517,
           "columns": 10,
           "tupleArities": [10, 10],
           "expectedFailure": false
@@ -392,7 +392,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.plan_versions",
-          "line": 511,
+          "line": 533,
           "columns": 7,
           "tupleArities": [7, 7, 7, 7],
           "expectedFailure": false
@@ -400,7 +400,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_plan_scopes",
-          "line": 532,
+          "line": 554,
           "columns": 7,
           "tupleArities": [],
           "expectedFailure": false
@@ -408,7 +408,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_plan_lines",
-          "line": 552,
+          "line": 574,
           "columns": 9,
           "tupleArities": [],
           "expectedFailure": false
@@ -416,7 +416,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_actual_events",
-          "line": 574,
+          "line": 596,
           "columns": 8,
           "tupleArities": [8],
           "expectedFailure": false
@@ -424,7 +424,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_batches",
-          "line": 585,
+          "line": 607,
           "columns": 4,
           "tupleArities": [4],
           "expectedFailure": false
@@ -432,7 +432,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_row_errors",
-          "line": 594,
+          "line": 616,
           "columns": 5,
           "tupleArities": [5],
           "expectedFailure": false
@@ -440,7 +440,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.clients",
-          "line": 644,
+          "line": 666,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -448,7 +448,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.clients",
-          "line": 791,
+          "line": 813,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -456,7 +456,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.projects",
-          "line": 798,
+          "line": 820,
           "columns": 6,
           "tupleArities": [6],
           "expectedFailure": true
@@ -464,7 +464,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.project_items",
-          "line": 809,
+          "line": 831,
           "columns": 7,
           "tupleArities": [7],
           "expectedFailure": true
@@ -472,7 +472,15 @@
         {
           "artifact": "p008",
           "table": "ltc_m.plan_versions",
-          "line": 836,
+          "line": 858,
+          "columns": 4,
+          "tupleArities": [4],
+          "expectedFailure": true
+        },
+        {
+          "artifact": "p008",
+          "table": "ltc_m.plan_versions",
+          "line": 866,
           "columns": 4,
           "tupleArities": [4],
           "expectedFailure": true
@@ -480,7 +488,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_actual_events",
-          "line": 869,
+          "line": 899,
           "columns": 7,
           "tupleArities": [7],
           "expectedFailure": true
@@ -488,7 +496,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_batches",
-          "line": 878,
+          "line": 908,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -496,7 +504,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_row_errors",
-          "line": 883,
+          "line": 913,
           "columns": 5,
           "tupleArities": [5],
           "expectedFailure": true
@@ -504,7 +512,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.app_users",
-          "line": 891,
+          "line": 921,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -777,36 +785,36 @@
     },
     {
       "runId": "r20000101_gate_00000000",
-      "sha256": "475C057A6658C6806176F6ED2D8E777A735DAC74E9B06DF000125E2FC4BDD8FE",
-      "canonicalSha256": "009D407F24BBE32A5DAB0C22DA9EF7D51195BAEF9304A89F5E92E94B105306A3",
+      "sha256": "E9C11B5BC68645B3C0F22D091A4E868ECA90D83B91E802CD794F2A8553B9C529",
+      "canonicalSha256": "6BAE462A9FE2AC04557E6EAE2491D0C20ED3EA1AAE45173156A1E3BD0E264041",
       "metrics": {
-        "statements": 1177,
+        "statements": 1201,
         "statementTypeCounts": {
-          "begin": 165,
+          "begin": 168,
           "commit": 2,
-          "declare": 20,
-          "do": 90,
-          "end": 329,
-          "exception": 81,
+          "declare": 21,
+          "do": 91,
+          "end": 334,
+          "exception": 83,
           "format_type": 1,
           "get": 4,
           "grant": 2,
-          "if": 105,
-          "insert": 59,
-          "perform": 12,
+          "if": 107,
+          "insert": 60,
+          "perform": 15,
           "pg_attribute": 1,
           "pg_get_userbyid": 1,
           "pg_index": 1,
           "pg_policy": 1,
           "pg_proc": 1,
           "pg_type": 1,
-          "raise": 81,
+          "raise": 82,
           "reset": 7,
           "revoke": 2,
           "rollback": 12,
-          "select": 124,
+          "select": 127,
           "set": 12,
-          "update": 40,
+          "update": 42,
           "v_actual_count": 1,
           "v_actual_count_after": 1,
           "v_actual_count_before": 1,
@@ -828,8 +836,8 @@
           "v_updated_at": 1,
           "with": 3
         },
-        "inserts": 76,
-        "tuples": 105,
+        "inserts": 77,
+        "tuples": 106,
         "aliases": 71,
         "ctes": 4,
         "appUsersFixtures": 20,
@@ -1033,7 +1041,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.app_users",
-          "line": 469,
+          "line": 491,
           "columns": 5,
           "tupleArities": [5, 5, 5, 5, 5],
           "expectedFailure": false
@@ -1041,7 +1049,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.clients",
-          "line": 477,
+          "line": 499,
           "columns": 5,
           "tupleArities": [5, 5],
           "expectedFailure": false
@@ -1049,7 +1057,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.projects",
-          "line": 482,
+          "line": 504,
           "columns": 8,
           "tupleArities": [8, 8],
           "expectedFailure": false
@@ -1057,7 +1065,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.project_items",
-          "line": 495,
+          "line": 517,
           "columns": 10,
           "tupleArities": [10, 10],
           "expectedFailure": false
@@ -1065,7 +1073,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.plan_versions",
-          "line": 511,
+          "line": 533,
           "columns": 7,
           "tupleArities": [7, 7, 7, 7],
           "expectedFailure": false
@@ -1073,7 +1081,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_plan_scopes",
-          "line": 532,
+          "line": 554,
           "columns": 7,
           "tupleArities": [],
           "expectedFailure": false
@@ -1081,7 +1089,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_plan_lines",
-          "line": 552,
+          "line": 574,
           "columns": 9,
           "tupleArities": [],
           "expectedFailure": false
@@ -1089,7 +1097,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_actual_events",
-          "line": 574,
+          "line": 596,
           "columns": 8,
           "tupleArities": [8],
           "expectedFailure": false
@@ -1097,7 +1105,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_batches",
-          "line": 585,
+          "line": 607,
           "columns": 4,
           "tupleArities": [4],
           "expectedFailure": false
@@ -1105,7 +1113,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_row_errors",
-          "line": 594,
+          "line": 616,
           "columns": 5,
           "tupleArities": [5],
           "expectedFailure": false
@@ -1113,7 +1121,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.clients",
-          "line": 644,
+          "line": 666,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -1121,7 +1129,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.clients",
-          "line": 791,
+          "line": 813,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -1129,7 +1137,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.projects",
-          "line": 798,
+          "line": 820,
           "columns": 6,
           "tupleArities": [6],
           "expectedFailure": true
@@ -1137,7 +1145,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.project_items",
-          "line": 809,
+          "line": 831,
           "columns": 7,
           "tupleArities": [7],
           "expectedFailure": true
@@ -1145,7 +1153,15 @@
         {
           "artifact": "p008",
           "table": "ltc_m.plan_versions",
-          "line": 836,
+          "line": 858,
+          "columns": 4,
+          "tupleArities": [4],
+          "expectedFailure": true
+        },
+        {
+          "artifact": "p008",
+          "table": "ltc_m.plan_versions",
+          "line": 866,
           "columns": 4,
           "tupleArities": [4],
           "expectedFailure": true
@@ -1153,7 +1169,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.financial_actual_events",
-          "line": 869,
+          "line": 899,
           "columns": 7,
           "tupleArities": [7],
           "expectedFailure": true
@@ -1161,7 +1177,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_batches",
-          "line": 878,
+          "line": 908,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -1169,7 +1185,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.import_row_errors",
-          "line": 883,
+          "line": 913,
           "columns": 5,
           "tupleArities": [5],
           "expectedFailure": true
@@ -1177,7 +1193,7 @@
         {
           "artifact": "p008",
           "table": "ltc_m.app_users",
-          "line": 891,
+          "line": 921,
           "columns": 2,
           "tupleArities": [2],
           "expectedFailure": true
@@ -1487,5 +1503,5 @@
     "DML sem contexto e vazamento entre transações/conexões"
   ],
   "issues": [],
-  "manifestSha256": "152AA215C6270CE4C1733B77DE58E30F2811977070478816DA600E09D274DE00"
+  "manifestSha256": "D66307260626083BF69E70A448E3F4E96AF89A4EF186D5631AA33AC1A2131D84"
 }

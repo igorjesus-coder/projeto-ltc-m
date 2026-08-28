@@ -81,4 +81,4 @@ validação PostgreSQL.
 
 P018 não implementa CRUD, estado de domínio, formulários, Auth0, Supabase, acesso à API, backend,
 deploy ou dados falsos. Em particular, a integração cliente/tipos prevista para P019 não foi
-antecipada. O schema permanece com 13 migrations e os contratos P008–P017 não são alterados.
+antecipada. O schema permanece com 14 migrations e os contratos P008–P017 não são alterados.

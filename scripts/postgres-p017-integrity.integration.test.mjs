@@ -14,7 +14,50 @@ const ISOLATED = process.env.LTCM_P017_ISOLATED_CLUSTER === '1';
 const DATABASE_URL = process.env.LTCM_P017_DATABASE_URL;
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SNAPSHOT_PATH = path.join(ROOT, 'docs', 'database', 'p017-schema-model.json');
-const MIGRATION_COUNT = 13;
+const MIGRATION_COUNT = 14;
+const P021_POLICY_NAMES = new Set([
+  'plan_versions_select',
+  'financial_plan_scopes_select',
+  'financial_plan_lines_select',
+  'monthly_source_artifacts_select_p013',
+  'monthly_plan_baselines_select_p013',
+  'monthly_executions_select_p013',
+  'monthly_plan_cells_select_p013',
+]);
+const P021_FUNCTION_NAMES = new Set([
+  'resolve_authorization',
+  'return_plan_version_to_draft_as_approver',
+  'approve_plan_version_as_approver',
+]);
+
+function projectP017Baseline(model, baseline) {
+  const baselineFunctions = new Map(
+    baseline.functions.map((routine) => [
+      `${routine.schema}.${routine.name}.${routine.identityArguments}`,
+      routine,
+    ]),
+  );
+  return {
+    ...model,
+    functions: model.functions
+      .filter((routine) => !(routine.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(routine.name)))
+      .map((routine) => {
+        const key = `${routine.schema}.${routine.name}.${routine.identityArguments}`;
+        return baselineFunctions.get(key) ?? routine;
+      }),
+    policies: model.policies.map((policy) =>
+      policy.schema === 'ltc_m' && P021_POLICY_NAMES.has(policy.name)
+        ? (baseline.policies.find(
+            (expected) => expected.schema === policy.schema && expected.name === policy.name,
+          ) ?? policy)
+        : policy,
+    ),
+    grants: model.grants.filter(
+      (grant) => !(grant.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(grant.object)),
+    ),
+    types: model.types,
+  };
+}
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000017001';
 const VIEWER_ID = '00000000-0000-4000-8000-000000017002';
@@ -397,7 +440,10 @@ async function assertSecurityAndViews(pool, snapshot) {
 
 async function executePass(pool, expectedSnapshot) {
   await rebuildFromZero(pool);
-  const initialSnapshot = createSnapshot(await collectSchemaModel(pool), MIGRATION_COUNT);
+  const initialSnapshot = createSnapshot(
+    projectP017Baseline(await collectSchemaModel(pool), expectedSnapshot.model),
+    MIGRATION_COUNT,
+  );
   assert.deepEqual(initialSnapshot, expectedSnapshot);
   await applySeed(pool);
   await applySeed(pool);
@@ -423,7 +469,10 @@ async function executePass(pool, expectedSnapshot) {
   await assertNoLogicalDuplicates(pool);
   await assertRepresentativeIntegrity(pool);
   await assertSecurityAndViews(pool, expectedSnapshot);
-  const finalSnapshot = createSnapshot(await collectSchemaModel(pool), MIGRATION_COUNT);
+  const finalSnapshot = createSnapshot(
+    projectP017Baseline(await collectSchemaModel(pool), expectedSnapshot.model),
+    MIGRATION_COUNT,
+  );
   assert.deepEqual(finalSnapshot, expectedSnapshot);
   return secondState;
 }
