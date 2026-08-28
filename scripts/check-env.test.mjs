@@ -9,6 +9,7 @@ const validFrontend = new Map([
   ['VITE_AUTH0_DOMAIN', 'localhost'],
   ['VITE_AUTH0_CLIENT_ID', 'public-client'],
   ['VITE_AUTH0_AUDIENCE', 'local-api'],
+  ['VITE_AUTH0_REDIRECT_URI', 'http://localhost:5173'],
 ]);
 
 test('detecta variável obrigatória ausente sem exibir outros valores', () => {
@@ -62,10 +63,11 @@ VITE_API_BASE_URL=http://localhost:3000
 VITE_AUTH0_DOMAIN=
 VITE_AUTH0_CLIENT_ID=
 VITE_AUTH0_AUDIENCE=
+VITE_AUTH0_REDIRECT_URI=
 NODE_ENV=development
 PORT=3000
 CORS_ALLOWED_ORIGINS=http://localhost:5173
-AUTH0_DOMAIN=
+AUTH0_ISSUER_BASE_URL=
 AUTH0_AUDIENCE=
 DATABASE_URL=
 DATABASE_SSL_MODE=disable
@@ -81,7 +83,7 @@ test('rejeita modo TLS inválido e exige verify-full em produção', () => {
     ['NODE_ENV', 'production'],
     ['PORT', '3000'],
     ['CORS_ALLOWED_ORIGINS', 'https://web.example.invalid'],
-    ['AUTH0_DOMAIN', 'tenant.example.invalid'],
+    ['AUTH0_ISSUER_BASE_URL', 'https://tenant.example.invalid/'],
     ['AUTH0_AUDIENCE', 'ltcm-api'],
     ['DATABASE_URL', 'postgresql://synthetic:synthetic@localhost/ltcm_test'],
     ['DATABASE_SSL_MODE', 'disable'],

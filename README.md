@@ -26,8 +26,8 @@ cd projeto-ltc-m
 npm ci
 ```
 
-O frontend ainda não integra Auth0 nem consome a API, e o scaffold backend P019 não exige
-credenciais remotas para build ou testes unitários. O
+O frontend integra o fluxo Auth0 da P020 e consome somente a API própria; o scaffold backend P019
+e a autenticação usam configurações locais sem credenciais remotas. O
 `.env.example` documenta as variáveis públicas previstas e as variáveis exclusivamente
 server-side; não preencha segredos no repositório. Quando as integrações existirem, use arquivos
 locais separados por serviço, como `apps/web/.env.development.local` e
@@ -419,6 +419,24 @@ bundle e o contrato completo estão em
 npm.cmd run db:types:check
 npm.cmd run p019:check
 npm.cmd run p019:acceptance
+```
+
+## Autenticação e sessão Auth0 (P020 D01)
+
+P020 integra o SDK oficial `@auth0/auth0-react` com Authorization Code + PKCE, cache em memória,
+rotas protegidas, logout, recuperação de sessão e cliente API com bearer token. O backend valida
+JWT por JWKS com `jose` e expõe somente `GET /auth/me` como endpoint de prova. Supabase Auth,
+`supabase-js`, acesso browser → PostgreSQL, CRUD de domínio e autorização de negócio permanecem
+fora do escopo.
+
+Configure os valores públicos `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID` e
+`VITE_AUTH0_AUDIENCE` em `apps/web/.env.development.local`. No backend, configure
+`AUTH0_ISSUER_BASE_URL` e `AUTH0_AUDIENCE`; não use client secret no frontend. O contrato completo
+está em [`docs/auth/p020-auth0-authentication-session.md`](docs/auth/p020-auth0-authentication-session.md).
+
+```powershell
+npm.cmd run p020:check
+npm.cmd run p020:acceptance
 ```
 
 ## Estrutura
