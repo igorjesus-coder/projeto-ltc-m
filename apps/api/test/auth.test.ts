@@ -52,6 +52,32 @@ test('rejeita ausência, token malformado, token expirado, issuer e audience inv
     /P020_JWT_INVALID/u,
   );
 
+  const { privateKey: foreignPrivateKey } = await generateKeyPair('RS256');
+  const invalidSignature = await new SignJWT()
+    .setProtectedHeader({ alg: 'RS256', kid: 'p020-test-key' })
+    .setSubject('auth0|p020-user')
+    .setIssuer(config.issuerBaseUrl)
+    .setAudience(config.audience)
+    .setExpirationTime('5m')
+    .sign(foreignPrivateKey);
+  await assert.rejects(
+    () => verifier.verifyAuthorizationHeader(`Bearer ${invalidSignature}`),
+    /P020_JWT_INVALID/u,
+  );
+
+  const { privateKey: invalidAlgorithmKey } = await generateKeyPair('RS384');
+  const invalidAlgorithm = await new SignJWT()
+    .setProtectedHeader({ alg: 'RS384', kid: 'p020-test-key' })
+    .setSubject('auth0|p020-user')
+    .setIssuer(config.issuerBaseUrl)
+    .setAudience(config.audience)
+    .setExpirationTime('5m')
+    .sign(invalidAlgorithmKey);
+  await assert.rejects(
+    () => verifier.verifyAuthorizationHeader(`Bearer ${invalidAlgorithm}`),
+    /P020_JWT_INVALID/u,
+  );
+
   const expired = await new SignJWT()
     .setProtectedHeader({ alg: 'RS256', kid: 'p020-test-key' })
     .setSubject('auth0|p020-user')
