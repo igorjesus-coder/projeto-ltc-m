@@ -17,6 +17,7 @@ import { AppErrorBoundary, AppErrorFallback } from './AppErrorBoundary';
 import { AuthorizationContext } from '../auth/authorization';
 import type { AuthorizationContextValue } from '../auth/authorization';
 import { AppShell } from '../layouts/AppShell';
+import { resolveRoute } from './routes';
 
 const readyAuthorization: AuthorizationContextValue = {
   status: 'ready' as const,
@@ -75,5 +76,13 @@ describe('scaffold da aplicação', () => {
     expect(html).toContain('aria-label="Navegação móvel"');
     expect(html).toContain('aria-label="Navegação principal"');
     expect(html).toContain('<aside class="desktop-navigation">');
+  });
+
+  it('resolve a lista e o detalhe de projetos como rotas protegidas', () => {
+    expect(resolveRoute('/projects', '').id).toBe('projects');
+    expect(resolveRoute('/projects/00000000-0000-4000-8000-000000023101', '').id).toBe(
+      'project-detail',
+    );
+    expect(resolveRoute('/projects', '?status=active&page=2').protected).toBe(true);
   });
 });

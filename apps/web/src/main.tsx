@@ -2,9 +2,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Auth0Provider } from '@auth0/auth0-react';
 
-import { App } from './app/App';
 import { AppErrorBoundary } from './app/AppErrorBoundary';
 import { publicEnvironment, requireAuth0Environment } from './app/environment';
+import { RoutedApp } from './app/RoutedApp';
 import { getSafeReturnTo } from './auth/navigation';
 import { AuthorizationProvider } from './auth/authorization';
 import './styles/global.css';
@@ -32,7 +32,7 @@ createRoot(rootElement).render(
     >
       <AppErrorBoundary>
         <AuthorizationProvider>
-          <App pathname={window.location.pathname} />
+          <RoutedApp />
         </AuthorizationProvider>
       </AppErrorBoundary>
     </Auth0Provider>

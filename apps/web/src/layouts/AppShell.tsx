@@ -33,7 +33,12 @@ export function AppShell({ children, currentRoute }: AppShellProps) {
         <li key={item.route}>
           <a
             href={item.href}
-            aria-current={currentRoute === item.route ? 'page' : undefined}
+            aria-current={
+              currentRoute === item.route ||
+              (item.route === 'projects' && currentRoute === 'project-detail')
+                ? 'page'
+                : undefined
+            }
             onClick={() => setMobileNavigationOpen(false)}
           >
             {item.label}
