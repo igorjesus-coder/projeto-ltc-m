@@ -1,8 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import type { PoolClient, QueryResultRow } from 'pg';
 
 import type { ActorContext } from '../database/transaction.js';
 import { DatabaseService } from '../database/database.service.js';
+import type { Role } from '../auth/authorization.js';
 import {
   P023_PROJECT_PORTFOLIO_CONTRACT,
   type ProjectDetail,
@@ -12,6 +18,14 @@ import {
   type ProjectStatus,
   type UnscheduledBalanceStatus,
 } from './projects.types.js';
+import {
+  P024_PROJECT_CREATE_EDIT_CONTRACT,
+  type ProjectClassification,
+  type ProjectOptionsResponse,
+  type ProjectPatchPayload,
+  type ProjectWritePayload,
+  type ProjectWriteResponse,
+} from './projects-write.types.js';
 
 interface PortfolioRow extends QueryResultRow {
   readonly project_id: string;
@@ -37,6 +51,34 @@ interface ProjectDetailRow extends QueryResultRow {
   readonly currency_code: string;
   readonly contract_value: string | null;
   readonly updated_at: string;
+}
+
+interface ProjectWriteRow extends QueryResultRow {
+  readonly project_id: string;
+  readonly project_code: string;
+  readonly project_name: string;
+  readonly client_id: string;
+  readonly client_name: string;
+  readonly client_active: boolean;
+  readonly client_deleted_at: string | null;
+  readonly reporting_group: string | null;
+  readonly classification: string;
+  readonly project_status: string;
+  readonly currency_code: string;
+  readonly contract_value: string;
+  readonly opening_balance: string | null;
+  readonly budget_cost: string | null;
+  readonly start_date: string | null;
+  readonly end_date: string | null;
+  readonly data_reference_date: string | null;
+  readonly notes: string | null;
+  readonly version: number;
+  readonly updated_at: string;
+}
+
+interface ProjectOptionRow extends QueryResultRow {
+  readonly id: string;
+  readonly display_name: string;
 }
 
 const SORT_EXPRESSIONS = Object.freeze({
@@ -168,6 +210,64 @@ function asUnscheduledBalanceStatus(value: string): UnscheduledBalanceStatus {
   return value as UnscheduledBalanceStatus;
 }
 
+function asProjectClassification(value: string): ProjectClassification {
+  return value as ProjectClassification;
+}
+
+function databaseErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const code = (error as { readonly code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+function mapProjectWriteError(error: unknown): never {
+  switch (databaseErrorCode(error)) {
+    case '23505':
+      throw new ConflictException('P024_PROJECT_CODE_CONFLICT');
+    case '23514':
+      throw new UnprocessableEntityException('P024_PROJECT_CONSTRAINT_INVALID');
+    case '23503':
+      throw new UnprocessableEntityException('P024_CLIENT_UNAVAILABLE');
+    case '42501':
+      throw new ConflictException('P024_PROJECT_STATUS_NOT_EDITABLE');
+    default:
+      throw error;
+  }
+}
+
+function ensureEditorStatus(role: Role, status: ProjectStatus): void {
+  if (role === 'editor' && status !== 'active') {
+    throw new ConflictException('P024_PROJECT_STATUS_NOT_EDITABLE');
+  }
+}
+
+function toProjectWriteResponse(row: ProjectWriteRow): ProjectWriteResponse {
+  return {
+    contract: P024_PROJECT_CREATE_EDIT_CONTRACT,
+    projectId: row.project_id,
+    projectCode: row.project_code,
+    projectName: row.project_name,
+    client: {
+      id: row.client_id,
+      displayName: row.client_name,
+      available: row.client_active && row.client_deleted_at === null,
+    },
+    reportingGroup: row.reporting_group,
+    classification: asProjectClassification(row.classification),
+    status: asProjectStatus(row.project_status),
+    baseCurrency: 'BRL',
+    contractValue: row.contract_value,
+    openingBalance: row.opening_balance,
+    budgetCost: row.budget_cost,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    dataReferenceDate: row.data_reference_date,
+    notes: row.notes,
+    version: row.version,
+    updatedAt: row.updated_at,
+  };
+}
+
 function toPortfolioItem(row: PortfolioRow): ProjectPortfolioItem {
   return {
     projectId: row.project_id,
@@ -260,6 +360,198 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
     });
   }
 
+  async options(actor: ActorContext): Promise<ProjectOptionsResponse> {
+    return this.database.actorTransaction(actor, async (client) => {
+      const currency = await client.query<{ readonly available: boolean }>(
+        `select exists (
+           select 1 from ltc_m.currencies
+           where code = 'BRL' and active = true
+         ) as available`,
+      );
+      if (!currency.rows[0]?.available) {
+        throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
+      }
+      const result = await client.query<ProjectOptionRow>(
+        `select id, display_name
+         from ltc_m.clients
+         where active = true and deleted_at is null
+         order by display_name asc, id asc`,
+      );
+      return {
+        contract: P024_PROJECT_CREATE_EDIT_CONTRACT,
+        baseCurrency: 'BRL',
+        clients: result.rows.map((row) => ({ id: row.id, displayName: row.display_name })),
+      };
+    });
+  }
+
+  async getEditData(projectId: string, actor: ActorContext): Promise<ProjectWriteResponse> {
+    return this.database.actorTransaction(actor, async (client) => {
+      const row = await this.findWriteById(client, projectId);
+      if (!row) throw new NotFoundException('P024_PROJECT_NOT_FOUND');
+      if (row.currency_code !== 'BRL') {
+        throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
+      }
+      return toProjectWriteResponse(row);
+    });
+  }
+
+  async create(
+    payload: ProjectWritePayload,
+    actor: ActorContext,
+    role: Role,
+  ): Promise<ProjectWriteResponse> {
+    ensureEditorStatus(role, payload.status);
+    return this.database.actorTransaction(actor, async (client) => {
+      await this.ensureActiveCurrency(client);
+      await this.ensureActiveClient(client, payload.clientId);
+      try {
+        const result = await client.query<{ readonly id: string }>(
+          `insert into ltc_m.projects (
+             project_code,
+             project_name,
+             client_id,
+             reporting_group,
+             classification,
+             status,
+             base_currency,
+             contract_value,
+             opening_balance,
+             budget_cost,
+             start_date,
+             end_date,
+             data_reference_date,
+             notes
+           ) values (
+             $1::text,
+             $2::text,
+             $3::uuid,
+             $4::text,
+             $5::ltc_m.project_classification,
+             $6::ltc_m.project_status,
+             'BRL',
+             $7::numeric,
+             $8::numeric,
+             $9::numeric,
+             $10::date,
+             $11::date,
+             $12::date,
+             $13::text
+           )
+           returning id`,
+          [
+            payload.projectCode,
+            payload.projectName,
+            payload.clientId,
+            payload.reportingGroup,
+            payload.classification,
+            payload.status,
+            payload.contractValue,
+            payload.openingBalance,
+            payload.budgetCost,
+            payload.startDate,
+            payload.endDate,
+            payload.dataReferenceDate,
+            payload.notes,
+          ],
+        );
+        const id = result.rows[0]?.id;
+        if (!id) throw new Error('P024_CREATE_RESULT_MISSING');
+        const row = await this.findWriteById(client, id);
+        if (!row) throw new Error('P024_CREATE_RESULT_MISSING');
+        return toProjectWriteResponse(row);
+      } catch (error: unknown) {
+        mapProjectWriteError(error);
+      }
+    });
+  }
+
+  async update(
+    projectId: string,
+    payload: ProjectPatchPayload,
+    actor: ActorContext,
+    role: Role,
+  ): Promise<ProjectWriteResponse> {
+    if (payload.status !== undefined) ensureEditorStatus(role, payload.status);
+    return this.database.actorTransaction(actor, async (client) => {
+      const visible = await client.query<{ readonly id: string; readonly version: number }>(
+        `select id, version from ltc_m.projects where id = $1::uuid`,
+        [projectId],
+      );
+      if (!visible.rows[0]) throw new NotFoundException('P024_PROJECT_NOT_FOUND');
+
+      if (payload.clientId !== undefined) await this.ensureActiveClient(client, payload.clientId);
+
+      const values: unknown[] = [];
+      const assignments: string[] = [];
+      const add = (column: string, value: unknown, cast: string) => {
+        values.push(value);
+        assignments.push(`${column} = $${values.length}::${cast}`);
+      };
+      if (payload.projectName !== undefined) add('project_name', payload.projectName, 'text');
+      if (payload.clientId !== undefined) add('client_id', payload.clientId, 'uuid');
+      if (payload.reportingGroup !== undefined)
+        add('reporting_group', payload.reportingGroup, 'text');
+      if (payload.classification !== undefined) {
+        add('classification', payload.classification, 'ltc_m.project_classification');
+      }
+      if (payload.status !== undefined) add('status', payload.status, 'ltc_m.project_status');
+      if (payload.contractValue !== undefined)
+        add('contract_value', payload.contractValue, 'numeric');
+      if (payload.openingBalance !== undefined)
+        add('opening_balance', payload.openingBalance, 'numeric');
+      if (payload.budgetCost !== undefined) add('budget_cost', payload.budgetCost, 'numeric');
+      if (payload.startDate !== undefined) add('start_date', payload.startDate, 'date');
+      if (payload.endDate !== undefined) add('end_date', payload.endDate, 'date');
+      if (payload.dataReferenceDate !== undefined) {
+        add('data_reference_date', payload.dataReferenceDate, 'date');
+      }
+      if (payload.notes !== undefined) add('notes', payload.notes, 'text');
+      values.push(projectId, payload.expectedVersion);
+      try {
+        const updated = await client.query<{ readonly id: string }>(
+          `update ltc_m.projects
+           set ${assignments.join(', ')}
+           where id = $${values.length - 1}::uuid
+             and version = $${values.length}::integer
+           returning id`,
+          values,
+        );
+        if (!updated.rows[0]) throw new ConflictException('P024_VERSION_CONFLICT');
+        const row = await this.findWriteById(client, projectId);
+        if (!row) throw new NotFoundException('P024_PROJECT_NOT_FOUND');
+        if (row.currency_code !== 'BRL') {
+          throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
+        }
+        return toProjectWriteResponse(row);
+      } catch (error: unknown) {
+        if (error instanceof ConflictException || error instanceof NotFoundException) throw error;
+        mapProjectWriteError(error);
+      }
+    });
+  }
+
+  private async ensureActiveCurrency(client: PoolClient): Promise<void> {
+    const result = await client.query<{ readonly available: boolean }>(
+      `select exists (
+         select 1 from ltc_m.currencies
+         where code = 'BRL' and active = true
+       ) as available`,
+    );
+    if (!result.rows[0]?.available)
+      throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
+  }
+
+  private async ensureActiveClient(client: PoolClient, clientId: string): Promise<void> {
+    const result = await client.query<{ readonly id: string }>(
+      `select id
+       from ltc_m.clients
+       where id = $1::uuid and active = true and deleted_at is null`,
+      [clientId],
+    );
+    if (!result.rows[0]) throw new UnprocessableEntityException('P024_CLIENT_UNAVAILABLE');
+  }
+
   private async findById(
     client: PoolClient,
     projectId: string,
@@ -277,6 +569,41 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
        from ltc_m.projects
        join ltc_m.clients
          on clients.id = projects.client_id
+       where projects.id = $1::uuid
+         and projects.deleted_at is null`,
+      [projectId],
+    );
+    return result.rows[0];
+  }
+
+  private async findWriteById(
+    client: PoolClient,
+    projectId: string,
+  ): Promise<ProjectWriteRow | undefined> {
+    const result = await client.query<ProjectWriteRow>(
+      `select
+         projects.id as project_id,
+         projects.project_code,
+         projects.project_name,
+         projects.client_id,
+         clients.display_name as client_name,
+         clients.active as client_active,
+         clients.deleted_at as client_deleted_at,
+         projects.reporting_group,
+         projects.classification::text as classification,
+         projects.status::text as project_status,
+         projects.base_currency as currency_code,
+         projects.contract_value,
+         projects.opening_balance,
+         projects.budget_cost,
+         projects.start_date,
+         projects.end_date,
+         projects.data_reference_date,
+         projects.notes,
+         projects.version,
+         projects.updated_at
+       from ltc_m.projects
+       join ltc_m.clients on clients.id = projects.client_id
        where projects.id = $1::uuid
          and projects.deleted_at is null`,
       [projectId],

@@ -8,7 +8,7 @@ import {
   AuthorizationDeniedError,
   createAuthenticatedApiClient,
 } from '../auth/api-client';
-import { useAuthorization } from '../auth/authorization';
+import { PermissionGate, useAuthorization } from '../auth/authorization';
 import {
   ActionLink,
   Breadcrumbs,
@@ -293,6 +293,16 @@ export function ProjectsPage({ search }: { readonly search: string }) {
               { label: pageTitle, current: true },
             ]}
           />
+        }
+        actions={
+          <PermissionGate capability="record:create">
+            <ActionLink
+              href={`/projects/new?returnTo=${encodeURIComponent(typeof window === 'undefined' ? '/projects' : `${window.location.pathname}${window.location.search}`)}`}
+              variant="primary"
+            >
+              Novo projeto
+            </ActionLink>
+          </PermissionGate>
         }
       />
 
