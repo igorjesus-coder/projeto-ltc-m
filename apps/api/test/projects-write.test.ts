@@ -43,6 +43,15 @@ test('P024 parser normaliza create e preserva campos opcionais como null', () =>
   assert.equal(parsed.status, 'active');
 });
 
+test('P024 parser aceita omissão das datas opcionais de início e fim', () => {
+  const withoutDates = { ...validCreate };
+  Reflect.deleteProperty(withoutDates, 'startDate');
+  Reflect.deleteProperty(withoutDates, 'endDate');
+  const parsed = parseProjectCreatePayload(withoutDates);
+  assert.equal(parsed.startDate, null);
+  assert.equal(parsed.endDate, null);
+});
+
 test('P024 parser rejeita campos desconhecidos, moeda atribuível, datas e valores inválidos', () => {
   assert.throws(
     () => parseProjectCreatePayload({ ...validCreate, unexpected: true }),

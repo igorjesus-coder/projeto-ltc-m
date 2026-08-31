@@ -181,7 +181,7 @@ function decimal(value: unknown, field: string, nullable: boolean): string | nul
 }
 
 function date(value: unknown, field: string, nullable: boolean): string | null {
-  if (value === null && nullable) return null;
+  if ((value === null || typeof value === 'undefined') && nullable) return null;
   if (typeof value !== 'string') invalid(`P024_${field.toUpperCase()}_INVALID`);
   const normalized = value.trim();
   if (!normalized) {
