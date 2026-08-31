@@ -5,10 +5,11 @@ import { resolveRoute } from './routes';
 
 interface AppProps {
   readonly pathname?: string;
+  readonly search?: string;
 }
 
-export function App({ pathname = '/' }: AppProps) {
-  const route = resolveRoute(pathname);
+export function App({ pathname = '/', search = '' }: AppProps) {
+  const route = resolveRoute(pathname, search);
   const content = route.protected ? (
     <ProtectedRoute>
       <AuthorizationRoute>{route.content}</AuthorizationRoute>
