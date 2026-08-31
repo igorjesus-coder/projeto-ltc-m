@@ -85,4 +85,12 @@ describe('scaffold da aplicação', () => {
     );
     expect(resolveRoute('/projects', '?status=active&page=2').protected).toBe(true);
   });
+
+  it('resolve as rotas protegidas de criação e edição P024', () => {
+    expect(resolveRoute('/projects/new', '').id).toBe('project-new');
+    expect(resolveRoute('/projects/00000000-0000-4000-8000-000000023101/edit', '').id).toBe(
+      'project-edit',
+    );
+    expect(resolveRoute('/projects/new', '').protected).toBe(true);
+  });
 });

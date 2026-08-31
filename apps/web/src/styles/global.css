@@ -578,6 +578,72 @@ textarea.form-control {
   margin-bottom: var(--space-4);
 }
 
+.project-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  margin-top: var(--space-7);
+  max-width: 940px;
+  padding: 22px;
+}
+
+.project-form-grid {
+  display: grid;
+  gap: 0 var(--space-5);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.project-form-grid .field {
+  max-width: none;
+}
+
+.form-actions {
+  align-items: center;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+}
+
+.form-actions .action-link {
+  margin-top: 0;
+}
+
+.form-error-summary,
+.form-notice,
+.project-read-only-summary {
+  border: 1px solid var(--color-border);
+  margin: 0 0 var(--space-5);
+  padding: 14px 16px;
+}
+
+.form-error-summary {
+  border-left: 4px solid var(--color-danger);
+  color: var(--color-danger);
+  font-weight: var(--font-weight-semibold);
+}
+
+.form-notice {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+}
+
+.project-read-only-summary {
+  background: var(--color-surface-muted);
+}
+
+.project-read-only-summary h2 {
+  font-size: var(--font-size-lg);
+  margin: 0 0 var(--space-2);
+}
+
+.project-read-only-summary p {
+  color: var(--color-text-muted);
+  margin: var(--space-1) 0 0;
+}
+
 .loading-state,
 .result-summary {
   color: var(--color-text-muted);
@@ -741,6 +807,10 @@ textarea.form-control {
 }
 
 @media (max-width: 760px) {
+  .project-form-grid {
+    grid-template-columns: 1fr;
+  }
+
   .desktop-navigation {
     display: none;
   }

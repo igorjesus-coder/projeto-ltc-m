@@ -4,8 +4,10 @@ import { HomePage } from '../routes/HomePage';
 import { NotFoundPage } from '../routes/NotFoundPage';
 import { ProjectDetailPage } from '../routes/ProjectDetailPage';
 import { ProjectsPage } from '../routes/ProjectsPage';
+import { ProjectFormPage } from '../routes/ProjectFormPage';
 
-export type AppRoute = 'home' | 'projects' | 'project-detail' | 'not-found';
+export type AppRoute =
+  'home' | 'projects' | 'project-detail' | 'project-new' | 'project-edit' | 'not-found';
 
 export interface NavigationItem {
   readonly route: Exclude<AppRoute, 'not-found' | 'project-detail'>;
@@ -42,11 +44,26 @@ export function resolveRoute(pathname: string, search = ''): ResolvedRoute {
   if (normalized === '/projects') {
     return { id: 'projects', content: <ProjectsPage search={routeSearch} />, protected: true };
   }
+  if (normalized === '/projects/new') {
+    return {
+      id: 'project-new',
+      content: <ProjectFormPage mode="create" search={routeSearch} />,
+      protected: true,
+    };
+  }
   const detailMatch = /^\/projects\/([^/]+)$/u.exec(normalized);
   if (detailMatch?.[1]) {
     return {
       id: 'project-detail',
       content: <ProjectDetailPage projectId={detailMatch[1]} search={routeSearch} />,
+      protected: true,
+    };
+  }
+  const editMatch = /^\/projects\/([^/]+)\/edit$/u.exec(normalized);
+  if (editMatch?.[1]) {
+    return {
+      id: 'project-edit',
+      content: <ProjectFormPage mode="edit" projectId={editMatch[1]} search={routeSearch} />,
       protected: true,
     };
   }

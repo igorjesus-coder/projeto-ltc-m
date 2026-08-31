@@ -8,7 +8,7 @@ import {
   AuthorizationDeniedError,
   createAuthenticatedApiClient,
 } from '../auth/api-client';
-import { useAuthorization } from '../auth/authorization';
+import { PermissionGate, useAuthorization } from '../auth/authorization';
 import { ActionLink, Breadcrumbs, Button, PageHeader } from '../components/design-system';
 import {
   formatDate,
@@ -174,6 +174,13 @@ export function ProjectDetailPage({
             </div>
           </dl>
           <ActionLink href={returnPath(search)}>Voltar para projetos</ActionLink>
+          <PermissionGate capability="record:edit_draft">
+            <ActionLink
+              href={`/projects/${encodeURIComponent(projectId)}/edit?returnTo=${encodeURIComponent(returnPath(search))}`}
+            >
+              Editar projeto
+            </ActionLink>
+          </PermissionGate>
         </section>
       ) : null}
     </>
