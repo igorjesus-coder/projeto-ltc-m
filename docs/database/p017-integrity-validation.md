@@ -50,7 +50,7 @@ duas vezes sobre o mesmo schema.
 
 ## Bootstrap e seeds
 
-- `supabase/seed.sql`: `IDEMPOTENT`, restrito a BRL e US.
+- `supabase/seed.sql`: `IDEMPOTENT`, preserva as moedas BRL e USD e o código histórico de unidade US.
 - bootstrap de roles do CI: `ONE_SHOT_BUT_GUARDED`, com preflight e cleanup.
 - fixtures PostgreSQL P012–P017: `TEST_ONLY` e sintéticas.
 - dados de produção ou `.local-source`: `NOT_APPLICABLE` para P017.

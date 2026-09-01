@@ -11,14 +11,16 @@ remoto. A baseline P004 permanece imutável.
 
 ## Matriz aprovada
 
-| Entidade | Tabela             | Chave natural | Nome oficial        | Metadados aprovados                   |
-| -------- | ------------------ | ------------- | ------------------- | ------------------------------------- |
-| Moeda    | `ltc_m.currencies` | `BRL`         | `Real brasileiro`   | `decimal_places = 2`, `active = true` |
-| Unidade  | `ltc_m.units`      | `US`          | `Unidade e Serviço` | `category = null`, `active = true`    |
+| Entidade | Tabela             | Chave natural | Nome/semântica preservada                            | Metadados aprovados                   |
+| -------- | ------------------ | ------------- | ---------------------------------------------------- | ------------------------------------- |
+| Moeda    | `ltc_m.currencies` | `BRL`         | `Real brasileiro`                                    | `decimal_places = 2`, `active = true` |
+| Moeda    | `ltc_m.currencies` | `USD`         | `Dólar americano`                                    | `decimal_places = 2`, `active = true` |
+| Unidade  | `ltc_m.units`      | `US`          | código histórico; significado normativo pendente D07 | `category = null`, `active = true`    |
 
-`US = Unidade e Serviço`.
+`USD` é código de moeda. `US` é código histórico de unidade e não é reinterpretado por esta
+documentação; o rótulo textual legado armazenado pelo seed permanece preservado até decisão D07.
 
-Não existem outras moedas ou unidades aprovadas. Cada projeto possui exatamente uma moeda, o
+Não existem outras moedas ou unidades seedadas/aprovadas. Cada projeto possui exatamente uma moeda, o
 portfólio pode conter projetos em moedas diferentes e não há conversão cambial implementada.
 Novas moedas e novas unidades exigem aprovação explícita.
 
@@ -37,12 +39,13 @@ Antes de inserir qualquer linha, o bloco de validação trata os três estados:
 - registro idêntico: nenhuma linha é inserida ou atualizada;
 - registro divergente: uma exceção clara interrompe a transação e exige revisão humana.
 
-As duas divergências são verificadas antes das inserções. Assim, uma falha em `BRL` ou `US`
+As três divergências são verificadas antes das inserções. Assim, uma falha em `BRL`, `USD` ou `US`
 reverte toda a transação e não deixa aplicação parcial. O arquivo não usa `UPDATE`, `DELETE`,
 `TRUNCATE`, `ON CONFLICT DO UPDATE` ou objetos fora de `ltc_m`.
 
-Para `BRL`, nome, casas decimais e status devem coincidir. Para `US`, nome, categoria nula e status
-devem coincidir. A categoria permanece nula porque nenhum valor foi aprovado para ela.
+Para `BRL` e `USD`, nome, casas decimais e status devem coincidir. Para `US`, o código, rótulo
+textual legado, categoria nula e status devem coincidir. A categoria permanece nula porque nenhum
+valor foi aprovado para ela.
 
 ## Validação estática
 
@@ -54,12 +57,12 @@ npm run test:seeds
 ```
 
 O scanner não possui dependências novas. Ele exige a transação, os dois locks, validações antes
-das inserções e exatamente os dois payloads aprovados. Também rejeita:
+das inserções e exatamente os três payloads aprovados (BRL, USD e US). Também rejeita:
 
 - schemas e tabelas fora do escopo;
 - comandos destrutivos, alterações de schema e updates;
 - projetos, clientes, usuários, planejamentos, eventos e outros cadastros;
-- moedas diferentes de `BRL` e unidades diferentes de `US`;
+- moedas diferentes de `BRL` e `USD`, e unidades diferentes de `US`;
 - nome incorreto de `US`;
 - Supabase Auth, dados pessoais, credenciais, endpoints e project refs;
 - arquivo vazio e declarações duplicadas.

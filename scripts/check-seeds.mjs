@@ -129,7 +129,7 @@ function requireTransactionAndLocks(sql, stripped, issues) {
     issues.push('validação completa de divergência de US ausente');
   }
   if ((sql.match(/\braise\s+exception\b/gi) ?? []).length < 3) {
-    issues.push('divergências de BRL e US devem interromper a execução');
+    issues.push('divergências de BRL, USD e US devem interromper a execução');
   }
 }
 
@@ -152,7 +152,7 @@ function requireApprovedPayloads(sql, issues) {
       currencyInserts[0],
     )
   ) {
-    issues.push('a moeda deve ser somente BRL = Real brasileiro, 2 casas e ativa');
+    issues.push('o payload da moeda BRL deve ser Real brasileiro, 2 casas e ativo');
   }
 
   if (
