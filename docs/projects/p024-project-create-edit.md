@@ -13,12 +13,12 @@ planejamento financeiro, workflow novo de projetos, `manager_user_id` ou a exce�
 
 ## Permissões e endpoints
 
-| Método | Rota                        | Capability          | Resultado                             |
-| ------ | --------------------------- | ------------------- | ------------------------------------- |
-| GET    | `/projects/options`         | `data:read`         | clientes ativos e `baseCurrency: BRL` |
-| GET    | `/projects/:projectId/edit` | `data:read`         | dados factuais para edição            |
-| POST   | `/projects`                 | `record:create`     | projeto criado, HTTP 201              |
-| PATCH  | `/projects/:projectId`      | `record:edit_draft` | projeto atualizado, HTTP 200          |
+| Método | Rota                        | Capability          | Resultado                               |
+| ------ | --------------------------- | ------------------- | --------------------------------------- |
+| GET    | `/projects/options`         | `data:read`         | clientes ativos e moedas ativas BRL/USD |
+| GET    | `/projects/:projectId/edit` | `data:read`         | dados factuais para edição              |
+| POST   | `/projects`                 | `record:create`     | projeto criado, HTTP 201                |
+| PATCH  | `/projects/:projectId`      | `record:edit_draft` | projeto atualizado, HTTP 200            |
 
 Viewer e approver não escrevem. Editor cria e edita somente projetos `active`. Admin segue os
 estados reais e as policies existentes, sem bypass. Auth0 fornece identidade; o perfil interno é
@@ -29,15 +29,15 @@ resolvido pelo backend; nenhum ator, role ou capability vem do payload.
 O POST aceita somente:
 
 `projectCode`, `projectName`, `clientId`, `reportingGroup`, `classification`, `status`,
-`contractValue`, `openingBalance`, `budgetCost`, `startDate`, `endDate`, `dataReferenceDate` e
-`notes`.
+`contractValue`, `openingBalance`, `budgetCost`, `startDate`, `endDate`, `dataReferenceDate`,
+`notes` e `baseCurrency`.
 
-`baseCurrency` é fixada server-side em `BRL`. `id`, `managerUserId`, `version` atribuível,
+`baseCurrency` é `BRL` ou `USD` e é validada server-side. `id`, `managerUserId`, `version` atribuível,
 metadados de auditoria, `deletedAt`, `legacyImportBatchId`, saldo derivado, alertas e campos
 desconhecidos são rejeitados.
 
 O PATCH é parcial, exige `expectedVersion` e aceita os campos manuais acima, exceto
-`projectCode` e `baseCurrency`, que são imutáveis no baseline P024.
+`projectCode`; `baseCurrency` pode alternar entre BRL e USD quando a nova moeda estiver ativa.
 
 Strings são trimadas. Datas usam `YYYY-MM-DD`. Valores são strings decimais não negativas com até
 18 dígitos inteiros e 2 casas. `contractValue` e `dataReferenceDate` são obrigatórios no POST;
@@ -52,7 +52,7 @@ limpar `dataReferenceDate`, pois D40 permanece fora do fluxo manual.
 - Admin pode selecionar `draft`, `active`, `on_hold`, `completed` ou `cancelled`, conforme RLS.
 - Cliente deve estar `active = true` e `deleted_at IS NULL`. Opções inativas/deletadas não são
   exibidas nem vinculadas no fluxo comum.
-- Moeda é `BRL`, somente leitura, sem FX ou conversão.
+- Moeda é `BRL` ou `USD`, sem texto livre, FX ou conversão; a troca preserva os valores numéricos.
 - `contract_value`, `opening_balance` e `budget_cost` permanecem medidas distintas.
 - `end_date` não pode anteceder `start_date`.
 - Saldo sem programação e alertas são derivados/read-only e não pertencem aos payloads.
@@ -80,10 +80,10 @@ funciona a partir de 320px.
 
 ## Decisões P024-D00
 
-As decisões B01–B05 são implementadas como aprovadas: código informado e imutável, editor apenas
-ativo, BRL fixa, classificação independente do saldo de abertura e clientes ativos/não deletados.
+As decisões B01–B05 do baseline permanecem válidas onde não conflitam com P026-D00-B01. Esta
+decisão posterior substitui a redação BRL fixa por BRL/USD, sem conversão cambial.
 
 ## Banco e dependências
 
-P024 usa as 14 migrations existentes, não cria migration e não adiciona dependência npm. Nenhuma
-policy, grant, role, segredo ou configuração remota é alterada.
+P024 é absorvida pela migration P026, sem nova dependência npm. Nenhuma policy, grant, role,
+segredo ou configuração remota é alterada fora da correção RLS explicitamente versionada em P026.

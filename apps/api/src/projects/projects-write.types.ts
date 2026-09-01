@@ -3,6 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 import { PROJECT_STATUSES, type ProjectStatus } from './projects.types.js';
 
 export const P024_PROJECT_CREATE_EDIT_CONTRACT = 'ltcm.p024.project-create-edit.v1' as const;
+export const PROJECT_CURRENCIES = ['BRL', 'USD'] as const;
+export type ProjectCurrency = (typeof PROJECT_CURRENCIES)[number];
 export const PROJECT_CLASSIFICATIONS = ['full_contract', 'demand', 'opening_balance'] as const;
 export type ProjectClassification = (typeof PROJECT_CLASSIFICATIONS)[number];
 
@@ -10,6 +12,7 @@ export interface ProjectWritePayload {
   readonly projectCode: string;
   readonly projectName: string;
   readonly clientId: string;
+  readonly baseCurrency: ProjectCurrency;
   readonly reportingGroup: string | null;
   readonly classification: ProjectClassification;
   readonly status: ProjectStatus;
@@ -25,6 +28,7 @@ export interface ProjectWritePayload {
 export interface ProjectPatchPayload {
   readonly projectName?: string;
   readonly clientId?: string;
+  readonly baseCurrency?: ProjectCurrency;
   readonly reportingGroup?: string | null;
   readonly classification?: ProjectClassification;
   readonly status?: ProjectStatus;
@@ -43,9 +47,14 @@ export interface ProjectOption {
   readonly displayName: string;
 }
 
+export interface ProjectCurrencyOption {
+  readonly code: ProjectCurrency;
+  readonly name: string;
+}
+
 export interface ProjectOptionsResponse {
   readonly contract: typeof P024_PROJECT_CREATE_EDIT_CONTRACT;
-  readonly baseCurrency: 'BRL';
+  readonly currencies: readonly ProjectCurrencyOption[];
   readonly clients: readonly ProjectOption[];
 }
 
@@ -58,7 +67,8 @@ export interface ProjectWriteResponse {
   readonly reportingGroup: string | null;
   readonly classification: ProjectClassification;
   readonly status: ProjectStatus;
-  readonly baseCurrency: 'BRL';
+  readonly baseCurrency: ProjectCurrency;
+  readonly currencyAvailable: boolean;
   readonly contractValue: string;
   readonly openingBalance: string | null;
   readonly budgetCost: string | null;
@@ -74,6 +84,7 @@ const CREATE_FIELDS = new Set([
   'projectCode',
   'projectName',
   'clientId',
+  'baseCurrency',
   'reportingGroup',
   'classification',
   'status',
@@ -84,7 +95,6 @@ const CREATE_FIELDS = new Set([
   'endDate',
   'dataReferenceDate',
   'notes',
-  'baseCurrency',
 ]);
 
 const PATCH_FIELDS = new Set([
@@ -161,6 +171,13 @@ function status(value: unknown): ProjectStatus {
   return value as ProjectStatus;
 }
 
+function currency(value: unknown): ProjectCurrency {
+  if (typeof value !== 'string' || !(PROJECT_CURRENCIES as readonly string[]).includes(value)) {
+    invalid('P024_CURRENCY_NOT_ALLOWED');
+  }
+  return value as ProjectCurrency;
+}
+
 function decimal(value: unknown, field: string, nullable: boolean): string | null {
   if (value === null && nullable) return null;
   if (typeof value !== 'string') invalid(`P024_${field.toUpperCase()}_INVALID`);
@@ -215,6 +232,7 @@ export function parseProjectCreatePayload(value: unknown): ProjectWritePayload {
     'projectCode',
     'projectName',
     'clientId',
+    'baseCurrency',
     'classification',
     'status',
     'contractValue',
@@ -222,7 +240,6 @@ export function parseProjectCreatePayload(value: unknown): ProjectWritePayload {
   ];
   for (const field of required)
     if (!(field in body)) invalid(`P024_${field.toUpperCase()}_REQUIRED`);
-  if ('baseCurrency' in body) invalid('P024_IMMUTABLE_FIELD_BASE_CURRENCY');
   const startDate = date(body['startDate'], 'start_date', true);
   const endDate = date(body['endDate'], 'end_date', true);
   validateDateRange(startDate, endDate);
@@ -230,6 +247,7 @@ export function parseProjectCreatePayload(value: unknown): ProjectWritePayload {
     projectCode: requiredText(body['projectCode'], 'project_code'),
     projectName: requiredText(body['projectName'], 'project_name'),
     clientId: uuid(body['clientId'], 'client_id'),
+    baseCurrency: currency(body['baseCurrency']),
     reportingGroup:
       'reportingGroup' in body ? optionalText(body['reportingGroup'], 'reporting_group') : null,
     classification: classification(body['classification']),
@@ -249,7 +267,6 @@ export function parseProjectPatchPayload(value: unknown): ProjectPatchPayload {
   const body = record(value);
   validateKeys(body, PATCH_FIELDS);
   if ('projectCode' in body) invalid('P024_IMMUTABLE_FIELD_PROJECT_CODE');
-  if ('baseCurrency' in body) invalid('P024_IMMUTABLE_FIELD_BASE_CURRENCY');
   if (!('expectedVersion' in body)) invalid('P024_EXPECTED_VERSION_REQUIRED');
   if (
     typeof body['expectedVersion'] !== 'number' ||
@@ -269,6 +286,9 @@ export function parseProjectPatchPayload(value: unknown): ProjectPatchPayload {
       : {}),
     ...(typeof body['clientId'] !== 'undefined'
       ? { clientId: uuid(body['clientId'], 'client_id') }
+      : {}),
+    ...(typeof body['baseCurrency'] !== 'undefined'
+      ? { baseCurrency: currency(body['baseCurrency']) }
       : {}),
     ...(typeof body['reportingGroup'] !== 'undefined'
       ? { reportingGroup: optionalText(body['reportingGroup'], 'reporting_group') }

@@ -23,6 +23,22 @@ begin
 
     if exists (
         select 1
+        from ltc_m.currencies
+        where
+            code = 'USD'
+            and (
+                name is distinct from 'Dólar americano'
+                or decimal_places is distinct from 2
+                or active is distinct from true
+            )
+    ) then
+        raise exception using
+            errcode = 'P0001',
+            message = 'Seed LTC-M bloqueado: USD existente diverge de Dólar americano, 2 casas decimais e ativo=true.';
+    end if;
+
+    if exists (
+        select 1
         from ltc_m.units
         where
             code = 'US'
@@ -45,6 +61,14 @@ where not exists (
     select 1
     from ltc_m.currencies
     where code = 'BRL'
+);
+
+insert into ltc_m.currencies (code, name, decimal_places, active)
+select 'USD', 'Dólar americano', 2, true
+where not exists (
+    select 1
+    from ltc_m.currencies
+    where code = 'USD'
 );
 
 insert into ltc_m.units (code, name, active)

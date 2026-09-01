@@ -15,7 +15,10 @@ test('primeira execução insere BRL e US; segunda é idempotente', () => {
   const second = applyApprovedSeed(first);
 
   assert.deepEqual(first, {
-    currencies: [{ code: 'BRL', name: 'Real brasileiro', decimalPlaces: 2, active: true }],
+    currencies: [
+      { code: 'BRL', name: 'Real brasileiro', decimalPlaces: 2, active: true },
+      { code: 'USD', name: 'Dólar americano', decimalPlaces: 2, active: true },
+    ],
     units: [{ code: 'US', name: 'Unidade e Serviço', category: null, active: true }],
   });
   assert.deepEqual(second, first);

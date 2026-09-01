@@ -1,6 +1,8 @@
 import type { PortfolioStatus } from './project-portfolio';
 
 export const P024_PROJECT_CREATE_EDIT_CONTRACT = 'ltcm.p024.project-create-edit.v1' as const;
+export const PROJECT_CURRENCIES = ['BRL', 'USD'] as const;
+export type ProjectCurrency = (typeof PROJECT_CURRENCIES)[number];
 export const PROJECT_CLASSIFICATIONS = ['full_contract', 'demand', 'opening_balance'] as const;
 export type ProjectClassification = (typeof PROJECT_CLASSIFICATIONS)[number];
 
@@ -11,8 +13,13 @@ export interface ProjectOption {
 
 export interface ProjectOptionsResponse {
   readonly contract: typeof P024_PROJECT_CREATE_EDIT_CONTRACT;
-  readonly baseCurrency: 'BRL';
+  readonly currencies: readonly ProjectCurrencyOption[];
   readonly clients: readonly ProjectOption[];
+}
+
+export interface ProjectCurrencyOption {
+  readonly code: ProjectCurrency;
+  readonly name: string;
 }
 
 export interface ProjectWriteResponse {
@@ -24,7 +31,8 @@ export interface ProjectWriteResponse {
   readonly reportingGroup: string | null;
   readonly classification: ProjectClassification;
   readonly status: PortfolioStatus;
-  readonly baseCurrency: 'BRL';
+  readonly baseCurrency: ProjectCurrency;
+  readonly currencyAvailable: boolean;
   readonly contractValue: string;
   readonly openingBalance: string | null;
   readonly budgetCost: string | null;
@@ -68,6 +76,16 @@ function option(value: unknown): ProjectOption {
   return { id: requiredString(value['id']), displayName: requiredString(value['displayName']) };
 }
 
+function currencyOption(value: unknown): ProjectCurrencyOption {
+  if (!isRecord(value) || !PROJECT_CURRENCIES.includes(value['code'] as ProjectCurrency)) {
+    throw new Error('P024_RESPONSE_INVALID');
+  }
+  return {
+    code: value['code'] as ProjectCurrency,
+    name: requiredString(value['name']),
+  };
+}
+
 function decimal(value: unknown): string {
   if (typeof value !== 'string' || !/^[0-9]+(?:\.[0-9]{1,2})?$/u.test(value)) {
     throw new Error('P024_RESPONSE_INVALID');
@@ -79,12 +97,12 @@ export function parseProjectOptions(value: unknown): ProjectOptionsResponse {
   if (!isRecord(value) || value['contract'] !== P024_PROJECT_CREATE_EDIT_CONTRACT) {
     throw new Error('P024_RESPONSE_INVALID');
   }
-  if (value['baseCurrency'] !== 'BRL' || !Array.isArray(value['clients'])) {
+  if (!Array.isArray(value['currencies']) || !Array.isArray(value['clients'])) {
     throw new Error('P024_RESPONSE_INVALID');
   }
   return {
     contract: P024_PROJECT_CREATE_EDIT_CONTRACT,
-    baseCurrency: 'BRL',
+    currencies: value['currencies'].map(currencyOption),
     clients: value['clients'].map(option),
   };
 }
@@ -101,7 +119,8 @@ export function parseProjectWriteResponse(value: unknown): ProjectWriteResponse 
     !isProjectClassification(value['classification']) ||
     typeof value['status'] !== 'string' ||
     !['draft', 'active', 'on_hold', 'completed', 'cancelled'].includes(value['status']) ||
-    value['baseCurrency'] !== 'BRL' ||
+    !PROJECT_CURRENCIES.includes(value['baseCurrency'] as ProjectCurrency) ||
+    typeof value['currencyAvailable'] !== 'boolean' ||
     typeof value['version'] !== 'number' ||
     !Number.isSafeInteger(value['version']) ||
     value['version'] < 1
@@ -117,7 +136,8 @@ export function parseProjectWriteResponse(value: unknown): ProjectWriteResponse 
     reportingGroup: nullableString(value['reportingGroup']),
     classification: value['classification'],
     status: value['status'] as PortfolioStatus,
-    baseCurrency: 'BRL',
+    baseCurrency: value['baseCurrency'] as ProjectCurrency,
+    currencyAvailable: value['currencyAvailable'],
     contractValue: decimal(value['contractValue']),
     openingBalance: value['openingBalance'] === null ? null : decimal(value['openingBalance']),
     budgetCost: value['budgetCost'] === null ? null : decimal(value['budgetCost']),

@@ -1,9 +1,9 @@
 # Dicionário de dados do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `b6d71494c7e561aea68b26ed6f658ed5e25fc72ea6b6b45a1bff4ffbc03f4893`
+Fingerprint: `485a3a4b0eb6821dca7978d593c69ae0c2bedec836ff716938b76315484b0aa8`
 
-Inventário: 28 relações (19 tabelas, 9 views), 482 colunas, 54 FKs e 49 policies.
+Inventário: 28 relações (19 tabelas, 9 views), 486 colunas, 54 FKs e 49 policies.
 
 O conteúdo é gerado do modelo canônico PostgreSQL 17. Descrições ausentes são declaradas como
 ausentes, sem inferência de negócio. Valores financeiros `numeric` permanecem exatos; sua
@@ -99,6 +99,8 @@ aditividade depende do grão documentado.
 | `name` | `text` | não | — | — | — |
 | `decimal_places` | `smallint` | não | 2 | — | — |
 | `active` | `boolean` | não | true | — | — |
+| `updated_at` | `timestamp with time zone` | não | now() | — | — |
+| `row_version` | `bigint` | não | 1 | — | — |
 
 ## `ltc_m.financial_actual_events`
 
@@ -540,6 +542,8 @@ aditividade depende do grão documentado.
 | `name` | `text` | não | — | — | — |
 | `category` | `text` | sim | — | — | — |
 | `active` | `boolean` | não | true | — | — |
+| `updated_at` | `timestamp with time zone` | não | now() | — | — |
+| `row_version` | `bigint` | não | 1 | — | — |
 
 ## `ltc_m.v_tableau_data_quality`
 

@@ -5,7 +5,7 @@
  */
 export const P017_SCHEMA_CONTRACT = 'ltcm.p017.schema-integrity.v1' as const;
 export const P017_SCHEMA_FINGERPRINT =
-  'b6d71494c7e561aea68b26ed6f658ed5e25fc72ea6b6b45a1bff4ffbc03f4893' as const;
+  '485a3a4b0eb6821dca7978d593c69ae0c2bedec836ff716938b76315484b0aa8' as const;
 export const P019_DATABASE_TYPES_CONTRACT = 'ltcm.p019.database-types.v1' as const;
 
 /** Exact decimal text returned by the P019 pg parser; never an authoritative number. */
@@ -99,6 +99,8 @@ export interface LtcMCurrenciesRow {
   readonly name: string;
   readonly decimal_places: number;
   readonly active: boolean;
+  readonly updated_at: PgTimestampTz;
+  readonly row_version: PgBigInt;
 }
 
 export interface LtcMFinancialActualEventsRow {
@@ -390,6 +392,8 @@ export interface LtcMUnitsRow {
   readonly name: string;
   readonly category: string | null;
   readonly active: boolean;
+  readonly updated_at: PgTimestampTz;
+  readonly row_version: PgBigInt;
 }
 
 export interface LtcMVTableauDataQualityRow {

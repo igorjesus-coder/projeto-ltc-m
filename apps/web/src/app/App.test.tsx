@@ -31,6 +31,18 @@ const readyAuthorization: AuthorizationContextValue = {
   refresh: () => undefined,
 };
 
+const adminAuthorization: AuthorizationContextValue = {
+  status: 'ready',
+  profile: {
+    authenticated: true,
+    user: { id: 'p026-admin', displayName: 'P026 Admin' },
+    role: 'admin',
+    capabilities: ['catalog:manage'],
+  },
+  can: () => true,
+  refresh: () => undefined,
+};
+
 describe('scaffold da aplicação', () => {
   it('renderiza a rota raiz com landmarks e navegação acessível', () => {
     const html = renderToStaticMarkup(
@@ -45,6 +57,7 @@ describe('scaffold da aplicação', () => {
     expect(html).toContain('<h1 id="home-title"');
     expect(html).toContain('Pular para o conteúdo');
     expect(html).toContain('aria-current="page"');
+    expect(html).not.toContain('Cadastros mestres');
   });
 
   it('renderiza fallback significativo para uma rota desconhecida', () => {
@@ -92,5 +105,17 @@ describe('scaffold da aplicação', () => {
       'project-edit',
     );
     expect(resolveRoute('/projects/new', '').protected).toBe(true);
+  });
+
+  it('exibe navegação administrativa somente para catalog:manage', () => {
+    const adminHtml = renderToStaticMarkup(
+      <AuthorizationContext.Provider value={adminAuthorization}>
+        <AppShell currentRoute="home">
+          <p>Conteúdo</p>
+        </AppShell>
+      </AuthorizationContext.Provider>,
+    );
+    expect(adminHtml).toContain('Cadastros mestres');
+    expect(resolveRoute('/admin/clients', '').id).toBe('admin-master-data');
   });
 });

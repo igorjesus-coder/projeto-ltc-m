@@ -21,6 +21,7 @@ import {
 import {
   P024_PROJECT_CREATE_EDIT_CONTRACT,
   type ProjectClassification,
+  type ProjectCurrency,
   type ProjectOptionsResponse,
   type ProjectPatchPayload,
   type ProjectWritePayload,
@@ -65,6 +66,7 @@ interface ProjectWriteRow extends QueryResultRow {
   readonly classification: string;
   readonly project_status: string;
   readonly currency_code: string;
+  readonly currency_available: boolean;
   readonly contract_value: string;
   readonly opening_balance: string | null;
   readonly budget_cost: string | null;
@@ -79,6 +81,11 @@ interface ProjectWriteRow extends QueryResultRow {
 interface ProjectOptionRow extends QueryResultRow {
   readonly id: string;
   readonly display_name: string;
+}
+
+interface ProjectCurrencyOptionRow extends QueryResultRow {
+  readonly code: ProjectCurrency;
+  readonly name: string;
 }
 
 const SORT_EXPRESSIONS = Object.freeze({
@@ -220,14 +227,16 @@ function databaseErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
-function mapProjectWriteError(error: unknown): never {
+function mapProjectWriteError(error: unknown, currencyChange = false): never {
   switch (databaseErrorCode(error)) {
     case '23505':
       throw new ConflictException('P024_PROJECT_CODE_CONFLICT');
     case '23514':
       throw new UnprocessableEntityException('P024_PROJECT_CONSTRAINT_INVALID');
     case '23503':
-      throw new UnprocessableEntityException('P024_CLIENT_UNAVAILABLE');
+      throw new UnprocessableEntityException(
+        currencyChange ? 'P024_CURRENCY_CHANGE_CONFLICT' : 'P024_CLIENT_UNAVAILABLE',
+      );
     case '42501':
       throw new ConflictException('P024_PROJECT_STATUS_NOT_EDITABLE');
     default:
@@ -255,7 +264,8 @@ function toProjectWriteResponse(row: ProjectWriteRow): ProjectWriteResponse {
     reportingGroup: row.reporting_group,
     classification: asProjectClassification(row.classification),
     status: asProjectStatus(row.project_status),
-    baseCurrency: 'BRL',
+    baseCurrency: row.currency_code as ProjectCurrency,
+    currencyAvailable: row.currency_available,
     contractValue: row.contract_value,
     openingBalance: row.opening_balance,
     budgetCost: row.budget_cost,
@@ -362,15 +372,12 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
 
   async options(actor: ActorContext): Promise<ProjectOptionsResponse> {
     return this.database.actorTransaction(actor, async (client) => {
-      const currency = await client.query<{ readonly available: boolean }>(
-        `select exists (
-           select 1 from ltc_m.currencies
-           where code = 'BRL' and active = true
-         ) as available`,
+      const currencies = await client.query<ProjectCurrencyOptionRow>(
+        `select code, name
+         from ltc_m.currencies
+         where code in ('BRL', 'USD') and active = true
+         order by code`,
       );
-      if (!currency.rows[0]?.available) {
-        throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
-      }
       const result = await client.query<ProjectOptionRow>(
         `select id, display_name
          from ltc_m.clients
@@ -379,7 +386,7 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
       );
       return {
         contract: P024_PROJECT_CREATE_EDIT_CONTRACT,
-        baseCurrency: 'BRL',
+        currencies: currencies.rows,
         clients: result.rows.map((row) => ({ id: row.id, displayName: row.display_name })),
       };
     });
@@ -389,9 +396,6 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
     return this.database.actorTransaction(actor, async (client) => {
       const row = await this.findWriteById(client, projectId);
       if (!row) throw new NotFoundException('P024_PROJECT_NOT_FOUND');
-      if (row.currency_code !== 'BRL') {
-        throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
-      }
       return toProjectWriteResponse(row);
     });
   }
@@ -403,7 +407,7 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
   ): Promise<ProjectWriteResponse> {
     ensureEditorStatus(role, payload.status);
     return this.database.actorTransaction(actor, async (client) => {
-      await this.ensureActiveCurrency(client);
+      await this.ensureActiveCurrency(client, payload.baseCurrency);
       await this.ensureActiveClient(client, payload.clientId);
       try {
         const result = await client.query<{ readonly id: string }>(
@@ -429,14 +433,14 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
              $4::text,
              $5::ltc_m.project_classification,
              $6::ltc_m.project_status,
-             'BRL',
-             $7::numeric,
+             $7::text,
              $8::numeric,
              $9::numeric,
-             $10::date,
+             $10::numeric,
              $11::date,
              $12::date,
-             $13::text
+             $13::date,
+             $14::text
            )
            returning id`,
           [
@@ -446,6 +450,7 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
             payload.reportingGroup,
             payload.classification,
             payload.status,
+            payload.baseCurrency,
             payload.contractValue,
             payload.openingBalance,
             payload.budgetCost,
@@ -481,6 +486,8 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
       if (!visible.rows[0]) throw new NotFoundException('P024_PROJECT_NOT_FOUND');
 
       if (payload.clientId !== undefined) await this.ensureActiveClient(client, payload.clientId);
+      if (payload.baseCurrency !== undefined)
+        await this.ensureActiveCurrency(client, payload.baseCurrency);
 
       const values: unknown[] = [];
       const assignments: string[] = [];
@@ -490,6 +497,7 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
       };
       if (payload.projectName !== undefined) add('project_name', payload.projectName, 'text');
       if (payload.clientId !== undefined) add('client_id', payload.clientId, 'uuid');
+      if (payload.baseCurrency !== undefined) add('base_currency', payload.baseCurrency, 'text');
       if (payload.reportingGroup !== undefined)
         add('reporting_group', payload.reportingGroup, 'text');
       if (payload.classification !== undefined) {
@@ -520,23 +528,21 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
         if (!updated.rows[0]) throw new ConflictException('P024_VERSION_CONFLICT');
         const row = await this.findWriteById(client, projectId);
         if (!row) throw new NotFoundException('P024_PROJECT_NOT_FOUND');
-        if (row.currency_code !== 'BRL') {
-          throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
-        }
         return toProjectWriteResponse(row);
       } catch (error: unknown) {
         if (error instanceof ConflictException || error instanceof NotFoundException) throw error;
-        mapProjectWriteError(error);
+        mapProjectWriteError(error, payload.baseCurrency !== undefined);
       }
     });
   }
 
-  private async ensureActiveCurrency(client: PoolClient): Promise<void> {
+  private async ensureActiveCurrency(client: PoolClient, code: ProjectCurrency): Promise<void> {
     const result = await client.query<{ readonly available: boolean }>(
       `select exists (
          select 1 from ltc_m.currencies
-         where code = 'BRL' and active = true
+         where code = $1::text and active = true
        ) as available`,
+      [code],
     );
     if (!result.rows[0]?.available)
       throw new UnprocessableEntityException('P024_CURRENCY_UNAVAILABLE');
@@ -593,6 +599,10 @@ limit ${limitPlaceholder}::integer offset ${offsetPlaceholder}::bigint`,
          projects.classification::text as classification,
          projects.status::text as project_status,
          projects.base_currency as currency_code,
+         exists (
+           select 1 from ltc_m.currencies
+           where currencies.code = projects.base_currency and currencies.active = true
+         ) as currency_available,
          projects.contract_value,
          projects.opening_balance,
          projects.budget_cost,
