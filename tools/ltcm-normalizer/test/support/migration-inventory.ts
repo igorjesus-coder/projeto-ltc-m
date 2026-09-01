@@ -49,12 +49,33 @@ export function validateMigrationNames(
   const timestamps = names.map((name) => name.slice(0, 14));
   assert.equal(new Set(timestamps).size, timestamps.length, 'timestamp de migration duplicado');
 
-  for (const requiredMigration of requiredBaseline) {
-    assert.ok(
-      names.includes(requiredMigration),
-      `migration histórica obrigatória ausente: ${requiredMigration}`,
-    );
-  }
+  assert.ok(requiredBaseline.length > 0, 'baseline histórico vazio');
+  const baselineNames = [...requiredBaseline];
+  const invalidBaselineName = baselineNames.find((name) => !MIGRATION_FILENAME.test(name));
+  assert.equal(
+    invalidBaselineName,
+    undefined,
+    `nome de migration histórica inválido: ${invalidBaselineName ?? ''}`,
+  );
+  assert.deepEqual(
+    baselineNames,
+    [...baselineNames].sort(compareMigrationNames),
+    'baseline histórico fora da ordem canônica',
+  );
+  const lastBaseline = baselineNames.at(-1);
+  assert.ok(lastBaseline !== undefined, 'baseline histórico vazio');
+  const missingBaseline = baselineNames.find((name) => !names.includes(name));
+  assert.equal(
+    missingBaseline,
+    undefined,
+    `migration histórica obrigatória ausente: ${missingBaseline ?? ''}`,
+  );
+  const historicalPrefix = names.filter((name) => name.slice(0, 14) <= lastBaseline.slice(0, 14));
+  assert.deepEqual(
+    historicalPrefix,
+    baselineNames,
+    'prefixo histórico de migrations divergiu do baseline canônico',
+  );
 
   return sortedNames;
 }

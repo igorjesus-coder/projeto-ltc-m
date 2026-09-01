@@ -14,6 +14,10 @@ import {
 const P021_MIGRATION = '20260828100000_add_p021_authorization_approver.sql';
 const P026_MIGRATION = '20260901100000_add_p026_master_data_management.sql';
 const FUTURE_MIGRATION = '20990101000000_future_valid_migration.sql';
+const HISTORICAL_MIDDLE = '20260730150000_historical_middle.sql';
+const HISTORICAL_BEFORE_FINAL = '20260804115959_historical_before_final.sql';
+const HISTORICAL_BEFORE_FIRST = '20260729000000_historical_before_first.sql';
+const HISTORICAL_REPLACEMENT = '20260804120000_historical_replacement.sql';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 
 test('P012, P013 e P016 aceitam seus baselines históricos canônicos', () => {
@@ -50,6 +54,7 @@ test('o inventário atual real é aceito sem teto global de cardinalidade', asyn
     path.join(REPOSITORY_ROOT, 'supabase', 'migrations'),
     P016_MIGRATION_BASELINE,
   );
+  assert.equal(inventory.length, 15);
   assert.ok(inventory.length > P016_MIGRATION_BASELINE.length);
   assert.ok(inventory.some((migration) => migration.name === P026_MIGRATION));
 });
@@ -66,6 +71,56 @@ test('a ausência do último marco histórico de cada milestone falha', () => {
   assert.throws(
     () => validateMigrationNames(P016_MIGRATION_BASELINE.slice(0, -1), P016_MIGRATION_BASELINE),
     /migration histórica obrigatória ausente/u,
+  );
+});
+
+test('qualquer inserção ou substituição no prefixo histórico falha', () => {
+  const cases = [
+    [
+      ...P012_MIGRATION_BASELINE.slice(0, 4),
+      HISTORICAL_MIDDLE,
+      ...P012_MIGRATION_BASELINE.slice(4),
+    ],
+    [
+      ...P012_MIGRATION_BASELINE.slice(0, -1),
+      HISTORICAL_BEFORE_FINAL,
+      P012_MIGRATION_BASELINE.at(-1)!,
+    ],
+    [HISTORICAL_BEFORE_FIRST, ...P012_MIGRATION_BASELINE],
+    [...P012_MIGRATION_BASELINE.slice(0, -1), HISTORICAL_REPLACEMENT],
+  ];
+
+  for (const names of cases) {
+    assert.throws(
+      () => validateMigrationNames(names, P012_MIGRATION_BASELINE),
+      /migration|prefixo/u,
+    );
+  }
+});
+
+test('baseline sintético exato rejeita prefixo adulterado e aceita somente successors posteriores', () => {
+  const baseline = [
+    '20260729000000_a.sql',
+    '20260730000000_b.sql',
+    '20260731000000_c.sql',
+  ] as const;
+  const validSuccessors = [
+    ...baseline,
+    '20260731000001_d_future.sql',
+    '20990101000000_e_future.sql',
+  ];
+  const adulteredPrefix = [
+    baseline[0],
+    baseline[1],
+    '20260730000001_b2_extra_historical.sql',
+    baseline[2],
+    '20990101000000_d_future.sql',
+  ];
+
+  assert.deepEqual(validateMigrationNames(validSuccessors, baseline), validSuccessors);
+  assert.throws(
+    () => validateMigrationNames(adulteredPrefix, baseline),
+    /prefixo histórico de migrations divergiu/u,
   );
 });
 
