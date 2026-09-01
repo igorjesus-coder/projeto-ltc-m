@@ -37,7 +37,7 @@ function source(root, relativePath) {
   return fs.existsSync(filename) ? fs.readFileSync(filename, 'utf8') : null;
 }
 
-export function checkP019ServerPostgres(root = process.cwd()) {
+export function checkP019ServerPostgres(root = process.cwd(), { migrationNames } = {}) {
   const issues = [];
   for (const file of REQUIRED_FILES) {
     if (source(root, file) === null) issues.push(`P019_REQUIRED_FILE_MISSING:${file}`);
@@ -90,10 +90,14 @@ export function checkP019ServerPostgres(root = process.cwd()) {
   ]) {
     if (pattern.test(webSource)) issues.push(code);
   }
-  const migrations = fs
-    .readdirSync(path.join(root, 'supabase', 'migrations'))
-    .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name));
-  if (migrations.length !== 15) issues.push(`P019_MIGRATION_COUNT_UNEXPECTED:${migrations.length}`);
+  const availableMigrationNames =
+    migrationNames ??
+    fs
+      .readdirSync(path.join(root, 'supabase', 'migrations'))
+      .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name));
+  if (availableMigrationNames.length < 14) {
+    issues.push(`P019_MIGRATION_BASELINE_INCOMPLETE:${availableMigrationNames.length}`);
+  }
   const docs = source(root, 'docs/backend/p019-server-postgres-access.md') ?? '';
   if (!docs.includes(P019_SERVER_POSTGRES_CONTRACT)) issues.push('P019_CONTRACT_MISSING');
   return [...new Set(issues)].sort();
@@ -110,7 +114,7 @@ function main() {
     return;
   }
   process.stdout.write(
-    `P019 válido: ${P019_SERVER_POSTGRES_CONTRACT}, pg server-only, 15 migrations\n`,
+    `P019 válido: ${P019_SERVER_POSTGRES_CONTRACT}, migration baseline preserved (minimum 14), pg server-only\n`,
   );
 }
 

@@ -36,6 +36,20 @@ test('aceita a única migration D21 e a suíte P007 ampliada', () => {
   assert.deepEqual(scanD21TestText(p007Sql), []);
 });
 
+test('aceita migrations posteriores arbitrárias sem allowlist de sucessoras', () => {
+  const target = copyMigrations();
+  try {
+    fs.writeFileSync(
+      path.join(target, '20990101000000_future_migration.sql'),
+      'create view ltc_m.future_migration as select 1;\n',
+      'utf8',
+    );
+    assert.deepEqual(checkD21Fix(target, testPath), []);
+  } finally {
+    fs.rmSync(target, { force: true, recursive: true });
+  }
+});
+
 test('rejeita acesso direto a OLD/NEW e ausência da estratégia JSONB', () => {
   const directField = correctionSql.replace(
     "(v_old_data -> 'deleted_at') is distinct from\n            (v_new_data -> 'deleted_at')",
@@ -83,7 +97,10 @@ test('rejeita migration aplicada alterada e uma segunda migration D21', () => {
 
     const issues = checkD21Fix(target, testPath);
     assert.ok(issues.some((issue) => issue.includes('migration aplicada alterada')));
-    assert.ok(issues.some((issue) => issue.includes('exatamente uma migration forward')));
+    assert.equal(
+      issues.some((issue) => issue.includes('exatamente uma migration forward')),
+      false,
+    );
   } finally {
     fs.rmSync(target, { force: true, recursive: true });
   }

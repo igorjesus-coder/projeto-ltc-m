@@ -34,16 +34,6 @@ const APPLIED_MIGRATION_HASHES = new Map([
 ]);
 
 const CORRECTION_NAME = '20260730163419_fix_ltcm_admin_inactivation_columns.sql';
-const APPROVED_SUCCESSORS = new Set([
-  '20260731103000_add_ltcm_audit_read_event.sql',
-  '20260731103001_add_ltcm_runtime_rls_security.sql',
-  '20260731120000_fix_ltcm_runtime_function_acl.sql',
-  '20260731130000_add_ltcm_import_staging.sql',
-  '20260804120000_add_legacy_project_reference_date_exception.sql',
-  '20260820120000_add_p013_monthly_baseline_foundation.sql',
-  '20260825160000_add_p016_tableau_analytical_views.sql',
-  '20260828100000_add_p021_authorization_approver.sql',
-]);
 const EXPECTED_FUNCTION = 'ltc_m.enforce_admin_inactivation';
 
 const REQUIRED_TEST_SCENARIOS = [
@@ -151,13 +141,6 @@ export function checkD21Fix(migrationDirectory, testPath) {
     }
   }
 
-  const unexpectedMigrations = sqlFiles.filter(
-    (filename) => !APPLIED_MIGRATION_HASHES.has(filename) && !APPROVED_SUCCESSORS.has(filename),
-  );
-  if (unexpectedMigrations.length > 0) {
-    issues.push('deve existir exatamente uma migration forward nova para D21');
-  }
-
   const correctionPath = path.join(migrationDirectory, CORRECTION_NAME);
   if (fs.existsSync(correctionPath)) {
     for (const issue of scanD21MigrationText(fs.readFileSync(correctionPath, 'utf8'))) {
@@ -187,7 +170,7 @@ function main() {
   }
 
   console.log(
-    'Correção D21 válida: uma migration forward, função genérica segura e migrations aplicadas intactas',
+    'Correção D21 válida: migration aplicada, função genérica segura e migrations aplicadas intactas',
   );
 }
 

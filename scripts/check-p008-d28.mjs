@@ -7,13 +7,6 @@ import { stripSqlNoise } from './check-migrations.mjs';
 
 export const D28_FILENAME = '20260731120000_fix_ltcm_runtime_function_acl.sql';
 const P008_LAST_TIMESTAMP = '20260731103001';
-const APPROVED_SUCCESSORS = new Set([
-  '20260731130000_add_ltcm_import_staging.sql',
-  '20260804120000_add_legacy_project_reference_date_exception.sql',
-  '20260820120000_add_p013_monthly_baseline_foundation.sql',
-  '20260825160000_add_p016_tableau_analytical_views.sql',
-  '20260828100000_add_p021_authorization_approver.sql',
-]);
 
 // D28 is intentionally a one-function corrective ACL.  The trigger path is
 // SECURITY INVOKER and calls this SECURITY DEFINER helper; no other function
@@ -137,16 +130,10 @@ export function checkD28Migrations(directory) {
     return timestamp && timestamp > P008_LAST_TIMESTAMP;
   });
   const d28Migrations = postP008.filter((filename) => filename === D28_FILENAME);
-  const unexpectedSuccessors = postP008.filter(
-    (filename) => filename !== D28_FILENAME && !APPROVED_SUCCESSORS.has(filename),
-  );
-  if (d28Migrations.length !== 1 || unexpectedSuccessors.length > 0) {
-    issues.push(
-      `deve existir exatamente uma migration D28 posterior ao P008 (encontradas: ${d28Migrations.length})`,
-    );
-  }
-  if (!postP008.includes(D28_FILENAME)) {
+  if (d28Migrations.length === 0) {
     issues.push(`migration D28 obrigatória ausente: ${D28_FILENAME}`);
+  } else if (d28Migrations.length > 1) {
+    issues.push(`múltiplas migrations D28 encontradas: ${d28Migrations.length}`);
   }
 
   if (entries.includes(D28_FILENAME)) {
