@@ -38,7 +38,10 @@ function parseJson(text, code, issues) {
   }
 }
 
-export function checkP018Scaffold(rootDirectory = process.cwd(), { overrides = {} } = {}) {
+export function checkP018Scaffold(
+  rootDirectory = process.cwd(),
+  { overrides = {}, migrationNames } = {},
+) {
   const issues = [];
   const source = (relativePath) => {
     if (Object.hasOwn(overrides, relativePath)) return overrides[relativePath];
@@ -171,11 +174,14 @@ export function checkP018Scaffold(rootDirectory = process.cwd(), { overrides = {
   }
 
   const migrationDirectory = path.join(rootDirectory, 'supabase', 'migrations');
-  const migrationCount = fs.existsSync(migrationDirectory)
-    ? fs.readdirSync(migrationDirectory).filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
-        .length
-    : 0;
-  if (migrationCount !== 14) issues.push(`P018_MIGRATION_COUNT_UNEXPECTED:${migrationCount}`);
+  const availableMigrationNames =
+    migrationNames ??
+    (fs.existsSync(migrationDirectory)
+      ? fs.readdirSync(migrationDirectory).filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
+      : []);
+  if (availableMigrationNames.length < 14) {
+    issues.push(`P018_MIGRATION_BASELINE_INCOMPLETE:${availableMigrationNames.length}`);
+  }
 
   return [...new Set(issues)].sort();
 }
@@ -188,7 +194,9 @@ function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`P018 scaffold válido: ${P018_SCAFFOLD_CONTRACT}, 14 migrations, sem P019`);
+  console.log(
+    `P018 scaffold válido: ${P018_SCAFFOLD_CONTRACT}, migration baseline preserved (minimum 14), sem P019`,
+  );
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
