@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -7,12 +6,12 @@ import { fileURLToPath } from 'node:url';
 import { Pool, type PoolClient } from 'pg';
 
 import { parseP012LoopbackDatabaseUrlForTestHarness } from './support/postgres-item-persistence.js';
+import { P016_MIGRATION_BASELINE, readMigrationInventory } from './support/migration-inventory.js';
 
 const DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const ENABLED = process.env['LTCM_P016_INTEGRATION'] === '1';
 const ISOLATED_CLUSTER = process.env['LTCM_P016_ISOLATED_CLUSTER'] === '1';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
-const EXPECTED_MIGRATION_COUNT = 14;
 
 const ADMIN_ID = '00000000-0000-4000-8000-000000016001';
 const VIEWER_ID = '00000000-0000-4000-8000-000000016002';
@@ -99,13 +98,7 @@ async function guard(client: PoolClient): Promise<void> {
 
 async function migrations(): Promise<Array<{ name: string; sql: string }>> {
   const directory = path.join(REPOSITORY_ROOT, 'supabase', 'migrations');
-  const names = (await readdir(directory))
-    .filter((name) => name.endsWith('.sql'))
-    .sort((left, right) => left.localeCompare(right, 'en'));
-  assert.equal(names.length, EXPECTED_MIGRATION_COUNT);
-  return Promise.all(
-    names.map(async (name) => ({ name, sql: await readFile(path.join(directory, name), 'utf8') })),
-  );
+  return readMigrationInventory(directory, P016_MIGRATION_BASELINE);
 }
 
 async function installAdmin(client: PoolClient): Promise<void> {
@@ -485,7 +478,7 @@ async function assertUniqueKeys(client: PoolClient): Promise<void> {
 }
 
 test(
-  'P016 aplica 13 migrations do zero e prova views, grão, fan-out, RLS e cleanup',
+  'P016 aplica o inventário atual de migrations do zero e prova views, grão, fan-out, RLS e cleanup',
   { skip: !ENABLED },
   async () => {
     const pool = new Pool({ connectionString: databaseUrl(), max: 6 });

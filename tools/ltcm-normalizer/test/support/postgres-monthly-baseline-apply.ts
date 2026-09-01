@@ -17,6 +17,11 @@ import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 import { sha256Canonical } from '../../src/canonical-json.js';
 import { createSourceLineKey } from '../../src/item-contracts.js';
 import {
+  ADMIN_BOOTSTRAP_MIGRATION,
+  P013_MIGRATION_BASELINE,
+  readMigrationInventory,
+} from './migration-inventory.js';
+import {
   assertP013CertifiedMonthlyBaselinePlan,
   createP013LocalPostgresDryRunAdapter,
   deriveP013MonthlyBaselinePreviewForTest,
@@ -1460,7 +1465,6 @@ test(
 const DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const ENABLED = process.env['LTCM_P013_D05_INTEGRATION'] === '1';
 const ROOT = fileURLToPath(new URL('../../../../..', import.meta.url));
-const EXPECTED_MIGRATIONS = 14;
 const ADMIN_ID = '00000000-0000-4000-8000-000000013601';
 const VIEWER_ID = '00000000-0000-4000-8000-000000013602';
 const CLIENT_ID = '00000000-0000-4000-8000-000000013603';
@@ -1634,11 +1638,9 @@ function fixtureUuid(group: number, index: number): string {
   return `00000000-0000-4000-${group.toString().padStart(4, '0')}-${index.toString().padStart(12, '0')}`;
 }
 
-async function migrations(): Promise<string[]> {
+async function migrations(): Promise<Array<{ name: string; sql: string }>> {
   const directory = path.join(ROOT, 'supabase', 'migrations');
-  const names = (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort();
-  assert.equal(names.length, EXPECTED_MIGRATIONS);
-  return Promise.all(names.map((name) => readFile(path.join(directory, name), 'utf8')));
+  return readMigrationInventory(directory, P013_MIGRATION_BASELINE);
 }
 
 async function guard(client: PoolClient): Promise<void> {
@@ -1674,9 +1676,9 @@ async function rebuildFromZero(pool: Pool, retainBootstrapAdmin = true): Promise
   try {
     await guard(client);
     await client.query('drop schema if exists ltc_m cascade');
-    for (const [index, migration] of (await migrations()).entries()) {
-      await client.query(migration);
-      if (index === 6) await installAdmin(client);
+    for (const migration of await migrations()) {
+      await client.query(migration.sql);
+      if (migration.name === ADMIN_BOOTSTRAP_MIGRATION) await installAdmin(client);
     }
     if (!retainBootstrapAdmin) {
       await client.query('truncate table ltc_m.app_users cascade');

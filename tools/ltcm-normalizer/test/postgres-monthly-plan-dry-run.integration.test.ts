@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -18,11 +18,15 @@ import {
   type P013MonthlyBaselinePlan,
 } from '../src/monthly-baseline-plan.js';
 import { parseP012LoopbackDatabaseUrlForTestHarness } from './support/postgres-item-persistence.js';
+import {
+  ADMIN_BOOTSTRAP_MIGRATION,
+  P013_MIGRATION_BASELINE,
+  readMigrationInventory,
+} from './support/migration-inventory.js';
 
 const DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const ENABLED = process.env['LTCM_P013_D03_INTEGRATION'] === '1';
 const ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
-const EXPECTED_MIGRATIONS = 14;
 const ADMIN_ID = '00000000-0000-4000-8000-000000013501';
 const CLIENT_ID = '00000000-0000-4000-8000-000000013502';
 const PLAN_ID = '00000000-0000-4000-8000-000000013503';
@@ -79,11 +83,7 @@ async function guard(client: PoolClient): Promise<void> {
 
 async function migrations(): Promise<Array<{ name: string; sql: string }>> {
   const directory = path.join(ROOT, 'supabase', 'migrations');
-  const names = (await readdir(directory)).filter((name) => name.endsWith('.sql')).sort();
-  assert.equal(names.length, EXPECTED_MIGRATIONS);
-  return Promise.all(
-    names.map(async (name) => ({ name, sql: await readFile(path.join(directory, name), 'utf8') })),
-  );
+  return readMigrationInventory(directory, P013_MIGRATION_BASELINE);
 }
 
 async function installAdmin(client: PoolClient): Promise<void> {
@@ -109,9 +109,9 @@ async function rebuildFromZero(pool: Pool): Promise<void> {
   try {
     await guard(client);
     await client.query('drop schema if exists ltc_m cascade');
-    for (const [index, migration] of (await migrations()).entries()) {
+    for (const migration of await migrations()) {
       await client.query(migration.sql);
-      if (index === 6) await installAdmin(client);
+      if (migration.name === ADMIN_BOOTSTRAP_MIGRATION) await installAdmin(client);
     }
   } finally {
     client.release();
