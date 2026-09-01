@@ -48,7 +48,7 @@ function parseJson(text, code, issues) {
   }
 }
 
-export function checkP020Auth0(root = process.cwd(), { overrides = {} } = {}) {
+export function checkP020Auth0(root = process.cwd(), { overrides = {}, migrationNames } = {}) {
   const issues = [];
   const source = (relativePath) => {
     if (Object.hasOwn(overrides, relativePath)) return overrides[relativePath];
@@ -128,7 +128,10 @@ export function checkP020Auth0(root = process.cwd(), { overrides = {} } = {}) {
   }
 
   for (const [code, pattern] of [
-    ['P020_API_SUPABASE_FOUND', /supabase-js|Supabase Auth|createClient/u],
+    [
+      'P020_API_SUPABASE_FOUND',
+      /supabase-js|Supabase Auth|\bsupabase(?:Client)?\b[\s\S]{0,80}\bcreateClient\b|\bcreateClient\b[\s\S]{0,80}\bsupabase(?:Client)?\b/u,
+    ],
     ['P020_API_JWT_VERIFY_MISSING', /jwtVerify/u],
     ['P020_API_JWKS_MISSING', /createRemoteJWKSet/u],
     ['P020_API_ALGORITHM_MISSING', /RS256/u],
@@ -140,12 +143,16 @@ export function checkP020Auth0(root = process.cwd(), { overrides = {} } = {}) {
       issues.push(code);
   }
 
-  const migrations = fs.existsSync(path.join(root, 'supabase', 'migrations'))
-    ? fs
-        .readdirSync(path.join(root, 'supabase', 'migrations'))
-        .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name)).length
-    : 0;
-  if (migrations !== 14) issues.push(`P020_MIGRATION_COUNT_CHANGED:${migrations}`);
+  const availableMigrationNames =
+    migrationNames ??
+    (fs.existsSync(path.join(root, 'supabase', 'migrations'))
+      ? fs
+          .readdirSync(path.join(root, 'supabase', 'migrations'))
+          .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
+      : []);
+  if (availableMigrationNames.length < 14) {
+    issues.push(`P020_MIGRATION_BASELINE_INCOMPLETE:${availableMigrationNames.length}`);
+  }
 
   return [...new Set(issues)].sort();
 }

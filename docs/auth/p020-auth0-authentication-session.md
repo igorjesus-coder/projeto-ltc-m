@@ -91,4 +91,5 @@ preservados.
 O gate `npm run p020:acceptance` valida configuração, provider, rota protegida, cliente API,
 bearer token, `401`, JWT/JWKS, issuer, audience, expiração, algoritmo, ausência de secrets,
 ausência de Supabase Auth e ausência de browser → banco. Testes usam mocks do SDK e JWKS local;
-CI não depende de Auth0 real nem de internet.
+CI não depende de Auth0 real nem de internet. O snapshot histórico de P020 possuía 14 migrations;
+migrations posteriores legítimas podem ser adicionadas sem invalidar este contrato.
