@@ -14,6 +14,7 @@ import {
   parseProjectItemDuplicatePayload,
   parseProjectItemInactivatePayload,
   parseProjectItemPatchPayload,
+  parseProjectItemReactivatePayload,
 } from '../src/project-items/project-items.types.js';
 
 const actor = Object.freeze({
@@ -117,6 +118,10 @@ test('P027 parser aceita criação, permite código repetido e falha fechado', (
       justification: 'correção',
     },
   );
+  assert.deepEqual(
+    parseProjectItemReactivatePayload({ expectedVersion: 3, justification: 'restaurar' }),
+    { expectedVersion: 3, justification: 'restaurar' },
+  );
   assert.deepEqual(parseProjectItemPatchPayload({ unitPrice: '12.3456', expectedVersion: 3 }), {
     unitPrice: '12.3456',
     expectedVersion: 3,
@@ -147,11 +152,15 @@ function databaseFor(
 }
 
 test('P027 criação usa transação, lock do projeto, moeda exata e total gerado pelo banco', async () => {
-  const database = databaseFor((text) => {
+  let insertValues: readonly unknown[] | undefined;
+  const database = databaseFor((text, values) => {
     if (text.includes('from ltc_m.projects')) return { rows: [project] };
     if (text.includes('from ltc_m.units')) return { rows: [{ active: true }] };
     if (text.includes('coalesce(max(line_number)')) return { rows: [{ line_number: 2 }] };
-    if (text.includes('insert into ltc_m.project_items')) return { rows: [{ id: itemId }] };
+    if (text.includes('insert into ltc_m.project_items')) {
+      insertValues = values;
+      return { rows: [{ id: itemId }] };
+    }
     if (text.includes('from ltc_m.project_items')) return { rows: [item] };
     return { rows: [] };
   });
@@ -178,6 +187,9 @@ test('P027 criação usa transação, lock do projeto, moeda exata e total gerad
   );
   assert.ok(insert);
   assert.doesNotMatch(insert, /total_amount/u);
+  assert.match(String(insertValues?.[1]), /^manual:/u);
+  assert.notEqual(insertValues?.[1], 'manual:source');
+  assert.equal(insertValues?.[2], 2);
   assert.doesNotMatch(database.statements.join('\n'), /delete\s+from/iu);
 });
 
@@ -244,6 +256,9 @@ test('P027 não aceita unidade inativa nem item de outro projeto', async () => {
 
 test('P027 duplicação cria novo item ativo sem exigir código novo', async () => {
   const statements: string[] = [];
+  let insertValues: readonly unknown[] | undefined;
+  let inserted = false;
+  const duplicateItemId = '00000000-0000-4000-8000-000000027202';
   const database = {
     actorTransaction: async <T>(
       _receivedActor: typeof actor,
@@ -252,16 +267,27 @@ test('P027 duplicação cria novo item ativo sem exigir código novo', async () 
       }) => Promise<T>,
     ) =>
       operation({
-        query: async <Row>(text: string) => {
+        query: async <Row>(text: string, values: readonly unknown[] = []) => {
           statements.push(text);
           if (text.includes('from ltc_m.projects')) return { rows: [project] as Row[] };
           if (text.includes('from ltc_m.project_items') && !text.includes('coalesce')) {
-            return { rows: [item] as Row[] };
+            return {
+              rows: [
+                {
+                  ...item,
+                  id: inserted ? duplicateItemId : itemId,
+                  line_number: inserted ? 2 : 1,
+                } as Row,
+              ],
+            };
           }
           if (text.includes('coalesce(max(line_number)'))
             return { rows: [{ line_number: 2 }] as Row[] };
-          if (text.includes('insert into ltc_m.project_items'))
-            return { rows: [{ id: itemId }] as Row[] };
+          if (text.includes('insert into ltc_m.project_items')) {
+            inserted = true;
+            insertValues = values;
+            return { rows: [{ id: duplicateItemId }] as Row[] };
+          }
           if (text.includes('from ltc_m.units')) return { rows: [{ active: true }] as Row[] };
           return { rows: [] as Row[] };
         },
@@ -279,6 +305,10 @@ test('P027 duplicação cria novo item ativo sem exigir código novo', async () 
   );
   assert.ok(insert);
   assert.match(insert, /active\s*\)\s*values[\s\S]*true/u);
+  assert.match(String(insertValues?.[1]), /^manual:/u);
+  assert.notEqual(insertValues?.[1], item.source_line_key);
+  assert.equal(result.id, duplicateItemId);
+  assert.equal(result.lineNumber, 2);
   assert.equal(result.itemCode, 'ITEM-1');
 });
 
@@ -315,5 +345,79 @@ test('P027 inativação é soft state change com justificativa no contexto do at
   assert.equal(
     (receivedActor as { readonly justification: string }).justification,
     'Correção de origem',
+  );
+});
+
+test('P028 restaura item inativo como admin sem revalidar catálogo histórico', async () => {
+  let receivedActor: unknown;
+  let itemReads = 0;
+  const inactiveItem = { ...item, active: false, unit_available: false, currency_available: false };
+  const restoredItem = { ...inactiveItem, active: true, row_version: '4' };
+  const statements: string[] = [];
+  const database = {
+    actorTransaction: async <T>(
+      transactionActor: typeof actor,
+      operation: (client: {
+        query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
+      }) => Promise<T>,
+    ) => {
+      receivedActor = transactionActor;
+      return operation({
+        query: async <Row>(text: string) => {
+          statements.push(text);
+          if (text.includes('from ltc_m.projects')) return { rows: [project] as Row[] };
+          if (text.includes('from ltc_m.project_items')) {
+            itemReads += 1;
+            return { rows: [itemReads === 1 ? inactiveItem : restoredItem] as Row[] };
+          }
+          if (text.includes('update ltc_m.project_items'))
+            return { rows: [{ id: itemId }] as Row[] };
+          return { rows: [] as Row[] };
+        },
+      });
+    },
+  };
+
+  const result = await new ProjectItemsService(database as never).reactivate(
+    projectId,
+    itemId,
+    parseProjectItemReactivatePayload({ expectedVersion: 3, justification: 'Revisão concluída' }),
+    actor,
+    'admin',
+  );
+
+  assert.equal(result.active, true);
+  assert.equal(result.id, itemId);
+  assert.equal(result.sourceLineKey, inactiveItem.source_line_key);
+  assert.equal(result.lineNumber, inactiveItem.line_number);
+  assert.equal(result.unitAvailable, false);
+  assert.equal(result.currencyAvailable, false);
+  assert.equal(
+    (receivedActor as { readonly justification: string }).justification,
+    'Revisão concluída',
+  );
+  const update = statements.find((statement) => statement.includes('update ltc_m.project_items'));
+  assert.ok(update);
+  assert.match(update, /set active = true/u);
+  assert.match(update, /active = false/u);
+  assert.doesNotMatch(statements.join('\n'), /from ltc_m.units/iu);
+});
+
+test('P028 rejeita restauração de item já ativo', async () => {
+  const database = databaseFor((text) => {
+    if (text.includes('from ltc_m.projects')) return { rows: [project] };
+    if (text.includes('from ltc_m.project_items')) return { rows: [item] };
+    return { rows: [] };
+  });
+
+  await assert.rejects(
+    new ProjectItemsService(database as never).reactivate(
+      projectId,
+      itemId,
+      { expectedVersion: 3, justification: 'não aplicável' },
+      actor,
+      'admin',
+    ),
+    (error: unknown) => error instanceof ConflictException,
   );
 });

@@ -19,6 +19,7 @@ import {
   parseProjectItemId,
   parseProjectItemInactivatePayload,
   parseProjectItemPatchPayload,
+  parseProjectItemReactivatePayload,
 } from './project-items.types.js';
 import { parseProjectId } from '../projects/projects.types.js';
 
@@ -116,6 +117,23 @@ export class ProjectItemsController {
       parseProjectId(projectId),
       parseProjectItemId(itemId),
       parseProjectItemInactivatePayload(body),
+      actorFromRequest(request),
+      roleFromRequest(request),
+    );
+  }
+
+  @Post(':itemId/reactivate')
+  @RequireCapabilities('soft_delete:restore')
+  async reactivate(
+    @Req() request: ProjectItemsRequest,
+    @Param('projectId') projectId: string,
+    @Param('itemId') itemId: string,
+    @Body() body: unknown,
+  ) {
+    return this.projectItems.reactivate(
+      parseProjectId(projectId),
+      parseProjectItemId(itemId),
+      parseProjectItemReactivatePayload(body),
       actorFromRequest(request),
       roleFromRequest(request),
     );

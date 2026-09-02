@@ -19,6 +19,7 @@ import {
   type ProjectItemDuplicatePayload,
   type ProjectItemInactivatePayload,
   type ProjectItemPatchPayload,
+  type ProjectItemReactivatePayload,
   type ProjectItemRecord,
   type ProjectItemsResponse,
 } from './project-items.types.js';
@@ -328,6 +329,41 @@ export class ProjectItemsService {
         if (!result.rows[0]) throw new ConflictException('P027_ITEM_VERSION_CONFLICT');
         const row = await this.findItem(client, projectId, itemId);
         if (!row) throw new NotFoundException('P027_ITEM_NOT_FOUND');
+        return toItem(row);
+      },
+    );
+  }
+
+  async reactivate(
+    projectId: string,
+    itemId: string,
+    payload: ProjectItemReactivatePayload,
+    actor: ActorContext,
+    role: Role,
+  ): Promise<ProjectItemRecord> {
+    return this.database.actorTransaction(
+      { ...actor, justification: payload.justification },
+      async (client) => {
+        const project = await this.findProject(client, projectId);
+        if (!project) throw new NotFoundException('P028_PROJECT_NOT_FOUND');
+        ensureProjectWritable(project, role);
+        const current = await this.findItem(client, projectId, itemId);
+        if (!current) throw new NotFoundException('P028_ITEM_NOT_FOUND');
+        if (current.active) throw new ConflictException('P028_ITEM_ALREADY_ACTIVE');
+        const result = await client.query<{ readonly id: string }>(
+          `update ltc_m.project_items
+           set active = true
+           where id = $1::uuid
+             and project_id = $2::uuid
+             and row_version = $3::bigint
+             and active = false
+             and deleted_at is null
+           returning id`,
+          [itemId, projectId, payload.expectedVersion],
+        );
+        if (!result.rows[0]) throw new ConflictException('P028_ITEM_VERSION_CONFLICT');
+        const row = await this.findItem(client, projectId, itemId);
+        if (!row) throw new NotFoundException('P028_ITEM_NOT_FOUND');
         return toItem(row);
       },
     );
