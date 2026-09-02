@@ -810,12 +810,29 @@ begin
         raise exception 'P008 falhou: editor não leu todos os estados autorizados.';
     end if;
 
-    insert into ltc_m.clients (legal_name, display_name)
-    values ('P008 Editor Client', 'P008 Editor Client')
-    returning id into v_client_id;
+    begin
+        insert into ltc_m.clients (legal_name, display_name)
+        values ('P008 Editor Client', 'P008 Editor Client');
+        raise exception 'P008 falhou: editor administrou cadastro.';
+    exception
+        when insufficient_privilege then null;
+    end;
+
+    select clients.id
+    into v_client_id
+    from ltc_m.clients
+    where clients.id = '00000000-0000-4000-8000-000000008101';
+    if v_client_id is null then
+        raise exception 'P008 falhou: cliente sintético do editor ausente.';
+    end if;
+
     update ltc_m.clients
     set display_name = 'P008 Editor Client Updated'
     where clients.id = v_client_id;
+    get diagnostics v_rows = row_count;
+    if v_rows <> 0 then
+        raise exception 'P008 falhou: editor alterou cadastro.';
+    end if;
 
     insert into ltc_m.projects (
         project_code, project_name, client_id, status, base_currency,
@@ -842,7 +859,10 @@ begin
         update ltc_m.clients
         set active = false
         where clients.id = v_client_id;
-        raise exception 'P008 falhou: editor inativou cliente.';
+        get diagnostics v_rows = row_count;
+        if v_rows <> 0 then
+            raise exception 'P008 falhou: editor inativou cliente.';
+        end if;
     exception
         when insufficient_privilege then null;
     end;
