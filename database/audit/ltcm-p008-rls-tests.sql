@@ -723,7 +723,7 @@ begin
         raise exception 'P008 falhou: viewer visualizou outros usuários.';
     end if;
     select count(*) into v_count from ltc_m.currencies;
-    if v_count <> 1 then
+    if v_count <> 2 then
         raise exception 'P008 falhou: viewer não leu BRL.';
     end if;
     select count(*) into v_count from ltc_m.units;
