@@ -8,6 +8,31 @@ import { checkP018Scaffold } from './check-p018-scaffold.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
+const migrationNames = fs
+  .readdirSync(path.join(root, 'supabase', 'migrations'))
+  .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name));
+
+test('aceita o baseline histórico P018 com 14 migrations', () => {
+  assert.deepEqual(checkP018Scaffold(root, { migrationNames: migrationNames.slice(0, 14) }), []);
+});
+
+test('aceita as 15 migrations atuais sem conhecer P026', () => {
+  assert.deepEqual(checkP018Scaffold(root, { migrationNames: migrationNames.slice(0, 15) }), []);
+});
+
+test('migrations posteriores adicionais não invalidam o scaffold P018', () => {
+  assert.deepEqual(
+    checkP018Scaffold(root, {
+      migrationNames: [...migrationNames, '20990101000000_add_future_migration.sql'],
+    }),
+    [],
+  );
+});
+
+test('preserva a proteção quando o baseline histórico está incompleto', () => {
+  const issues = checkP018Scaffold(root, { migrationNames: migrationNames.slice(0, 13) });
+  assert.ok(issues.includes('P018_MIGRATION_BASELINE_INCOMPLETE:13'));
+});
 
 test('aceita o scaffold P018 modular, acessível e sem P019', () => {
   assert.deepEqual(checkP018Scaffold(root), []);

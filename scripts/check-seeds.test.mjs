@@ -6,22 +6,25 @@ import { applyApprovedSeed, scanSeedText } from './check-seeds.mjs';
 
 const seedSql = fs.readFileSync(new URL('../supabase/seed.sql', import.meta.url), 'utf8');
 
-test('seed oficial contém somente BRL e US e passa no scanner', () => {
+test('seed oficial contém as moedas BRL e USD e preserva o código de unidade US', () => {
   assert.deepEqual(scanSeedText(seedSql), []);
 });
 
-test('primeira execução insere BRL e US; segunda é idempotente', () => {
+test('primeira execução insere BRL e USD e preserva US; segunda é idempotente', () => {
   const first = applyApprovedSeed({ currencies: [], units: [] });
   const second = applyApprovedSeed(first);
 
   assert.deepEqual(first, {
-    currencies: [{ code: 'BRL', name: 'Real brasileiro', decimalPlaces: 2, active: true }],
+    currencies: [
+      { code: 'BRL', name: 'Real brasileiro', decimalPlaces: 2, active: true },
+      { code: 'USD', name: 'Dólar americano', decimalPlaces: 2, active: true },
+    ],
     units: [{ code: 'US', name: 'Unidade e Serviço', category: null, active: true }],
   });
   assert.deepEqual(second, first);
 });
 
-test('US divergente é rejeitada sem aplicação parcial', () => {
+test('código de unidade US divergente é rejeitado sem aplicação parcial', () => {
   const initial = {
     currencies: [],
     units: [{ code: 'US', name: 'Outro nome', category: null, active: true }],

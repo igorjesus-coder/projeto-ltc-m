@@ -57,18 +57,20 @@ insert into ltc_m.clients (id) values ('00000000-0000-4000-8000-000000000001');`
   assert.ok(issues.some((issue) => issue.includes('exatamente um REVOKE')));
 });
 
-test('rejeita mais de uma migration posterior ao P008 e nome D28 divergente', () => {
+test('aceita D28 e migrations posteriores arbitrárias', () => {
   withDirectory(
     {
       [D28_FILENAME]: validD28,
-      '20260731120001_second_d28.sql': validD28,
+      '20990101000000_future_one.sql': 'create view ltc_m.future_one as select 1;',
+      '20990101000001_future_two.sql': 'create view ltc_m.future_two as select 1;',
     },
     (directory) => {
-      const issues = checkD28Migrations(directory).issues;
-      assert.ok(issues.some((issue) => issue.includes('exatamente uma migration D28')));
+      assert.deepEqual(checkD28Migrations(directory).issues, []);
     },
   );
+});
 
+test('rejeita ausência ou variação inválida do filename D28', () => {
   withDirectory({ '20260731120001_wrong_name.sql': validD28 }, (directory) => {
     const issues = checkD28Migrations(directory).issues;
     assert.ok(issues.some((issue) => issue.includes('migration D28 obrigatória ausente')));
@@ -81,7 +83,7 @@ test('checkD28Migrations aceita somente o arquivo esperado', () => {
   });
 });
 
-test('aceita a migration analítica P016 como sucessora aprovada da D28', () => {
+test('aceita uma migration posterior sem allowlist de sucessoras', () => {
   withDirectory(
     {
       [D28_FILENAME]: validD28,

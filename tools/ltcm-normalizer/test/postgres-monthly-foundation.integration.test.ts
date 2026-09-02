@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -7,12 +6,16 @@ import { fileURLToPath } from 'node:url';
 import { Pool, type PoolClient } from 'pg';
 
 import { parseP012LoopbackDatabaseUrlForTestHarness } from './support/postgres-item-persistence.js';
+import {
+  ADMIN_BOOTSTRAP_MIGRATION,
+  P013_MIGRATION_BASELINE,
+  readMigrationInventory,
+} from './support/migration-inventory.js';
 
 const DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const ENABLED = process.env['LTCM_P013_INTEGRATION'] === '1';
 const ISOLATED_CLUSTER = process.env['LTCM_P013_ISOLATED_CLUSTER'] === '1';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
-const EXPECTED_MIGRATION_COUNT = 14;
 const ADMIN_ID = '00000000-0000-4000-8000-000000013001';
 const VIEWER_ID = '00000000-0000-4000-8000-000000013002';
 const CLIENT_ID = '00000000-0000-4000-8000-000000013003';
@@ -108,13 +111,7 @@ async function guard(client: PoolClient): Promise<void> {
 
 async function migrations(): Promise<Array<{ name: string; sql: string }>> {
   const directory = path.join(REPOSITORY_ROOT, 'supabase', 'migrations');
-  const names = (await readdir(directory))
-    .filter((name) => name.endsWith('.sql'))
-    .sort((left, right) => left.localeCompare(right, 'en'));
-  assert.equal(names.length, EXPECTED_MIGRATION_COUNT);
-  return Promise.all(
-    names.map(async (name) => ({ name, sql: await readFile(path.join(directory, name), 'utf8') })),
-  );
+  return readMigrationInventory(directory, P013_MIGRATION_BASELINE, 'historical');
 }
 
 async function installAdmin(client: PoolClient): Promise<void> {
@@ -151,10 +148,10 @@ async function rebuildFromZero(pool: Pool): Promise<void> {
     );
     assert.equal(membership.rows[0]?.['membership_count'], 0);
     await client.query('drop schema if exists ltc_m cascade');
-    for (const [index, migration] of (await migrations()).entries()) {
+    for (const migration of await migrations()) {
       currentMigration = migration.name;
       await client.query(migration.sql);
-      if (index === 6) await installAdmin(client);
+      if (migration.name === ADMIN_BOOTSTRAP_MIGRATION) await installAdmin(client);
     }
   } catch (error) {
     await client.query('rollback').catch(() => undefined);

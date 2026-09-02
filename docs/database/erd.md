@@ -1,7 +1,7 @@
 # ERD do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `b6d71494c7e561aea68b26ed6f658ed5e25fc72ea6b6b45a1bff4ffbc03f4893`
+Fingerprint: `53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47`
 
 Arquivo gerado deterministicamente a partir do modelo canônico capturado em PostgreSQL 17.
 Não editar manualmente; use `npm run docs:schema:generate` e valide com
@@ -57,6 +57,8 @@ erDiagram
     text name
     smallint decimal_places
     boolean active
+    timestamp_with_time_zone updated_at
+    bigint row_version
   }
   financial_actual_events {
     uuid id PK
@@ -333,6 +335,8 @@ erDiagram
     text name
     text category
     boolean active
+    timestamp_with_time_zone updated_at
+    bigint row_version
   }
   app_users ||--o{ audit_log : "audit_log_changed_by_user_id_fkey"
   app_users ||--o{ clients : "clients_created_by_user_id_fkey"

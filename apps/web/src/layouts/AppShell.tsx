@@ -4,6 +4,7 @@ import { APP_METADATA } from '../app/app-config';
 import { publicEnvironment } from '../app/environment';
 import { APP_NAVIGATION, type AppRoute } from '../app/routes';
 import { Button } from '../components/design-system';
+import { useAuthorization } from '../auth/authorization';
 
 interface AppShellProps {
   readonly children: ReactNode;
@@ -11,6 +12,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children, currentRoute }: AppShellProps) {
+  const { can } = useAuthorization();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -29,7 +31,7 @@ export function AppShell({ children, currentRoute }: AppShellProps) {
 
   const navigation = (
     <ul>
-      {APP_NAVIGATION.map((item) => (
+      {APP_NAVIGATION.filter((item) => !item.capability || can(item.capability)).map((item) => (
         <li key={item.route}>
           <a
             href={item.href}

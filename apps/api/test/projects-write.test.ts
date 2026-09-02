@@ -22,6 +22,7 @@ const validCreate = {
   projectCode: '  2026-01-15797  ',
   projectName: 'Projeto P024',
   clientId,
+  baseCurrency: 'BRL',
   classification: 'full_contract',
   status: 'active',
   contractValue: '2260099.66',
@@ -59,9 +60,9 @@ test('P024 parser rejeita campos desconhecidos, moeda atribuível, datas e valor
       error instanceof BadRequestException && error.message.includes('P024_UNKNOWN_FIELD'),
   );
   assert.throws(
-    () => parseProjectCreatePayload({ ...validCreate, baseCurrency: 'USD' }),
+    () => parseProjectCreatePayload({ ...validCreate, baseCurrency: 'EUR' }),
     (error: unknown) =>
-      error instanceof BadRequestException && error.message.includes('P024_IMMUTABLE_FIELD'),
+      error instanceof BadRequestException && error.message.includes('P024_CURRENCY_NOT_ALLOWED'),
   );
   assert.throws(
     () => parseProjectCreatePayload({ ...validCreate, endDate: '2025-12-31' }),
@@ -95,7 +96,7 @@ test('P024 PATCH exige versão, rejeita campos imutáveis e aceita atualização
   );
 });
 
-test('P024 create usa actor transaction, BRL server-side e INSERT parametrizado', async () => {
+test('P024 create usa actor transaction, moeda controlada e INSERT parametrizado', async () => {
   const calls: Array<{ readonly text: string; readonly values: readonly unknown[] }> = [];
   const row = {
     project_id: projectId,
@@ -118,6 +119,7 @@ test('P024 create usa actor transaction, BRL server-side e INSERT parametrizado'
     notes: null,
     version: 1,
     updated_at: '2026-08-31T12:00:00.000Z',
+    currency_available: true,
   };
   type FakeClient = {
     query: <Result>(text: string, values?: readonly unknown[]) => Promise<{ rows: Result[] }>;
@@ -131,8 +133,9 @@ test('P024 create usa actor transaction, BRL server-side e INSERT parametrizado'
       return operation({
         query: async <Result>(text: string, values: readonly unknown[] = []) => {
           calls.push({ text, values });
-          if (text.includes('currencies')) return { rows: [{ available: true } as Result] };
-          if (text.includes('clients') && text.includes('active = true'))
+          if (text.includes('currencies') && text.includes('select exists'))
+            return { rows: [{ available: true } as Result] };
+          if (text.includes('where id = $1::uuid and active = true'))
             return { rows: [{ id: clientId } as Result] };
           if (text.startsWith('insert into')) return { rows: [{ id: projectId } as Result] };
           return { rows: [row as Result] };
@@ -150,7 +153,7 @@ test('P024 create usa actor transaction, BRL server-side e INSERT parametrizado'
   assert.equal(response.version, 1);
   const insert = calls.find((call) => call.text.startsWith('insert into'));
   assert.ok(insert);
-  assert.match(insert.text, /'BRL'/u);
+  assert.ok(insert.values.includes('BRL'));
   assert.ok(!insert.values.includes(actor.appUserId));
 });
 

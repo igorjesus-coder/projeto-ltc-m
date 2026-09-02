@@ -5,19 +5,33 @@ import { NotFoundPage } from '../routes/NotFoundPage';
 import { ProjectDetailPage } from '../routes/ProjectDetailPage';
 import { ProjectsPage } from '../routes/ProjectsPage';
 import { ProjectFormPage } from '../routes/ProjectFormPage';
+import { AdminMasterDataPage } from '../routes/AdminMasterDataPage';
 
 export type AppRoute =
-  'home' | 'projects' | 'project-detail' | 'project-new' | 'project-edit' | 'not-found';
+  | 'home'
+  | 'projects'
+  | 'project-detail'
+  | 'project-new'
+  | 'project-edit'
+  | 'admin-master-data'
+  | 'not-found';
 
 export interface NavigationItem {
   readonly route: Exclude<AppRoute, 'not-found' | 'project-detail'>;
   readonly label: string;
   readonly href: string;
+  readonly capability?: 'catalog:manage';
 }
 
 export const APP_NAVIGATION: readonly NavigationItem[] = Object.freeze([
   { route: 'home', label: 'Início', href: '/' },
   { route: 'projects', label: 'Projetos', href: '/projects' },
+  {
+    route: 'admin-master-data',
+    label: 'Cadastros mestres',
+    href: '/admin/clients',
+    capability: 'catalog:manage',
+  },
 ]);
 
 export interface ResolvedRoute {
@@ -43,6 +57,9 @@ export function resolveRoute(pathname: string, search = ''): ResolvedRoute {
   }
   if (normalized === '/projects') {
     return { id: 'projects', content: <ProjectsPage search={routeSearch} />, protected: true };
+  }
+  if (normalized === '/admin/clients') {
+    return { id: 'admin-master-data', content: <AdminMasterDataPage />, protected: true };
   }
   if (normalized === '/projects/new') {
     return {

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -25,11 +24,15 @@ import {
   parseP012LoopbackDatabaseUrlForTestHarness,
   type P012PostgresTestHarness,
 } from './support/postgres-item-persistence.js';
+import {
+  ADMIN_BOOTSTRAP_MIGRATION,
+  P012_MIGRATION_BASELINE,
+  readMigrationInventory,
+} from './support/migration-inventory.js';
 
 const D12A_DATABASE_URL = process.env['LTCM_P012_TEST_DATABASE_URL'];
 const D12A_LOCAL = D12A_DATABASE_URL !== undefined && D12A_DATABASE_URL !== '';
 const ENABLED = process.env['LTCM_P012_INTEGRATION'] === '1';
-const EXPECTED_MIGRATION_COUNT = 14;
 const EXPECTED_TABLE_COUNT = 19;
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const ADMIN_ID = '00000000-0000-4000-8000-000000012001';
@@ -114,10 +117,11 @@ async function installD12AAdminBeforeRls(client: PoolClient): Promise<void> {
 
 async function applyD12AMigrations(pool: Pool): Promise<boolean> {
   const migrationsDirectory = path.join(REPOSITORY_ROOT, 'supabase', 'migrations');
-  const migrations = (await readdir(migrationsDirectory))
-    .filter((name) => name.endsWith('.sql'))
-    .sort((left, right) => left.localeCompare(right, 'en'));
-  assert.equal(migrations.length, EXPECTED_MIGRATION_COUNT);
+  const migrations = await readMigrationInventory(
+    migrationsDirectory,
+    P012_MIGRATION_BASELINE,
+    'historical',
+  );
   const client = await pool.connect();
   try {
     await assertD12ADatabaseGuard(client);
@@ -126,10 +130,11 @@ async function applyD12AMigrations(pool: Pool): Promise<boolean> {
     );
     const createdSchema = preflight.rows[0]?.['schema_exists'] === false;
     if (createdSchema) {
-      for (const [index, migration] of migrations.entries()) {
-        const sql = await readFile(path.join(migrationsDirectory, migration), 'utf8');
-        await client.query(sql);
-        if (index === 6) await installD12AAdminBeforeRls(client);
+      for (const migration of migrations) {
+        await client.query(migration.sql);
+        if (migration.name === ADMIN_BOOTSTRAP_MIGRATION) {
+          await installD12AAdminBeforeRls(client);
+        }
       }
     } else {
       await installD12AAdminBeforeRls(client);

@@ -125,7 +125,24 @@ begin
         or (select count(*) from ltc_m.import_batch_sheets) <> 0
         or (select count(*) from ltc_m.import_staging_rows) <> 0
         or (select count(*) from ltc_m.import_row_errors) <> 0
-        or (select count(*) from ltc_m.audit_log) <> 0
+        or (select count(*) from ltc_m.audit_log) <> 3
+        or (
+            select count(*)
+            from ltc_m.audit_log
+            where
+                (
+                    table_name = 'ltc_m.currencies'
+                    and record_id in ('BRL', 'USD')
+                    and operation = 'INSERT'::ltc_m.audit_operation
+                    and source = 'system'
+                )
+                or (
+                    table_name = 'ltc_m.units'
+                    and record_id = 'US'
+                    and operation = 'INSERT'::ltc_m.audit_operation
+                    and source = 'system'
+                )
+        ) <> 3
     then
         raise exception 'Estado final CI encontrou fixture operacional persistente.';
     end if;
@@ -161,6 +178,19 @@ select pg_catalog.jsonb_build_object(
     'final_counts', pg_catalog.jsonb_build_object(
         'currencies_brl', (select count(*) from ltc_m.currencies where code = 'BRL'),
         'units_us', (select count(*) from ltc_m.units where code = 'US'),
-        'operational_fixtures', 0
+        'operational_fixtures',
+            (select count(*) from ltc_m.app_users)
+            + (select count(*) from ltc_m.clients)
+            + (select count(*) from ltc_m.projects)
+            + (select count(*) from ltc_m.project_items)
+            + (select count(*) from ltc_m.plan_versions)
+            + (select count(*) from ltc_m.financial_plan_scopes)
+            + (select count(*) from ltc_m.financial_plan_lines)
+            + (select count(*) from ltc_m.financial_actual_events)
+            + (select count(*) from ltc_m.import_batches)
+            + (select count(*) from ltc_m.import_batch_sheets)
+            + (select count(*) from ltc_m.import_staging_rows)
+            + (select count(*) from ltc_m.import_row_errors)
+            + (select count(*) from ltc_m.audit_log) - 3
     )
 ) as ltcm_ci_final_state;

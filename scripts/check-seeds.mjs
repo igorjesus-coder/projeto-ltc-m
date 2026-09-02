@@ -3,12 +3,10 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
-const APPROVED_CURRENCY = Object.freeze({
-  code: 'BRL',
-  name: 'Real brasileiro',
-  decimalPlaces: 2,
-  active: true,
-});
+const APPROVED_CURRENCIES = Object.freeze([
+  Object.freeze({ code: 'BRL', name: 'Real brasileiro', decimalPlaces: 2, active: true }),
+  Object.freeze({ code: 'USD', name: 'Dólar americano', decimalPlaces: 2, active: true }),
+]);
 
 const APPROVED_UNIT = Object.freeze({
   code: 'US',
@@ -118,15 +116,20 @@ function requireTransactionAndLocks(sql, stripped, issues) {
     /from\s+ltc_m\.currencies[\s\S]*?code\s*=\s*'BRL'[\s\S]*?name\s+is\s+distinct\s+from\s+'Real brasileiro'[\s\S]*?decimal_places\s+is\s+distinct\s+from\s+2[\s\S]*?active\s+is\s+distinct\s+from\s+true/i;
   const unitDivergence =
     /from\s+ltc_m\.units[\s\S]*?code\s*=\s*'US'[\s\S]*?name\s+is\s+distinct\s+from\s+'Unidade e Serviço'[\s\S]*?category\s+is\s+not\s+null[\s\S]*?active\s+is\s+distinct\s+from\s+true/i;
+  const usdDivergence =
+    /from\s+ltc_m\.currencies[\s\S]*?code\s*=\s*'USD'[\s\S]*?name\s+is\s+distinct\s+from\s+'Dólar americano'[\s\S]*?decimal_places\s+is\s+distinct\s+from\s+2[\s\S]*?active\s+is\s+distinct\s+from\s+true/i;
 
   if (!currencyDivergence.test(sql)) {
     issues.push('validação completa de divergência de BRL ausente');
   }
+  if (!usdDivergence.test(sql)) {
+    issues.push('P026 USD divergence validation missing');
+  }
   if (!unitDivergence.test(sql)) {
     issues.push('validação completa de divergência de US ausente');
   }
-  if ((sql.match(/\braise\s+exception\b/gi) ?? []).length < 2) {
-    issues.push('divergências de BRL e US devem interromper a execução');
+  if ((sql.match(/\braise\s+exception\b/gi) ?? []).length < 3) {
+    issues.push('divergências de BRL, USD e US devem interromper a execução');
   }
 }
 
@@ -142,14 +145,24 @@ function requireApprovedPayloads(sql, issues) {
     ...sql.matchAll(/\binsert\s+into\s+([a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*)/gi),
   ].map((match) => match[1].toLowerCase());
 
-  if (currencyInserts.length !== 1) {
+  if (currencyInserts.length !== 2) {
     issues.push('deve existir exatamente uma declaração de moeda');
   } else if (
     !/^\s*'BRL'\s*,\s*'Real brasileiro'\s*,\s*2\s*,\s*true\s+where\s+not\s+exists\s*\(\s*select\s+1\s+from\s+ltc_m\.currencies\s+where\s+code\s*=\s*'BRL'\s*\)\s*$/i.test(
       currencyInserts[0],
     )
   ) {
-    issues.push('a moeda deve ser somente BRL = Real brasileiro, 2 casas e ativa');
+    issues.push('o payload da moeda BRL deve ser Real brasileiro, 2 casas e ativo');
+  }
+
+  if (
+    !currencyInserts.some((payload) =>
+      /^\s*'USD'\s*,\s*'Dólar americano'\s*,\s*2\s*,\s*true\s+where\s+not\s+exists\s*\(\s*select\s+1\s+from\s+ltc_m\.currencies\s+where\s+code\s*=\s*'USD'\s*\)\s*$/i.test(
+        payload,
+      ),
+    )
+  ) {
+    issues.push('P026 seed USD payload invalid');
   }
 
   if (unitInserts.length !== 1) {
@@ -165,7 +178,7 @@ function requireApprovedPayloads(sql, issues) {
   if (allInsertTargets.some((target) => !ALLOWED_TABLES.has(target))) {
     issues.push('seed de entidade não aprovada');
   }
-  if (allInsertTargets.length !== 2) {
+  if (allInsertTargets.length !== 3) {
     issues.push('arquivo deve conter somente os dois registros aprovados');
   }
 
@@ -229,16 +242,19 @@ export function scanSeedText(sql) {
 
 export function applyApprovedSeed(state) {
   const next = structuredClone(state);
-  const existingCurrency = next.currencies.find((row) => row.code === APPROVED_CURRENCY.code);
   const existingUnit = next.units.find((row) => row.code === APPROVED_UNIT.code);
 
-  if (
-    existingCurrency &&
-    (existingCurrency.name !== APPROVED_CURRENCY.name ||
-      existingCurrency.decimalPlaces !== APPROVED_CURRENCY.decimalPlaces ||
-      existingCurrency.active !== APPROVED_CURRENCY.active)
-  ) {
-    throw new Error('BRL divergente');
+  for (const approvedCurrency of APPROVED_CURRENCIES) {
+    const existingCurrency = next.currencies.find((row) => row.code === approvedCurrency.code);
+    if (
+      existingCurrency &&
+      (existingCurrency.name !== approvedCurrency.name ||
+        existingCurrency.decimalPlaces !== approvedCurrency.decimalPlaces ||
+        existingCurrency.active !== approvedCurrency.active)
+    ) {
+      throw new Error(`${approvedCurrency.code} divergente`);
+    }
+    if (!existingCurrency) next.currencies.push({ ...approvedCurrency });
   }
   if (
     existingUnit &&
@@ -249,7 +265,6 @@ export function applyApprovedSeed(state) {
     throw new Error('US divergente');
   }
 
-  if (!existingCurrency) next.currencies.push({ ...APPROVED_CURRENCY });
   if (!existingUnit) next.units.push({ ...APPROVED_UNIT });
   return next;
 }
@@ -281,7 +296,7 @@ function main() {
     return;
   }
 
-  console.log('Seed válido: BRL e US');
+  console.log('Seed válido: BRL, USD e US');
 }
 
 const currentFile = fileURLToPath(import.meta.url);

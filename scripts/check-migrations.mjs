@@ -9,6 +9,8 @@ const P009_MIGRATION_NAME = '20260731130000_add_ltcm_import_staging.sql';
 const D40_MIGRATION_NAME = '20260804120000_add_legacy_project_reference_date_exception.sql';
 const P013_MIGRATION_NAME = '20260820120000_add_p013_monthly_baseline_foundation.sql';
 const P021_MIGRATION_NAME = '20260828100000_add_p021_authorization_approver.sql';
+const P026_MIGRATION_NAME = '20260901100000_add_p026_master_data_management.sql';
+const P026_AUDIT_FIX_MIGRATION_NAME = '20260902100000_fix_p026_catalog_audit_identity.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -98,6 +100,10 @@ const P009_COLUMNS = new Map([
 ]);
 
 const D40_COLUMNS = new Map([['projects', new Set(['legacy_import_batch_id'])]]);
+const P026_COLUMNS = new Map([
+  ['currencies', new Set(['updated_at', 'row_version'])],
+  ['units', new Set(['updated_at', 'row_version'])],
+]);
 
 const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.audit_row_change',
@@ -342,7 +348,9 @@ function requireAdditiveAlterTables(sql, issues, scope) {
         ? D40_COLUMNS.get(tableName)
         : scope === 'p009'
           ? P009_COLUMNS.get(tableName)
-          : P007_COLUMNS.get(tableName);
+          : scope === 'p026'
+            ? P026_COLUMNS.get(tableName)
+            : P007_COLUMNS.get(tableName);
 
     if (scope === 'd40') {
       const normalized = statement.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -396,7 +404,8 @@ function requireAdditiveAlterTables(sql, issues, scope) {
         (scope === 'p009' &&
           /^\s*alter\s+table\s+ltc_m\.import_batches\b[\s\S]*?\bdrop\s+constraint\s+ck_import_batches_source_hash\b/i.test(
             statement,
-          ))
+          )) ||
+        scope === 'p026'
       )
     ) {
       issues.push(`DROP CONSTRAINT fora do escopo ${scope.toUpperCase()}`);
@@ -736,25 +745,40 @@ export function extractNamedObjects(sql) {
 export function scanMigrationText(sql, options = {}) {
   const issues = [];
   const scope =
-    options.migrationName === P021_MIGRATION_NAME
-      ? 'p021'
-      : options.migrationName === D40_MIGRATION_NAME
-        ? 'd40'
-        : options.migrationName === P013_MIGRATION_NAME
-          ? 'p013'
-          : options.migrationName === P009_MIGRATION_NAME
-            ? 'p009'
-            : 'p007';
+    options.migrationName === P026_AUDIT_FIX_MIGRATION_NAME
+      ? 'p026-audit-fix'
+      : options.migrationName === P026_MIGRATION_NAME
+        ? 'p026'
+        : options.migrationName === P021_MIGRATION_NAME
+          ? 'p021'
+          : options.migrationName === D40_MIGRATION_NAME
+            ? 'd40'
+            : options.migrationName === P013_MIGRATION_NAME
+              ? 'p013'
+              : options.migrationName === P009_MIGRATION_NAME
+                ? 'p009'
+                : 'p007';
   const stripped = stripSqlNoise(sql);
+  const sqlForForbiddenPatterns =
+    scope === 'p026-audit-fix'
+      ? stripped.replace(
+          /\bdrop\s+trigger\s+(?:if\s+exists\s+)?(?:trg_90_currencies_audit\s+on\s+ltc_m\.currencies|trg_90_units_audit\s+on\s+ltc_m\.units)\b/gi,
+          '',
+        )
+      : stripped;
   const semanticSql = stripped.replace(/\b(?:begin|commit|rollback)\b/gi, '').replace(/[;\s]/g, '');
 
   if (!semanticSql) issues.push('migration vazia');
 
   for (const [pattern, message] of FORBIDDEN_PATTERNS) {
-    if (scope === 'p021' && message === 'policy proibida' && /alter\s+policy/i.test(stripped)) {
+    if (
+      (scope === 'p021' || scope === 'p026') &&
+      message === 'policy proibida' &&
+      /(?:alter|drop)\s+policy/i.test(stripped)
+    ) {
       continue;
     }
-    if (pattern.test(stripped)) issues.push(message);
+    if (pattern.test(sqlForForbiddenPatterns)) issues.push(message);
   }
 
   requireQualifiedObjects(stripped, issues);

@@ -238,14 +238,31 @@ select pg_catalog.jsonb_build_object(
         and (select count(*) from ltc_m.import_batch_sheets) = 0
         and (select count(*) from ltc_m.import_staging_rows) = 0
         and (select count(*) from ltc_m.import_row_errors) = 0
-        and (select count(*) from ltc_m.audit_log) = 0,
+        and (select count(*) from ltc_m.audit_log) = 3
+        and (
+            select count(*)
+            from ltc_m.audit_log
+            where
+                (
+                    table_name = 'ltc_m.currencies'
+                    and record_id in ('BRL', 'USD')
+                    and operation = 'INSERT'::ltc_m.audit_operation
+                    and source = 'system'
+                )
+                or (
+                    table_name = 'ltc_m.units'
+                    and record_id = 'US'
+                    and operation = 'INSERT'::ltc_m.audit_operation
+                    and source = 'system'
+                )
+        ) = 3,
     'operational_rows',
         (select count(*) from ltc_m.app_users)
         + (select count(*) from ltc_m.import_batches)
         + (select count(*) from ltc_m.import_batch_sheets)
         + (select count(*) from ltc_m.import_staging_rows)
         + (select count(*) from ltc_m.import_row_errors)
-        + (select count(*) from ltc_m.audit_log),
+        + (select count(*) from ltc_m.audit_log) - 3,
     'relevant_advisory_locks', (
         select count(*)
         from pg_catalog.pg_locks

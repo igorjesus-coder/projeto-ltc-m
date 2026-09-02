@@ -1,21 +1,21 @@
 {
   "schemaContract": "ltcm.p017.schema-integrity.v1",
   "fingerprintContract": "ltcm.p017.schema-fingerprint.v1",
-  "migrationCount": 14,
-  "fingerprint": "b6d71494c7e561aea68b26ed6f658ed5e25fc72ea6b6b45a1bff4ffbc03f4893",
+  "migrationCount": 16,
+  "fingerprint": "53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47",
   "summary": {
     "relationCount": 28,
     "tableCount": 19,
     "viewCount": 9,
     "materializedViewCount": 0,
-    "columnCount": 482,
+    "columnCount": 486,
     "functionCount": 23,
-    "triggerCount": 60,
+    "triggerCount": 66,
     "indexCount": 79,
     "primaryKeyCount": 19,
     "uniqueConstraintCount": 20,
     "foreignKeyCount": 54,
-    "checkConstraintCount": 98,
+    "checkConstraintCount": 100,
     "protectedRlsTableCount": 19,
     "forceRlsTableCount": 19,
     "policyCount": 49,
@@ -421,6 +421,24 @@
             "type": "boolean",
             "nullable": false,
             "default": "true",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 5,
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 6,
+            "name": "row_version",
+            "type": "bigint",
+            "nullable": false,
+            "default": "1",
             "generated": null,
             "comment": null
           }
@@ -2817,6 +2835,24 @@
             "default": "true",
             "generated": null,
             "comment": null
+          },
+          {
+            "position": 5,
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 6,
+            "name": "row_version",
+            "type": "bigint",
+            "nullable": false,
+            "default": "1",
+            "generated": null,
+            "comment": null
           }
         ]
       },
@@ -5074,6 +5110,19 @@
         "referencedTable": null,
         "referencedColumns": [],
         "definition": "CHECK (btrim(name) <> ''::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "currencies",
+        "name": "ck_currencies_row_version",
+        "type": "check",
+        "columns": [
+          "row_version"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (row_version > 0)"
       },
       {
         "schema": "ltc_m",
@@ -7444,6 +7493,19 @@
       {
         "schema": "ltc_m",
         "table": "units",
+        "name": "ck_units_row_version",
+        "type": "check",
+        "columns": [
+          "row_version"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (row_version > 0)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "units",
         "name": "units_pkey",
         "type": "primary_key",
         "columns": [
@@ -8268,7 +8330,7 @@
         "language": "plpgsql",
         "securityDefiner": true,
         "volatility": "volatile",
-        "definitionHash": "021245a75c8d0d45ea6f091244168bc1ff8c2856c77eba3362f8cda84ff35c18"
+        "definitionHash": "53fd3398f67cb64a5e44aa09deaf1ce6c7cc9edffb7f2d1ba3782d4b4ae6cd86"
       },
       {
         "schema": "ltc_m",
@@ -8356,7 +8418,7 @@
         "language": "plpgsql",
         "securityDefiner": false,
         "volatility": "volatile",
-        "definitionHash": "40c431f2f612a37299e916dac9a585aa68bdc4239f8408d057699c02c40df13b"
+        "definitionHash": "0d3f9733593e0cfc094cb9bd9c51d3294a885d8484d31af625f359f27f5329d2"
       },
       {
         "schema": "ltc_m",
@@ -8562,6 +8624,24 @@
         "table": "currencies",
         "name": "trg_00_currencies_no_delete",
         "definition": "CREATE TRIGGER trg_00_currencies_no_delete BEFORE DELETE ON ltc_m.currencies FOR EACH ROW EXECUTE FUNCTION ltc_m.prevent_physical_delete()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "currencies",
+        "name": "trg_05_currencies_inactivation",
+        "definition": "CREATE TRIGGER trg_05_currencies_inactivation BEFORE UPDATE ON ltc_m.currencies FOR EACH ROW EXECUTE FUNCTION ltc_m.enforce_admin_inactivation()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "currencies",
+        "name": "trg_10_currencies_metadata",
+        "definition": "CREATE TRIGGER trg_10_currencies_metadata BEFORE INSERT OR UPDATE ON ltc_m.currencies FOR EACH ROW EXECUTE FUNCTION ltc_m.maintain_row_metadata('row_version')"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "currencies",
+        "name": "trg_90_currencies_audit",
+        "definition": "CREATE TRIGGER trg_90_currencies_audit AFTER INSERT OR DELETE OR UPDATE ON ltc_m.currencies FOR EACH ROW EXECUTE FUNCTION ltc_m.audit_row_change('code')"
       },
       {
         "schema": "ltc_m",
@@ -8862,6 +8942,24 @@
         "table": "units",
         "name": "trg_00_units_no_delete",
         "definition": "CREATE TRIGGER trg_00_units_no_delete BEFORE DELETE ON ltc_m.units FOR EACH ROW EXECUTE FUNCTION ltc_m.prevent_physical_delete()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "units",
+        "name": "trg_05_units_inactivation",
+        "definition": "CREATE TRIGGER trg_05_units_inactivation BEFORE UPDATE ON ltc_m.units FOR EACH ROW EXECUTE FUNCTION ltc_m.enforce_admin_inactivation()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "units",
+        "name": "trg_10_units_metadata",
+        "definition": "CREATE TRIGGER trg_10_units_metadata BEFORE INSERT OR UPDATE ON ltc_m.units FOR EACH ROW EXECUTE FUNCTION ltc_m.maintain_row_metadata('row_version')"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "units",
+        "name": "trg_90_units_audit",
+        "definition": "CREATE TRIGGER trg_90_units_audit AFTER INSERT OR DELETE OR UPDATE ON ltc_m.units FOR EACH ROW EXECUTE FUNCTION ltc_m.audit_row_change('code')"
       }
     ],
     "policies": [
@@ -8911,7 +9009,7 @@
           "ltc_m_runtime"
         ],
         "using": null,
-        "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role OR authorization_context.app_role = 'editor'::ltc_m.app_role AND clients.active = true AND clients.deleted_at IS NULL))"
+        "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role))"
       },
       {
         "schema": "ltc_m",
@@ -8934,8 +9032,8 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role OR authorization_context.app_role = 'editor'::ltc_m.app_role AND clients.active = true AND clients.deleted_at IS NULL))",
-        "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role OR authorization_context.app_role = 'editor'::ltc_m.app_role AND clients.active = true AND clients.deleted_at IS NULL))"
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role))",
+        "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role))"
       },
       {
         "schema": "ltc_m",

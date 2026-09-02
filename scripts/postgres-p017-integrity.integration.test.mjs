@@ -14,7 +14,6 @@ const ISOLATED = process.env.LTCM_P017_ISOLATED_CLUSTER === '1';
 const DATABASE_URL = process.env.LTCM_P017_DATABASE_URL;
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SNAPSHOT_PATH = path.join(ROOT, 'docs', 'database', 'p017-schema-model.json');
-const MIGRATION_COUNT = 14;
 const P021_POLICY_NAMES = new Set([
   'plan_versions_select',
   'financial_plan_scopes_select',
@@ -97,12 +96,12 @@ function isolatedDatabaseUrl() {
   return DATABASE_URL;
 }
 
-async function migrationInventory() {
+async function migrationInventory(expectedMigrationCount) {
   const directory = path.join(ROOT, 'supabase', 'migrations');
   const names = (await readdir(directory))
     .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
     .sort((left, right) => left.localeCompare(right, 'en'));
-  assert.equal(names.length, MIGRATION_COUNT);
+  assert.equal(names.length, expectedMigrationCount);
   assert.equal(new Set(names.map((name) => name.slice(0, 14))).size, names.length);
   return Promise.all(
     names.map(async (name) => ({ name, sql: await readFile(path.join(directory, name), 'utf8') })),
@@ -151,13 +150,13 @@ async function installAdmin(client) {
   }
 }
 
-async function rebuildFromZero(pool) {
+async function rebuildFromZero(pool, expectedMigrationCount) {
   const client = await pool.connect();
   let currentMigration = 'preflight';
   try {
     await assertEnvironment(client);
     await client.query('drop schema if exists ltc_m cascade');
-    for (const migration of await migrationInventory()) {
+    for (const migration of await migrationInventory(expectedMigrationCount)) {
       currentMigration = migration.name;
       await client.query(migration.sql);
       if (migration.name === '20260731103000_add_ltcm_audit_read_event.sql') {
@@ -439,10 +438,10 @@ async function assertSecurityAndViews(pool, snapshot) {
 }
 
 async function executePass(pool, expectedSnapshot) {
-  await rebuildFromZero(pool);
+  await rebuildFromZero(pool, expectedSnapshot.migrationCount);
   const initialSnapshot = createSnapshot(
     projectP017Baseline(await collectSchemaModel(pool), expectedSnapshot.model),
-    MIGRATION_COUNT,
+    expectedSnapshot.migrationCount,
   );
   assert.deepEqual(initialSnapshot, expectedSnapshot);
   await applySeed(pool);
@@ -453,7 +452,7 @@ async function executePass(pool, expectedSnapshot) {
   const secondState = await businessState(pool);
   assert.deepEqual(secondState, firstState);
   assert.deepEqual(secondState, {
-    currencies: 1,
+    currencies: 2,
     units: 1,
     clients: 1,
     projects: 1,
@@ -471,7 +470,7 @@ async function executePass(pool, expectedSnapshot) {
   await assertSecurityAndViews(pool, expectedSnapshot);
   const finalSnapshot = createSnapshot(
     projectP017Baseline(await collectSchemaModel(pool), expectedSnapshot.model),
-    MIGRATION_COUNT,
+    expectedSnapshot.migrationCount,
   );
   assert.deepEqual(finalSnapshot, expectedSnapshot);
   return secondState;
@@ -489,7 +488,7 @@ test(
       assert.deepEqual(secondPass, firstPass);
     } finally {
       await pool.query('revoke ltc_m_runtime from postgres').catch(() => undefined);
-      await rebuildFromZero(pool);
+      await rebuildFromZero(pool, expectedSnapshot.migrationCount);
       const cleanup = await pool.query(
         `select
            (select count(*) from ltc_m.projects)::integer as projects,

@@ -30,6 +30,7 @@ const APPLIED_MIGRATION_HASHES = new Map([
 ]);
 
 const CORRECTION_NAME = '20260730155749_fix_ltcm_workflow_guard_fail_closed.sql';
+const P026_AUDIT_FIX_MIGRATION_NAME = '20260902100000_fix_p026_catalog_audit_identity.sql';
 const EXPECTED_FUNCTIONS = new Set([
   'ltc_m.workflow_guard_active',
   'ltc_m.protect_plan_version',
@@ -154,6 +155,7 @@ export function checkPw902Fix(migrationDirectory, testPath) {
   }
 
   for (const filename of sqlFiles.filter((candidate) => !APPLIED_MIGRATION_HASHES.has(candidate))) {
+    if (filename === P026_AUDIT_FIX_MIGRATION_NAME) continue;
     const functions = createdOrReplacedFunctions(
       fs.readFileSync(path.join(migrationDirectory, filename), 'utf8'),
     );

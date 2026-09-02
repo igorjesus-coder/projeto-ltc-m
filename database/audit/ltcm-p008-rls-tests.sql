@@ -207,9 +207,9 @@ begin
 {"schemaname":"ltc_m","tablename":"app_users","policyname":"app_users_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
 {"schemaname":"ltc_m","tablename":"app_users","policyname":"app_users_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"20e95a3739a4783610028009b4d5bfc5","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
 {"schemaname":"ltc_m","tablename":"app_users","policyname":"app_users_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"b8e8fac0047b1d3cf781a94a5f46c433","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
-{"schemaname":"ltc_m","tablename":"clients","policyname":"clients_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"cc5122562461ce1005582aa3a962c44e"},
+{"schemaname":"ltc_m","tablename":"clients","policyname":"clients_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
 {"schemaname":"ltc_m","tablename":"clients","policyname":"clients_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"4231ffa7bd1ae6a0cb1fdd50802b83e3","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
-{"schemaname":"ltc_m","tablename":"clients","policyname":"clients_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"cc5122562461ce1005582aa3a962c44e","with_check_md5":"cc5122562461ce1005582aa3a962c44e"},
+{"schemaname":"ltc_m","tablename":"clients","policyname":"clients_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"b8e8fac0047b1d3cf781a94a5f46c433","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
 {"schemaname":"ltc_m","tablename":"currencies","policyname":"currencies_insert","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"INSERT","qual_md5":"d41d8cd98f00b204e9800998ecf8427e","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
 {"schemaname":"ltc_m","tablename":"currencies","policyname":"currencies_select","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"SELECT","qual_md5":"e7809db2abd45631be170ea3d918f3ba","with_check_md5":"d41d8cd98f00b204e9800998ecf8427e"},
 {"schemaname":"ltc_m","tablename":"currencies","policyname":"currencies_update","permissive":"PERMISSIVE","roles":"{ltc_m_runtime}","cmd":"UPDATE","qual_md5":"b8e8fac0047b1d3cf781a94a5f46c433","with_check_md5":"b8e8fac0047b1d3cf781a94a5f46c433"},
@@ -723,7 +723,7 @@ begin
         raise exception 'P008 falhou: viewer visualizou outros usuários.';
     end if;
     select count(*) into v_count from ltc_m.currencies;
-    if v_count <> 1 then
+    if v_count <> 2 then
         raise exception 'P008 falhou: viewer não leu BRL.';
     end if;
     select count(*) into v_count from ltc_m.units;
@@ -804,18 +804,36 @@ declare
     v_batch_id uuid;
     v_plan_id uuid := '00000000-0000-4000-8000-000000008405';
     v_count integer;
+    v_rows integer;
 begin
     select count(*) into v_count from ltc_m.plan_versions;
     if v_count <> 4 then
         raise exception 'P008 falhou: editor não leu todos os estados autorizados.';
     end if;
 
-    insert into ltc_m.clients (legal_name, display_name)
-    values ('P008 Editor Client', 'P008 Editor Client')
-    returning id into v_client_id;
+    begin
+        insert into ltc_m.clients (legal_name, display_name)
+        values ('P008 Editor Client', 'P008 Editor Client');
+        raise exception 'P008 falhou: editor administrou cadastro.';
+    exception
+        when insufficient_privilege then null;
+    end;
+
+    select clients.id
+    into v_client_id
+    from ltc_m.clients
+    where clients.id = '00000000-0000-4000-8000-000000008101';
+    if v_client_id is null then
+        raise exception 'P008 falhou: cliente sintético do editor ausente.';
+    end if;
+
     update ltc_m.clients
     set display_name = 'P008 Editor Client Updated'
     where clients.id = v_client_id;
+    get diagnostics v_rows = row_count;
+    if v_rows <> 0 then
+        raise exception 'P008 falhou: editor alterou cadastro.';
+    end if;
 
     insert into ltc_m.projects (
         project_code, project_name, client_id, status, base_currency,
@@ -842,7 +860,10 @@ begin
         update ltc_m.clients
         set active = false
         where clients.id = v_client_id;
-        raise exception 'P008 falhou: editor inativou cliente.';
+        get diagnostics v_rows = row_count;
+        if v_rows <> 0 then
+            raise exception 'P008 falhou: editor inativou cliente.';
+        end if;
     exception
         when insufficient_privilege then null;
     end;

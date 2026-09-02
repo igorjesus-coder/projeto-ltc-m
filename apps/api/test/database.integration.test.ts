@@ -11,7 +11,8 @@ const ENABLED = process.env['LTCM_P019_INTEGRATION'] === '1';
 const ADMIN_DATABASE_URL = process.env['LTCM_P019_DATABASE_URL'];
 const RUNTIME_ROLE = 'p019_runtime_test';
 const RUNTIME_PASSWORD = 'p019_ci_local_only';
-const ADMIN_ID = '00000000-0000-4000-8000-000000017001';
+const P019_ADMIN_ID = '00000000-0000-4000-8000-000000019001';
+const P019_ADMIN_SUBJECT = 'ci-p019|admin';
 
 function isolatedAdminUrl(): string {
   if (!ENABLED) return '';
@@ -45,6 +46,25 @@ function runtimeUrl(adminUrl: string): string {
   return parsed.toString();
 }
 
+async function installP019Admin(admin: Pool): Promise<void> {
+  await admin.query('begin');
+  try {
+    await admin.query(
+      `select ltc_m.set_actor_context(null, null, 'p019-bootstrap', null, 'system', false)`,
+    );
+    await admin.query(
+      `insert into ltc_m.app_users (id, auth_subject, full_name, role, active)
+       values ($1::uuid, $2::text, 'P019 Synthetic Admin', 'admin', true)
+       on conflict (id) do nothing`,
+      [P019_ADMIN_ID, P019_ADMIN_SUBJECT],
+    );
+    await admin.query('commit');
+  } catch (error) {
+    await admin.query('rollback').catch(() => undefined);
+    throw error;
+  }
+}
+
 test(
   'P019 isola pool, transação, contexto P008 e FORCE RLS em PostgreSQL 17 from-zero',
   { skip: !ENABLED },
@@ -53,22 +73,23 @@ test(
     const admin = new Pool({ connectionString: adminUrl, max: 1 });
     let databasePool: ReturnType<typeof createDatabasePool> | undefined;
     try {
+      await installP019Admin(admin);
       const environment = await admin.query<{
         database_name: string;
         server_version_num: string;
-        admin_exists: boolean;
+        p019_admin_exists: boolean;
       }>(
         `select current_database() as database_name,
                 current_setting('server_version_num') as server_version_num,
                 exists (
                   select 1 from ltc_m.app_users
-                   where id = $1::uuid and auth_subject = 'ci-p017|admin' and active
-                ) as admin_exists`,
-        [ADMIN_ID],
+                   where id = $1::uuid and auth_subject = $2::text and active
+                ) as p019_admin_exists`,
+        [P019_ADMIN_ID, P019_ADMIN_SUBJECT],
       );
       assert.equal(environment.rows[0]?.database_name, 'ltcm_test');
       assert.match(environment.rows[0]?.server_version_num ?? '', /^17/u);
-      assert.equal(environment.rows[0]?.admin_exists, true);
+      assert.equal(environment.rows[0]?.p019_admin_exists, true);
 
       await admin.query(`drop role if exists ${RUNTIME_ROLE}`);
       await admin.query(
@@ -110,8 +131,8 @@ test(
       const actor = await withActorTransaction(
         databasePool,
         {
-          appUserId: ADMIN_ID,
-          authSubject: 'ci-p017|admin',
+          appUserId: P019_ADMIN_ID,
+          authSubject: P019_ADMIN_SUBJECT,
           requestId: 'p019-valid-context',
           source: 'api',
         },
@@ -127,7 +148,7 @@ test(
           return result.rows[0];
         },
       );
-      assert.equal(actor?.app_user_id, ADMIN_ID);
+      assert.equal(actor?.app_user_id, P019_ADMIN_ID);
       assert.equal(actor?.app_role, 'admin');
       actorBackendPid = actor?.backend_pid ?? 0;
 

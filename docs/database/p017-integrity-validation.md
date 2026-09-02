@@ -2,25 +2,25 @@
 
 Contrato do schema: `ltcm.p017.schema-integrity.v1`
 Contrato do fingerprint: `ltcm.p017.schema-fingerprint.v1`
-Fingerprint nominal: `b6d71494c7e561aea68b26ed6f658ed5e25fc72ea6b6b45a1bff4ffbc03f4893`
+Fingerprint nominal: `53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47`
 
 ## Inventário nominal
 
 | Medida | Quantidade |
 | --- | ---: |
-| `migrationCount` | 14 |
+| `migrationCount` | 16 |
 | `relationCount` | 28 |
 | `tableCount` | 19 |
 | `viewCount` | 9 |
 | `materializedViewCount` | 0 |
-| `columnCount` | 482 |
+| `columnCount` | 486 |
 | `functionCount` | 23 |
-| `triggerCount` | 60 |
+| `triggerCount` | 66 |
 | `indexCount` | 79 |
 | `primaryKeyCount` | 19 |
 | `uniqueConstraintCount` | 20 |
 | `foreignKeyCount` | 54 |
-| `checkConstraintCount` | 98 |
+| `checkConstraintCount` | 100 |
 | `protectedRlsTableCount` | 19 |
 | `forceRlsTableCount` | 19 |
 | `policyCount` | 49 |
@@ -50,7 +50,7 @@ duas vezes sobre o mesmo schema.
 
 ## Bootstrap e seeds
 
-- `supabase/seed.sql`: `IDEMPOTENT`, restrito a BRL e US.
+- `supabase/seed.sql`: `IDEMPOTENT`, preserva as moedas BRL e USD e o código histórico de unidade US.
 - bootstrap de roles do CI: `ONE_SHOT_BUT_GUARDED`, com preflight e cleanup.
 - fixtures PostgreSQL P012–P017: `TEST_ONLY` e sintéticas.
 - dados de produção ou `.local-source`: `NOT_APPLICABLE` para P017.

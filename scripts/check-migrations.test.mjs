@@ -44,7 +44,18 @@ test('aceita os artefatos RLS P008 versionados', () => {
   const result = checkMigrations(migrationsDirectory);
 
   assert.deepEqual(result.issues, []);
-  assert.equal(result.files.length, 14);
+  assert.equal(result.files.length, 16);
+});
+
+test('P026-D21 aceita somente a correção auditável de identidade dos catálogos', () => {
+  const migrationName = '20260902100000_fix_p026_catalog_audit_identity.sql';
+  const sql = fs.readFileSync(path.resolve('supabase', 'migrations', migrationName), 'utf8');
+
+  assert.deepEqual(scanMigrationText(sql, { migrationName }), []);
+  assert.match(sql, /tg_nargs[\s\S]*tg_argv/iu);
+  assert.match(sql, /audit_row_change\('code'\)/iu);
+  assert.match(sql, /drop trigger trg_90_currencies_audit on ltc_m\.currencies/iu);
+  assert.match(sql, /drop trigger trg_90_units_audit on ltc_m\.units/iu);
 });
 
 test('aceita somente o contrato nominal da migration D40', () => {

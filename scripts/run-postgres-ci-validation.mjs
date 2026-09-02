@@ -259,11 +259,13 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       p013_postgres: false,
       p016_postgres: false,
       p017_postgres: false,
+      p026_postgres: false,
       p019_postgres: false,
     },
     p013_postgres: null,
     p016_postgres: null,
     p017_postgres: null,
+    p026_postgres: null,
     p019_postgres: null,
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
@@ -521,6 +523,40 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         'nine_tableau_views',
         'documentation_inventory',
         'cleanup',
+      ],
+      cleanup: 'pending',
+    };
+    runStage('p026_postgres', () =>
+      runProcess(
+        'node',
+        ['--test', path.join('scripts', 'postgres-p026-audit.integration.test.mjs')],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P026_INTEGRATION: '1',
+            LTCM_P026_ISOLATED_CLUSTER: '1',
+            LTCM_P026_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p026_postgres = true;
+    evidence.p026_postgres = {
+      passed: true,
+      cluster_mode: 'isolated_docker',
+      database: P013_DATABASE,
+      host_class: 'loopback',
+      postgres_major: 17,
+      command: 'node --test scripts/postgres-p026-audit.integration.test.mjs',
+      coverage: [
+        'catalog_insert_update_audit_identity',
+        'clients_uuid_audit_identity',
+        'record_id_not_null_or_blank',
+        'rls_force_rls',
+        'runtime_delete_prohibition',
+        'missing_identity_fail_closed',
       ],
       cleanup: 'pending',
     };
@@ -796,6 +832,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }
       if (evidence.p017_postgres) {
         evidence.p017_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
+      }
+      if (evidence.p026_postgres) {
+        evidence.p026_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
       }
       if (evidence.p019_postgres) {
         evidence.p019_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';

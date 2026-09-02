@@ -25,8 +25,10 @@ import {
   CLASSIFICATION_LABELS,
   parseProjectOptions,
   parseProjectWriteResponse,
+  PROJECT_CURRENCIES,
   PROJECT_CLASSIFICATIONS,
   type ProjectClassification,
+  type ProjectCurrency,
   type ProjectOptionsResponse,
   type ProjectWriteResponse,
 } from '../projects/project-create-edit';
@@ -35,6 +37,7 @@ interface FormValues {
   projectCode: string;
   projectName: string;
   clientId: string;
+  baseCurrency: string;
   reportingGroup: string;
   classification: string;
   status: string;
@@ -63,6 +66,7 @@ const EMPTY_VALUES: FormValues = {
   projectCode: '',
   projectName: '',
   clientId: '',
+  baseCurrency: 'BRL',
   reportingGroup: '',
   classification: '',
   status: 'active',
@@ -91,6 +95,7 @@ function valuesFromProject(project: ProjectWriteResponse): FormValues {
     projectCode: project.projectCode,
     projectName: project.projectName,
     clientId: project.client.id,
+    baseCurrency: project.baseCurrency,
     reportingGroup: project.reportingGroup ?? '',
     classification: project.classification,
     status: project.status,
@@ -134,6 +139,9 @@ function validate(values: FormValues, editor: boolean): FormErrors {
   if (!values.projectCode.trim()) errors.projectCode = 'Informe o código do projeto.';
   if (!values.projectName.trim()) errors.projectName = 'Informe o nome do projeto.';
   if (!values.clientId) errors.clientId = 'Selecione um cliente ativo.';
+  if (!PROJECT_CURRENCIES.includes(values.baseCurrency as ProjectCurrency)) {
+    errors.baseCurrency = 'Selecione uma moeda permitida.';
+  }
   if (!values.classification) errors.classification = 'Selecione uma classificação.';
   if (!PROJECT_CLASSIFICATIONS.includes(values.classification as ProjectClassification)) {
     errors.classification = 'Classificação inválida.';
@@ -289,6 +297,7 @@ export function ProjectFormPage({
           projectCode: values.projectCode.trim(),
           projectName: values.projectName.trim(),
           clientId: values.clientId,
+          baseCurrency: values.baseCurrency,
           reportingGroup: nullable(values.reportingGroup),
           classification: values.classification,
           status: editor ? 'active' : values.status,
@@ -309,6 +318,7 @@ export function ProjectFormPage({
         const fields: Array<keyof FormValues> = [
           'projectName',
           'clientId',
+          'baseCurrency',
           'reportingGroup',
           'classification',
           'status',
@@ -357,6 +367,7 @@ export function ProjectFormPage({
   const title = mode === 'create' ? 'Novo projeto' : 'Editar projeto';
   const currentProject = state.kind === 'ready' ? state.project : undefined;
   const currentClientUnavailable = Boolean(currentProject && !currentProject.client.available);
+  const currentCurrencyUnavailable = Boolean(currentProject && !currentProject.currencyAvailable);
   return (
     <>
       <PageHeader
@@ -517,9 +528,26 @@ export function ProjectFormPage({
             <Field
               id="project-currency"
               label="Moeda"
-              help="Baseline P024: moeda única BRL, sem conversão cambial."
+              required
+              error={errors.baseCurrency}
+              help="P026 permite somente BRL e USD; a troca não converte valores."
             >
-              <Input id="project-currency" value="BRL" readOnly />
+              <Select
+                id="project-currency"
+                value={values.baseCurrency}
+                onChange={(event) => update('baseCurrency', fieldValue(event))}
+              >
+                {currentCurrencyUnavailable ? (
+                  <option value={values.baseCurrency} disabled>
+                    {values.baseCurrency} (inativa)
+                  </option>
+                ) : null}
+                {state.options.currencies.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {currency.code} — {currency.name}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <Field
               id="project-contract-value"
@@ -615,7 +643,12 @@ export function ProjectFormPage({
             <Button
               type="submit"
               variant="primary"
-              disabled={pending || !canWrite || state.options.clients.length === 0}
+              disabled={
+                pending ||
+                !canWrite ||
+                state.options.clients.length === 0 ||
+                state.options.currencies.length === 0
+              }
             >
               {pending ? 'Salvando…' : 'Salvar projeto'}
             </Button>

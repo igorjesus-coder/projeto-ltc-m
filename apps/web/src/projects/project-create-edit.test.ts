@@ -7,12 +7,18 @@ describe('contrato P024 no frontend', () => {
     expect(
       parseProjectOptions({
         contract: 'ltcm.p024.project-create-edit.v1',
-        baseCurrency: 'BRL',
+        currencies: [
+          { code: 'BRL', name: 'Real brasileiro' },
+          { code: 'USD', name: 'Dólar americano' },
+        ],
         clients: [{ id: 'client-1', displayName: 'Cliente 1' }],
       }),
     ).toEqual({
       contract: 'ltcm.p024.project-create-edit.v1',
-      baseCurrency: 'BRL',
+      currencies: [
+        { code: 'BRL', name: 'Real brasileiro' },
+        { code: 'USD', name: 'Dólar americano' },
+      ],
       clients: [{ id: 'client-1', displayName: 'Cliente 1' }],
     });
   });
@@ -21,7 +27,7 @@ describe('contrato P024 no frontend', () => {
     expect(() =>
       parseProjectOptions({
         contract: 'ltcm.p024.project-create-edit.v1',
-        baseCurrency: 'USD',
+        currencies: [{ code: 'EUR', name: 'Euro' }],
         clients: [],
       }),
     ).toThrow('P024_RESPONSE_INVALID');
