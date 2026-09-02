@@ -413,7 +413,32 @@ export function ProjectItemsGrid({ projectId }: { readonly projectId: string }) 
                             </Button>
                           </PermissionGate>
                         ) : (
-                          <span>Inativo</span>
+                          <>
+                            <span>Inativo</span>
+                            <PermissionGate capability="soft_delete:restore">
+                              <Button
+                                type="button"
+                                disabled={pending}
+                                onClick={() => {
+                                  if (!apiClient) return;
+                                  void reloadAfter(
+                                    () =>
+                                      apiClient.sendJson(
+                                        `/projects/${encodeURIComponent(projectId)}/items/${encodeURIComponent(item.id)}/reactivate`,
+                                        'POST',
+                                        {
+                                          expectedVersion: item.rowVersion,
+                                          justification: 'Reativação solicitada na grade P028.',
+                                        },
+                                      ),
+                                    'Item reativado.',
+                                  );
+                                }}
+                              >
+                                Reativar
+                              </Button>
+                            </PermissionGate>
+                          </>
                         )}
                         {item.active ? (
                           <PermissionGate capability="record:create">

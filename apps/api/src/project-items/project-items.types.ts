@@ -1,6 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 
 export const P027_PROJECT_ITEMS_CONTRACT = 'ltcm.p027.project-items-crud.v1' as const;
+export const P028_PROJECT_ITEMS_LIFECYCLE_CONTRACT =
+  'ltcm.p028.project-items-lifecycle.v1' as const;
 export const P027_CURRENCIES = ['BRL', 'USD'] as const;
 export type P027Currency = (typeof P027_CURRENCIES)[number];
 
@@ -22,6 +24,11 @@ export interface ProjectItemDuplicatePayload {
 }
 
 export interface ProjectItemInactivatePayload {
+  readonly expectedVersion: number;
+  readonly justification: string;
+}
+
+export interface ProjectItemReactivatePayload {
   readonly expectedVersion: number;
   readonly justification: string;
 }
@@ -75,6 +82,7 @@ const CREATE_FIELDS = new Set([
 const PATCH_FIELDS = new Set([...CREATE_FIELDS, 'expectedVersion']);
 const DUPLICATE_FIELDS = new Set(['expectedVersion']);
 const INACTIVATE_FIELDS = new Set(['expectedVersion', 'justification']);
+const REACTIVATE_FIELDS = new Set(['expectedVersion', 'justification']);
 
 function invalid(code: string): never {
   throw new BadRequestException(code);
@@ -190,6 +198,15 @@ export function parseProjectItemDuplicatePayload(value: unknown): ProjectItemDup
 export function parseProjectItemInactivatePayload(value: unknown): ProjectItemInactivatePayload {
   const body = object(value);
   keys(body, INACTIVATE_FIELDS);
+  return {
+    expectedVersion: version(body['expectedVersion']),
+    justification: text(body['justification'], 'JUSTIFICATION', 2_000),
+  };
+}
+
+export function parseProjectItemReactivatePayload(value: unknown): ProjectItemReactivatePayload {
+  const body = object(value);
+  keys(body, REACTIVATE_FIELDS);
   return {
     expectedVersion: version(body['expectedVersion']),
     justification: text(body['justification'], 'JUSTIFICATION', 2_000),

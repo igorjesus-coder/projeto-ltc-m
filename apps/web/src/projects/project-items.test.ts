@@ -49,6 +49,29 @@ describe('P027 project items contract', () => {
     expect(formatProjectItemMoney('21.00', 'BRL')).toContain('21,00');
   });
 
+  it('preserves inactive historical items and their catalog references', () => {
+    const response = parseProjectItemsResponse({
+      contract: P027_PROJECT_ITEMS_CONTRACT,
+      projectId: item.projectId,
+      projectCurrency: 'BRL',
+      projectCurrencyAvailable: true,
+      units: [{ code: 'UN', name: 'Unidade histórica', active: false }],
+      items: [
+        {
+          ...item,
+          active: false,
+          unitAvailable: false,
+          currencyAvailable: false,
+        },
+      ],
+    });
+
+    expect(response.items[0]?.active).toBe(false);
+    expect(response.items[0]?.sourceLineKey).toBe(item.sourceLineKey);
+    expect(response.items[0]?.unitAvailable).toBe(false);
+    expect(response.items[0]?.currencyAvailable).toBe(false);
+  });
+
   it('rejects an invalid contract, currency or decimal response', () => {
     expect(() => parseProjectItemsResponse({ contract: 'wrong', units: [], items: [] })).toThrow(
       'P027_RESPONSE_INVALID',
