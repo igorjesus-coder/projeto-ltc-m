@@ -757,6 +757,110 @@ textarea.form-control {
   padding: 22px;
 }
 
+.project-items-panel {
+  margin-top: var(--space-7);
+}
+
+.project-items-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-5);
+  justify-content: space-between;
+}
+
+.project-items-heading h2,
+.project-items-create-form h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.project-items-notice {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+  margin: var(--space-2) 0 0;
+}
+
+.project-items-create-form,
+.project-items-edit-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  margin-top: var(--space-5);
+  padding: 18px 22px;
+}
+
+.project-items-form-grid {
+  display: grid;
+  gap: 0 var(--space-4);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.project-items-form-grid .field {
+  max-width: none;
+}
+
+.project-items-form-grid .field:nth-child(1),
+.project-items-form-grid .field:nth-child(2) {
+  grid-column: span 2;
+}
+
+.project-items-table-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  margin-top: var(--space-6);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.project-items-table {
+  border-collapse: collapse;
+  min-width: 1050px;
+  width: 100%;
+}
+
+.project-items-table th,
+.project-items-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.project-items-table thead th {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.project-items-table caption {
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.project-items-table .project-item-inactive {
+  background: #f7f4f1;
+  color: var(--color-text-muted);
+}
+
+.project-items-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 190px;
+}
+
+.project-items-actions .button {
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.project-items-edit-form .project-items-form-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .error-panel {
   border-left: 4px solid var(--color-danger);
 }
@@ -807,8 +911,15 @@ textarea.form-control {
 }
 
 @media (max-width: 760px) {
-  .project-form-grid {
+  .project-form-grid,
+  .project-items-form-grid,
+  .project-items-edit-form .project-items-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .project-items-form-grid .field:nth-child(1),
+  .project-items-form-grid .field:nth-child(2) {
+    grid-column: auto;
   }
 
   .desktop-navigation {

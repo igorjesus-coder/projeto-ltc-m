@@ -18,6 +18,7 @@ import {
   type ProjectDetail,
 } from '../projects/project-portfolio';
 import { getSafeReturnTo } from '../auth/navigation';
+import { ProjectItemsGrid } from './ProjectItemsGrid';
 
 type DetailState =
   | { readonly key: string; readonly kind: 'loading' }
@@ -183,6 +184,7 @@ export function ProjectDetailPage({
           </PermissionGate>
         </section>
       ) : null}
+      {visibleState.kind === 'success' ? <ProjectItemsGrid projectId={projectId} /> : null}
     </>
   );
 }
