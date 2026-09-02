@@ -804,6 +804,7 @@ declare
     v_batch_id uuid;
     v_plan_id uuid := '00000000-0000-4000-8000-000000008405';
     v_count integer;
+    v_rows integer;
 begin
     select count(*) into v_count from ltc_m.plan_versions;
     if v_count <> 4 then
