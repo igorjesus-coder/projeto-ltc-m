@@ -452,7 +452,7 @@ async function executePass(pool, expectedSnapshot) {
   const secondState = await businessState(pool);
   assert.deepEqual(secondState, firstState);
   assert.deepEqual(secondState, {
-    currencies: 1,
+    currencies: 2,
     units: 1,
     clients: 1,
     projects: 1,

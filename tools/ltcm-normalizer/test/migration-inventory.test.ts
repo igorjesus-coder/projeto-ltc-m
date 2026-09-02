@@ -8,11 +8,13 @@ import {
   P013_MIGRATION_BASELINE,
   P016_MIGRATION_BASELINE,
   readMigrationInventory,
+  selectMigrationNames,
   validateMigrationNames,
 } from './support/migration-inventory.js';
 
 const P021_MIGRATION = '20260828100000_add_p021_authorization_approver.sql';
 const P026_MIGRATION = '20260901100000_add_p026_master_data_management.sql';
+const P026_AUDIT_FIX_MIGRATION = '20260902100000_fix_p026_catalog_audit_identity.sql';
 const FUTURE_MIGRATION = '20990101000000_future_valid_migration.sql';
 const HISTORICAL_MIDDLE = '20260730150000_historical_middle.sql';
 const HISTORICAL_BEFORE_FINAL = '20260804115959_historical_before_final.sql';
@@ -36,7 +38,12 @@ test('P012, P013 e P016 aceitam seus baselines históricos canônicos', () => {
 });
 
 test('as três suítes aceitam as migrations atuais e sucessoras arbitrárias', () => {
-  const current = [...P016_MIGRATION_BASELINE, P021_MIGRATION, P026_MIGRATION];
+  const current = [
+    ...P016_MIGRATION_BASELINE,
+    P021_MIGRATION,
+    P026_MIGRATION,
+    P026_AUDIT_FIX_MIGRATION,
+  ];
   const future = [...current, FUTURE_MIGRATION];
 
   for (const baseline of [
@@ -54,9 +61,31 @@ test('o inventário atual real é aceito sem teto global de cardinalidade', asyn
     path.join(REPOSITORY_ROOT, 'supabase', 'migrations'),
     P016_MIGRATION_BASELINE,
   );
-  assert.equal(inventory.length, 15);
+  assert.equal(inventory.length, 16);
   assert.ok(inventory.length > P016_MIGRATION_BASELINE.length);
   assert.ok(inventory.some((migration) => migration.name === P026_MIGRATION));
+  assert.ok(inventory.some((migration) => migration.name === P026_AUDIT_FIX_MIGRATION));
+});
+
+test('o modo histórico do P013 seleciona exatamente o baseline e exclui sucessoras', async () => {
+  const inventory = await readMigrationInventory(
+    path.join(REPOSITORY_ROOT, 'supabase', 'migrations'),
+    P013_MIGRATION_BASELINE,
+    'historical',
+  );
+  assert.deepEqual(
+    inventory.map((migration) => migration.name),
+    P013_MIGRATION_BASELINE,
+  );
+  assert.ok(!inventory.some((migration) => migration.name === P026_MIGRATION));
+  assert.deepEqual(
+    selectMigrationNames(
+      [...P013_MIGRATION_BASELINE, P021_MIGRATION, P026_MIGRATION],
+      P013_MIGRATION_BASELINE,
+      'historical',
+    ),
+    P013_MIGRATION_BASELINE,
+  );
 });
 
 test('a ausência do último marco histórico de cada milestone falha', () => {

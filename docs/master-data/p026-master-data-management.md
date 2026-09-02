@@ -57,3 +57,6 @@ O hardening mínimo adiciona `updated_at`, `row_version`, triggers de metadata e
 genérico, unidade organizacional ou tabela de FX. A decisão P026-D00-B01 é posterior e prevalece
 sobre a redação BRL-fixed do baseline P024 quando houver conflito; B02 mantém somente admin como
 gestor e B03 mantém o significado de unidades restrito a itens de projeto.
+Na auditoria, `audit_log.record_id` permanece `text NOT NULL`: o trigger genérico usa `id` por omissão,
+enquanto os triggers de `currencies` e `units` passam explicitamente `code`. Identidade configurada
+ausente, nula ou vazia interrompe o DML; nenhum UUID sintético ou coluna `id` é criado nos catálogos.

@@ -117,7 +117,11 @@ async function installD12AAdminBeforeRls(client: PoolClient): Promise<void> {
 
 async function applyD12AMigrations(pool: Pool): Promise<boolean> {
   const migrationsDirectory = path.join(REPOSITORY_ROOT, 'supabase', 'migrations');
-  const migrations = await readMigrationInventory(migrationsDirectory, P012_MIGRATION_BASELINE);
+  const migrations = await readMigrationInventory(
+    migrationsDirectory,
+    P012_MIGRATION_BASELINE,
+    'historical',
+  );
   const client = await pool.connect();
   try {
     await assertD12ADatabaseGuard(client);

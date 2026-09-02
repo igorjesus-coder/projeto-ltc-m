@@ -10,6 +10,7 @@ const D40_MIGRATION_NAME = '20260804120000_add_legacy_project_reference_date_exc
 const P013_MIGRATION_NAME = '20260820120000_add_p013_monthly_baseline_foundation.sql';
 const P021_MIGRATION_NAME = '20260828100000_add_p021_authorization_approver.sql';
 const P026_MIGRATION_NAME = '20260901100000_add_p026_master_data_management.sql';
+const P026_AUDIT_FIX_MIGRATION_NAME = '20260902100000_fix_p026_catalog_audit_identity.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -744,18 +745,27 @@ export function extractNamedObjects(sql) {
 export function scanMigrationText(sql, options = {}) {
   const issues = [];
   const scope =
-    options.migrationName === P026_MIGRATION_NAME
-      ? 'p026'
-      : options.migrationName === P021_MIGRATION_NAME
-        ? 'p021'
-        : options.migrationName === D40_MIGRATION_NAME
-          ? 'd40'
-          : options.migrationName === P013_MIGRATION_NAME
-            ? 'p013'
-            : options.migrationName === P009_MIGRATION_NAME
-              ? 'p009'
-              : 'p007';
+    options.migrationName === P026_AUDIT_FIX_MIGRATION_NAME
+      ? 'p026-audit-fix'
+      : options.migrationName === P026_MIGRATION_NAME
+        ? 'p026'
+        : options.migrationName === P021_MIGRATION_NAME
+          ? 'p021'
+          : options.migrationName === D40_MIGRATION_NAME
+            ? 'd40'
+            : options.migrationName === P013_MIGRATION_NAME
+              ? 'p013'
+              : options.migrationName === P009_MIGRATION_NAME
+                ? 'p009'
+                : 'p007';
   const stripped = stripSqlNoise(sql);
+  const sqlForForbiddenPatterns =
+    scope === 'p026-audit-fix'
+      ? stripped.replace(
+          /\bdrop\s+trigger\s+(?:if\s+exists\s+)?(?:trg_90_currencies_audit\s+on\s+ltc_m\.currencies|trg_90_units_audit\s+on\s+ltc_m\.units)\b/gi,
+          '',
+        )
+      : stripped;
   const semanticSql = stripped.replace(/\b(?:begin|commit|rollback)\b/gi, '').replace(/[;\s]/g, '');
 
   if (!semanticSql) issues.push('migration vazia');
@@ -768,7 +778,7 @@ export function scanMigrationText(sql, options = {}) {
     ) {
       continue;
     }
-    if (pattern.test(stripped)) issues.push(message);
+    if (pattern.test(sqlForForbiddenPatterns)) issues.push(message);
   }
 
   requireQualifiedObjects(stripped, issues);

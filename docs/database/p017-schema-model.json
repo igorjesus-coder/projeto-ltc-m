@@ -1,8 +1,8 @@
 {
   "schemaContract": "ltcm.p017.schema-integrity.v1",
   "fingerprintContract": "ltcm.p017.schema-fingerprint.v1",
-  "migrationCount": 15,
-  "fingerprint": "485a3a4b0eb6821dca7978d593c69ae0c2bedec836ff716938b76315484b0aa8",
+  "migrationCount": 16,
+  "fingerprint": "53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47",
   "summary": {
     "relationCount": 28,
     "tableCount": 19,
@@ -8330,7 +8330,7 @@
         "language": "plpgsql",
         "securityDefiner": true,
         "volatility": "volatile",
-        "definitionHash": "021245a75c8d0d45ea6f091244168bc1ff8c2856c77eba3362f8cda84ff35c18"
+        "definitionHash": "53fd3398f67cb64a5e44aa09deaf1ce6c7cc9edffb7f2d1ba3782d4b4ae6cd86"
       },
       {
         "schema": "ltc_m",
@@ -8418,7 +8418,7 @@
         "language": "plpgsql",
         "securityDefiner": false,
         "volatility": "volatile",
-        "definitionHash": "40c431f2f612a37299e916dac9a585aa68bdc4239f8408d057699c02c40df13b"
+        "definitionHash": "0d3f9733593e0cfc094cb9bd9c51d3294a885d8484d31af625f359f27f5329d2"
       },
       {
         "schema": "ltc_m",
@@ -8641,7 +8641,7 @@
         "schema": "ltc_m",
         "table": "currencies",
         "name": "trg_90_currencies_audit",
-        "definition": "CREATE TRIGGER trg_90_currencies_audit AFTER INSERT OR UPDATE ON ltc_m.currencies FOR EACH ROW EXECUTE FUNCTION ltc_m.audit_row_change()"
+        "definition": "CREATE TRIGGER trg_90_currencies_audit AFTER INSERT OR DELETE OR UPDATE ON ltc_m.currencies FOR EACH ROW EXECUTE FUNCTION ltc_m.audit_row_change('code')"
       },
       {
         "schema": "ltc_m",
@@ -8959,7 +8959,7 @@
         "schema": "ltc_m",
         "table": "units",
         "name": "trg_90_units_audit",
-        "definition": "CREATE TRIGGER trg_90_units_audit AFTER INSERT OR UPDATE ON ltc_m.units FOR EACH ROW EXECUTE FUNCTION ltc_m.audit_row_change()"
+        "definition": "CREATE TRIGGER trg_90_units_audit AFTER INSERT OR DELETE OR UPDATE ON ltc_m.units FOR EACH ROW EXECUTE FUNCTION ltc_m.audit_row_change('code')"
       }
     ],
     "policies": [

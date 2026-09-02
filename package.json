@@ -94,6 +94,7 @@
     "test:p022:static": "node --test scripts/check-p022-layout.test.mjs",
     "test:p026": "node --test scripts/check-p026-tests.test.mjs && npm run test --workspace @ltcm/api && npm run test --workspace @ltcm/web",
     "test:p026:static": "node --test scripts/check-p026-tests.test.mjs",
+    "test:p026:postgres": "node --test scripts/postgres-p026-audit.integration.test.mjs",
     "test:d28": "node --test scripts/check-p008-d28.test.mjs",
     "test:d40": "node --test scripts/check-d40-tests.test.mjs",
     "test:pw902": "node --test scripts/check-pw902-fix.test.mjs",

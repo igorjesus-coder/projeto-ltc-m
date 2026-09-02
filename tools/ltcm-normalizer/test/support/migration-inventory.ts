@@ -31,6 +31,7 @@ export const P016_MIGRATION_BASELINE = [
 ] as const;
 
 export type MigrationFile = { name: string; sql: string };
+export type MigrationInventoryMode = 'current' | 'historical';
 
 function compareMigrationNames(left: string, right: string): number {
   return left.localeCompare(right, 'en');
@@ -80,16 +81,30 @@ export function validateMigrationNames(
   return sortedNames;
 }
 
+export function selectMigrationNames(
+  names: readonly string[],
+  requiredBaseline: readonly string[],
+  mode: MigrationInventoryMode = 'current',
+): string[] {
+  const canonicalNames = validateMigrationNames(names, requiredBaseline);
+  if (mode === 'current') return canonicalNames;
+
+  const lastBaseline = requiredBaseline.at(-1);
+  if (lastBaseline === undefined) throw new Error('baseline histórico vazio');
+  return canonicalNames.filter((name) => name.slice(0, 14) <= lastBaseline.slice(0, 14));
+}
+
 export async function readMigrationInventory(
   directory: string,
   requiredBaseline: readonly string[],
+  mode: MigrationInventoryMode = 'current',
 ): Promise<MigrationFile[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const names = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith('.sql'))
     .map((entry) => entry.name)
     .sort(compareMigrationNames);
-  const canonicalNames = validateMigrationNames(names, requiredBaseline);
+  const canonicalNames = selectMigrationNames(names, requiredBaseline, mode);
   return Promise.all(
     canonicalNames.map(async (name) => ({
       name,

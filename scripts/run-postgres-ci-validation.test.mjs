@@ -165,6 +165,13 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   assert.match(runner, /postgres-p017-integrity\.integration\.test\.mjs/u);
   assert.match(runner, /evidence\.regressions\.p017_postgres = true/u);
   assert.match(runner, /p017_postgres: false/u);
+  assert.match(runner, /runStage\('p026_postgres'/u);
+  assert.match(runner, /LTCM_P026_INTEGRATION: '1'/u);
+  assert.match(runner, /LTCM_P026_ISOLATED_CLUSTER: '1'/u);
+  assert.match(runner, /LTCM_P026_DATABASE_URL: p013DatabaseUrl/u);
+  assert.match(runner, /postgres-p026-audit\.integration\.test\.mjs/u);
+  assert.match(runner, /evidence\.regressions\.p026_postgres = true/u);
+  assert.match(runner, /p026_postgres: false/u);
   assert.match(runner, /runStage\('p019_postgres_build'/u);
   assert.match(runner, /runStage\('p019_postgres'/u);
   assert.match(runner, /LTCM_P019_INTEGRATION: '1'/u);
@@ -185,6 +192,12 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   );
   assert.ok(
     runner.indexOf("runStage('p017_postgres'") < runner.indexOf("runStage('p019_postgres'"),
+  );
+  assert.ok(
+    runner.indexOf("runStage('p017_postgres'") < runner.indexOf("runStage('p026_postgres'"),
+  );
+  assert.ok(
+    runner.indexOf("runStage('p026_postgres'") < runner.indexOf("runStage('p019_postgres'"),
   );
   assert.ok(runner.indexOf('runP013PostgresStage()') < runner.indexOf("runStage('bootstrap_d26'"));
   assert.ok(runner.indexOf('runP013PostgresStage()') < runner.indexOf("runStage('d27_grant'"));

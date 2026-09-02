@@ -2,13 +2,13 @@
 
 Contrato do schema: `ltcm.p017.schema-integrity.v1`
 Contrato do fingerprint: `ltcm.p017.schema-fingerprint.v1`
-Fingerprint nominal: `485a3a4b0eb6821dca7978d593c69ae0c2bedec836ff716938b76315484b0aa8`
+Fingerprint nominal: `53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47`
 
 ## Inventário nominal
 
 | Medida | Quantidade |
 | --- | ---: |
-| `migrationCount` | 15 |
+| `migrationCount` | 16 |
 | `relationCount` | 28 |
 | `tableCount` | 19 |
 | `viewCount` | 9 |

@@ -9,6 +9,13 @@ const migration = fs.readFileSync(
   ),
   'utf8',
 );
+const auditFixMigration = fs.readFileSync(
+  new URL(
+    '../supabase/migrations/20260902100000_fix_p026_catalog_audit_identity.sql',
+    import.meta.url,
+  ),
+  'utf8',
+);
 const controller = fs.readFileSync(
   new URL('../apps/api/src/master-data/master-data.controller.ts', import.meta.url),
   'utf8',
@@ -25,6 +32,15 @@ test('P026 corrige clients para admin-only e preserva RLS/FORCE sem DELETE', () 
   assert.match(migration, /create policy clients_update[\s\S]*?app_role = 'admin'/iu);
   assert.doesNotMatch(migration, /grant[\s\S]*delete/iu);
   assert.match(migration, /trg_90_(?:currencies|units)_audit/iu);
+});
+
+test('P026-D21 usa identidade explícita nos catálogos e falha fechado', () => {
+  assert.match(auditFixMigration, /tg_nargs/iu);
+  assert.match(auditFixMigration, /tg_argv/iu);
+  assert.match(auditFixMigration, /when tg_nargs = 0 then 'id'/iu);
+  assert.match(auditFixMigration, /v_new_data \? v_identity_column/iu);
+  assert.match(auditFixMigration, /audit_row_change\('code'\)/giu);
+  assert.match(auditFixMigration, /record_id[\s\S]*v_record_id/iu);
 });
 
 test('P026 backend tem guard administrativo, domínio fechado e concorrência', () => {

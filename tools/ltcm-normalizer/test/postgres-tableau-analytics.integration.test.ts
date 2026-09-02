@@ -98,7 +98,7 @@ async function guard(client: PoolClient): Promise<void> {
 
 async function migrations(): Promise<Array<{ name: string; sql: string }>> {
   const directory = path.join(REPOSITORY_ROOT, 'supabase', 'migrations');
-  return readMigrationInventory(directory, P016_MIGRATION_BASELINE);
+  return readMigrationInventory(directory, P016_MIGRATION_BASELINE, 'historical');
 }
 
 async function installAdmin(client: PoolClient): Promise<void> {
