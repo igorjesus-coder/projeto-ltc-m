@@ -51,7 +51,24 @@ begin
         or (select count(*) from ltc_m.import_batch_sheets) <> 0
         or (select count(*) from ltc_m.import_staging_rows) <> 0
         or (select count(*) from ltc_m.import_row_errors) <> 0
-        or (select count(*) from ltc_m.audit_log) <> 0
+        or (select count(*) from ltc_m.audit_log) <> 3
+        or (
+            select count(*)
+            from ltc_m.audit_log
+            where
+                (
+                    table_name = 'ltc_m.currencies'
+                    and record_id in ('BRL', 'USD')
+                    and operation = 'INSERT'::ltc_m.audit_operation
+                    and source = 'system'
+                )
+                or (
+                    table_name = 'ltc_m.units'
+                    and record_id = 'US'
+                    and operation = 'INSERT'::ltc_m.audit_operation
+                    and source = 'system'
+                )
+        ) <> 3
     then
         raise exception 'P008 D27: dados sintéticos ou valores controlados divergentes.';
     end if;
@@ -77,5 +94,5 @@ select pg_catalog.jsonb_build_object(
         + (select count(*) from ltc_m.import_batch_sheets)
         + (select count(*) from ltc_m.import_staging_rows)
         + (select count(*) from ltc_m.import_row_errors)
-        + (select count(*) from ltc_m.audit_log)
+        + (select count(*) from ltc_m.audit_log) - 3
 ) as p008_runtime_result;
