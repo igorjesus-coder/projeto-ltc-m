@@ -286,6 +286,22 @@ test('estado final D51 comprova roles, ownership e D26 cluster-wide', () => {
   assert.match(finalState, /pg_has_role\('ci_admin', 'ltc_m_runtime', 'SET'\)/iu);
 });
 
+test('estado final preserva exatamente o baseline de auditoria do seed', () => {
+  const finalState = fs.readFileSync(
+    path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-final-state.sql'),
+    'utf8',
+  );
+  assert.match(finalState, /select count\(\*\) from ltc_m\.audit_log\) <> 3/u);
+  assert.match(finalState, /table_name = 'ltc_m\.currencies'/u);
+  assert.match(finalState, /record_id in \('BRL', 'USD'\)/u);
+  assert.match(finalState, /table_name = 'ltc_m\.units'/u);
+  assert.match(finalState, /record_id = 'US'/u);
+  assert.match(
+    finalState,
+    /operational_fixtures[\s\S]*select count\(\*\) from ltc_m\.audit_log\) - 3/u,
+  );
+});
+
 test('runner só avança da Fase A P009 com evidência limpa', () => {
   const runner = fs.readFileSync(
     path.join(process.cwd(), 'scripts', 'run-postgres-ci-validation.mjs'),
