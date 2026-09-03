@@ -53,7 +53,7 @@ export function createAuthenticatedApiClient({
       if (!response.ok) throw await requestError(response);
       return (await response.json()) as T;
     },
-    async sendJson<T>(path: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
+    async sendJson<T>(path: string, method: 'POST' | 'PATCH' | 'PUT', body: unknown): Promise<T> {
       const token = await getAccessToken();
       if (!token.trim()) throw new AuthenticationRequiredError();
       const response = await fetchImpl(new URL(path, `${baseUrl}/`), {

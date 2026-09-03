@@ -11,6 +11,7 @@ import {
   renderComprehensiveP008,
   renderComprehensiveP009,
   renderScenario,
+  isExactD26Membership,
   validateHarnessSources,
 } from './run-p008-dynamic-validation.mjs';
 import {
@@ -24,6 +25,29 @@ const rootDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 
 test('aceita o harness oficial D26/D27 e os hashes das migrations aplicadas', () => {
   assert.deepEqual(validateHarnessSources(rootDirectory), []);
+});
+
+test('precheck D26 aceita somente a associação atual e rejeita desvios de grant, opções, SET e cardinalidade', () => {
+  const valid = {
+    granted_role: 'ltc_m_runtime',
+    member_role: 'postgres',
+    grantor: 'supabase_admin',
+    admin_option: true,
+    inherit_option: false,
+    set_option: false,
+  };
+  assert.equal(isExactD26Membership([valid], false), true);
+  for (const [field, value] of [
+    ['grantor', 'postgres'],
+    ['admin_option', false],
+    ['inherit_option', true],
+    ['set_option', true],
+  ]) {
+    assert.equal(isExactD26Membership([{ ...valid, [field]: value }], false), false, field);
+  }
+  assert.equal(isExactD26Membership([valid], true), false, 'SET ROLE');
+  assert.equal(isExactD26Membership([], false), false, 'missing membership');
+  assert.equal(isExactD26Membership([valid, valid], false), false, 'duplicate membership');
 });
 
 test('renderiza identificadores exclusivos sem deixar placeholders', () => {

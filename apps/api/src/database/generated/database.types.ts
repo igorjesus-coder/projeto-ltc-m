@@ -5,7 +5,7 @@
  */
 export const P017_SCHEMA_CONTRACT = 'ltcm.p017.schema-integrity.v1' as const;
 export const P017_SCHEMA_FINGERPRINT =
-  '53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47' as const;
+  '63866804fe6f5247d9193bad2448253641bee6a45daccacec3c7986d22090b8e' as const;
 export const P019_DATABASE_TYPES_CONTRACT = 'ltcm.p019.database-types.v1' as const;
 
 /** Exact decimal text returned by the P019 pg parser; never an authoritative number. */
@@ -337,6 +337,7 @@ export interface LtcMPlanVersionsRow {
   readonly row_version: PgBigInt;
   readonly updated_by_user_id: PgUuid | null;
   readonly source_plan_version_id: PgUuid | null;
+  readonly content_revision: PgBigInt;
 }
 
 export interface LtcMProjectItemsRow {

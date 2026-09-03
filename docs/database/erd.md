@@ -1,7 +1,7 @@
 # ERD do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47`
+Fingerprint: `63866804fe6f5247d9193bad2448253641bee6a45daccacec3c7986d22090b8e`
 
 Arquivo gerado deterministicamente a partir do modelo canônico capturado em PostgreSQL 17.
 Não editar manualmente; use `npm run docs:schema:generate` e valide com
@@ -275,6 +275,7 @@ erDiagram
     bigint row_version
     uuid updated_by_user_id FK
     uuid source_plan_version_id FK
+    bigint content_revision
     text name
     date reference_date
     ltc_m_plan_status status

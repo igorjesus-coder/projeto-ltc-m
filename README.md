@@ -72,6 +72,10 @@ A aplicação fica disponível em `http://localhost:5173`.
 
 ## Verificações
 
+O editor de programação mensal P029 está disponível em `/planning`. Ele carrega versões de
+planejamento por item, permite editar várias competências e salva o lote atomicamente pela API;
+consulte o [contrato P029](docs/planning/p029-monthly-planning-editor.md).
+
 ```bash
 npm run format:check
 npm run lint

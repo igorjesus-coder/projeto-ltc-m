@@ -11,6 +11,7 @@ const P013_MIGRATION_NAME = '20260820120000_add_p013_monthly_baseline_foundation
 const P021_MIGRATION_NAME = '20260828100000_add_p021_authorization_approver.sql';
 const P026_MIGRATION_NAME = '20260901100000_add_p026_master_data_management.sql';
 const P026_AUDIT_FIX_MIGRATION_NAME = '20260902100000_fix_p026_catalog_audit_identity.sql';
+const P029_MIGRATION_NAME = '20260903100000_add_p029_plan_content_revision.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -104,6 +105,7 @@ const P026_COLUMNS = new Map([
   ['currencies', new Set(['updated_at', 'row_version'])],
   ['units', new Set(['updated_at', 'row_version'])],
 ]);
+const P029_COLUMNS = new Map([['plan_versions', new Set(['content_revision'])]]);
 
 const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.audit_row_change',
@@ -350,7 +352,9 @@ function requireAdditiveAlterTables(sql, issues, scope) {
           ? P009_COLUMNS.get(tableName)
           : scope === 'p026'
             ? P026_COLUMNS.get(tableName)
-            : P007_COLUMNS.get(tableName);
+            : scope === 'p029'
+              ? P029_COLUMNS.get(tableName)
+              : P007_COLUMNS.get(tableName);
 
     if (scope === 'd40') {
       const normalized = statement.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -749,15 +753,17 @@ export function scanMigrationText(sql, options = {}) {
       ? 'p026-audit-fix'
       : options.migrationName === P026_MIGRATION_NAME
         ? 'p026'
-        : options.migrationName === P021_MIGRATION_NAME
-          ? 'p021'
-          : options.migrationName === D40_MIGRATION_NAME
-            ? 'd40'
-            : options.migrationName === P013_MIGRATION_NAME
-              ? 'p013'
-              : options.migrationName === P009_MIGRATION_NAME
-                ? 'p009'
-                : 'p007';
+        : options.migrationName === P029_MIGRATION_NAME
+          ? 'p029'
+          : options.migrationName === P021_MIGRATION_NAME
+            ? 'p021'
+            : options.migrationName === D40_MIGRATION_NAME
+              ? 'd40'
+              : options.migrationName === P013_MIGRATION_NAME
+                ? 'p013'
+                : options.migrationName === P009_MIGRATION_NAME
+                  ? 'p009'
+                  : 'p007';
   const stripped = stripSqlNoise(sql);
   const sqlForForbiddenPatterns =
     scope === 'p026-audit-fix'
