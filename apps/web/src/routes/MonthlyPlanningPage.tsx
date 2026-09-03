@@ -22,7 +22,7 @@ import {
 } from '../components/design-system';
 import {
   decimalToCents,
-  formatCents,
+  buildPlanningEntries,
   moneyLabel,
   parsePlanningEditorResponse,
   parsePlanningProjectsResponse,
@@ -222,16 +222,11 @@ export function MonthlyPlanningPage() {
   }
   async function save() {
     if (!apiClient || !data || !editable) return;
-    const entries = data.items.flatMap((item) =>
-      data.competences.flatMap((competence) => {
-        const key = planningCellKey(item.itemId, competence.value);
-        if ((values[key] ?? '') === (original[key] ?? '')) return [];
-        const parsed = decimalToCents(values[key] ?? '');
-        return parsed === null || (values[key] ?? '').trim() === ''
-          ? [{ itemId: item.itemId, competence: competence.value, amount: '' }]
-          : [{ itemId: item.itemId, competence: competence.value, amount: formatCents(parsed) }];
-      }),
-    );
+    if (!justification.trim()) {
+      setNotice('Informe uma justificativa para salvar as alterações.');
+      return;
+    }
+    const entries = buildPlanningEntries(data, values, original);
     if (entries.some((entry) => !entry.amount)) {
       setNotice('Células alteradas devem conter um valor decimal; use 0.00 para zerar.');
       return;
@@ -245,7 +240,7 @@ export function MonthlyPlanningPage() {
         'PUT',
         {
           expectedVersion: data.version.contentRevision,
-          justification: justification.trim() || null,
+          justification: justification.trim(),
           entries,
         },
       );
@@ -509,7 +504,8 @@ export function MonthlyPlanningPage() {
             <Field
               id="planning-justification"
               label="Justificativa"
-              help="Opcional; será anexada à auditoria das alterações"
+              help="Obrigatória; será anexada à auditoria das alterações"
+              required
             >
               <Textarea
                 value={justification}
@@ -522,7 +518,7 @@ export function MonthlyPlanningPage() {
               type="button"
               variant="primary"
               onClick={() => void save()}
-              disabled={!editable || !dirty || pending}
+              disabled={!editable || !dirty || !justification.trim() || pending}
             >
               Salvar alterações
             </Button>

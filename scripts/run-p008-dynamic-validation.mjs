@@ -795,8 +795,7 @@ function stagePassed(report, name) {
   return report.stages.some((stage) => stage.name === name && stage.ok === true);
 }
 
-function d26IsExact(postcheck) {
-  const memberships = postcheck?.d26_membership;
+export function isExactD26Membership(memberships, setRole) {
   return (
     Array.isArray(memberships) &&
     memberships.length === 1 &&
@@ -805,8 +804,13 @@ function d26IsExact(postcheck) {
     memberships[0].grantor === 'supabase_admin' &&
     memberships[0].admin_option === true &&
     memberships[0].inherit_option === false &&
-    memberships[0].set_option === false
+    memberships[0].set_option === false &&
+    setRole === false
   );
+}
+
+function d26IsExact(postcheck) {
+  return isExactD26Membership(postcheck?.d26_membership, postcheck?.d26_set_role ?? false);
 }
 
 export function buildP009TerminalPayload(report) {

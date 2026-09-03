@@ -209,7 +209,7 @@ export class PlanningService {
     actor: ActorContext,
   ): Promise<PlanningEditorResponse> {
     return this.database.actorTransaction(
-      { ...actor, justification: payload.justification ?? null },
+      { ...actor, justification: payload.justification },
       async (client) => {
         const project = await this.findProject(client, projectId);
         if (!project) throw new NotFoundException('P029_PROJECT_NOT_FOUND');

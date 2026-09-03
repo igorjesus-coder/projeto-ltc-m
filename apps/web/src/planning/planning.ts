@@ -50,6 +50,12 @@ export interface PlanningEntry {
   readonly rowVersion: number;
 }
 
+export interface PlanningMonthEntryPayload {
+  readonly itemId: string;
+  readonly competence: string;
+  readonly amount: string;
+}
+
 export interface PlanningEditorResponse {
   readonly contract: typeof P029_MONTHLY_PLANNING_CONTRACT;
   readonly project: PlanningProjectOption;
@@ -216,4 +222,22 @@ export function moneyLabel(value: bigint, currency: string): string {
 
 export function planningCellKey(itemId: string, competence: string): string {
   return `${itemId}\u0000${competence}`;
+}
+
+export function buildPlanningEntries(
+  data: PlanningEditorResponse,
+  values: Readonly<Record<string, string>>,
+  original: Readonly<Record<string, string>>,
+): readonly PlanningMonthEntryPayload[] {
+  return data.items.flatMap((item) =>
+    data.competences.flatMap((competence) => {
+      const key = planningCellKey(item.itemId, competence.value);
+      if ((values[key] ?? '') === (original[key] ?? '')) return [];
+      const value = values[key] ?? '';
+      const parsed = decimalToCents(value);
+      return parsed === null || value.trim() === ''
+        ? [{ itemId: item.itemId, competence: competence.value, amount: '' }]
+        : [{ itemId: item.itemId, competence: competence.value, amount: formatCents(parsed) }];
+    }),
+  );
 }

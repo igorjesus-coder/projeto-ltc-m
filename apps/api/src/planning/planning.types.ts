@@ -79,7 +79,7 @@ export interface PlanningMonthEntryPayload {
 
 export interface PlanningBatchPayload {
   readonly expectedVersion: number;
-  readonly justification?: string | null;
+  readonly justification: string;
   readonly entries: readonly PlanningMonthEntryPayload[];
 }
 
@@ -144,11 +144,9 @@ function amount(value: unknown): string {
   return `${integer}.${fraction.padEnd(2, '0')}`;
 }
 
-function optionalJustification(value: unknown): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
+function justification(value: unknown): string {
   if (typeof value !== 'string' || !value.trim() || value.length > 2_000) {
-    invalid('P029_INVALID_JUSTIFICATION');
+    invalid('P029_JUSTIFICATION_REQUIRED');
   }
   return value.trim();
 }
@@ -196,10 +194,9 @@ export function parsePlanningBatchPayload(value: unknown): PlanningBatchPayload 
     seen.add(identity);
     return parsed;
   });
-  const parsedJustification = optionalJustification(body['justification']);
   return {
     expectedVersion: positiveVersion(body['expectedVersion']),
-    ...(parsedJustification === undefined ? {} : { justification: parsedJustification }),
+    justification: justification(body['justification']),
     entries,
   };
 }

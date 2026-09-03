@@ -30,9 +30,10 @@ O editor não remove linhas fisicamente; para zerar uma declaração existente d
   linhas existentes ou `projects.start_date/end_date`; quando ambos não existem, o intervalo é
   escolhido explicitamente pelo usuário.
 - `PUT /planning/projects/:projectId/versions/:versionId/months`: recebe
-  `{ expectedVersion, justification?, entries[] }` e persiste todos os itens/meses em uma única
-  actor transaction. Duplicatas, competência deslocada, valor inválido, item de outro projeto,
-  item inativo, versão incompatível ou versão stale falham fechado.
+  `{ expectedVersion, justification, entries[] }` e persiste todos os itens/meses em uma única
+  actor transaction. `justification` é obrigatória, não pode ser vazia após trim e está limitada a
+  2.000 caracteres. Duplicatas, competência deslocada, valor inválido, item de outro projeto, item
+  inativo, versão incompatível ou versão stale falham fechado.
 
 `forecast:edit_draft` é a capability usada para escrita; nenhuma nova capability foi criada.
 `plan_versions.row_version` é o token de metadados da própria versão; `content_revision` é o token
@@ -54,7 +55,8 @@ somente para apresentação e totais locais. Backend/PostgreSQL permanece a font
 item editável e visão agregada por projeto somente leitura. O estado local separa original/editado,
 calcula dirty/diferença/totais com `BigInt` em centavos e envia uma única requisição PUT. Após
 sucesso, o readback da API substitui o estado local; trocas com alterações pendentes pedem
-confirmação.
+confirmação. O formulário exige justificativa antes de habilitar o salvamento, e a montagem do
+batch preserva todas as células alteradas de itens e competências diferentes.
 
 Foi criada a migration aditiva `20260903100000_add_p029_plan_content_revision.sql`: a revisão
 provou que o trigger P007 ignora alterações isoladas de `updated_by_user_id`, portanto o

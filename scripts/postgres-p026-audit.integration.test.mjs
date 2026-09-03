@@ -43,7 +43,7 @@ async function migrationInventory() {
   const names = (await readdir(directory))
     .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
     .sort((left, right) => left.localeCompare(right, 'en'));
-  assert.equal(names.length, 16);
+  assert.equal(names.length, 17);
   return Promise.all(
     names.map(async (name) => ({ name, sql: await readFile(path.join(directory, name), 'utf8') })),
   );

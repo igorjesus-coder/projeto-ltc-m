@@ -102,6 +102,22 @@ test('P029 parser limita batch técnico sem impor horizonte financeiro', () => {
   );
 });
 
+test('P029 exige justificativa não vazia, limitada e normalizada', () => {
+  assert.equal(
+    parsePlanningBatchPayload({ ...validPayload, justification: '  Ajuste de forecast  ' })
+      .justification,
+    'Ajuste de forecast',
+  );
+  for (const justification of [undefined, null, '', '   ', 'x'.repeat(2_001)]) {
+    assert.throws(
+      () => parsePlanningBatchPayload({ ...validPayload, justification }),
+      (error: unknown) =>
+        error instanceof BadRequestException &&
+        error.message.includes('P029_JUSTIFICATION_REQUIRED'),
+    );
+  }
+});
+
 function createDatabase(options: { readonly inactive?: boolean; readonly stale?: boolean } = {}) {
   const calls: Array<{ readonly text: string; readonly values: readonly unknown[] }> = [];
   const project = {
