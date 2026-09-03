@@ -2,6 +2,7 @@ export const P029_MONTHLY_PLANNING_CONTRACT = 'ltcm.p029.monthly-planning-editor
 export const P030_PERCENT_SCALE = 10_000n;
 export const P030_PERCENT_TOTAL = 100n * P030_PERCENT_SCALE;
 export const P030_MAX_DESTINATIONS = 5_000;
+export const P031_WORKFLOW_CONTRACT = 'ltcm.p031.version-approval-locking.v1' as const;
 
 export interface PlanningProjectOption {
   readonly projectId: string;
@@ -24,6 +25,9 @@ export interface PlanningVersionOption {
   readonly contentRevision: number;
   readonly editable: boolean;
   readonly isBaseline: boolean;
+  readonly approvedAt: string | null;
+  readonly sourcePlanVersionId: string | null;
+  readonly baselinePlanVersionId: string | null;
 }
 
 export interface PlanningVersionsResponse {
@@ -106,6 +110,11 @@ function requiredString(value: unknown): string {
   return value;
 }
 
+function nullableString(value: unknown): string | null {
+  if (value !== null && typeof value !== 'string') throw new Error('P029_RESPONSE_INVALID');
+  return value;
+}
+
 function positiveInteger(value: unknown): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1)
     throw new Error('P029_RESPONSE_INVALID');
@@ -135,7 +144,37 @@ function version(value: unknown): PlanningVersionOption {
     contentRevision: positiveInteger(item['contentRevision']),
     editable: item['editable'],
     isBaseline: item['isBaseline'],
+    approvedAt: nullableString(item['approvedAt'] ?? null),
+    sourcePlanVersionId: nullableString(item['sourcePlanVersionId'] ?? null),
+    baselinePlanVersionId: nullableString(item['baselinePlanVersionId'] ?? null),
   };
+}
+
+export type PlanningWorkflowAction =
+  'submit' | 'return' | 'approve' | 'lock' | 'archive' | 'reopen';
+
+type PlanningWorkflowCapability =
+  | 'workflow:submit'
+  | 'workflow:return_to_draft'
+  | 'workflow:approve'
+  | 'workflow:lock'
+  | 'workflow:archive'
+  | 'workflow:reopen';
+
+export function planningWorkflowActions(
+  status: string,
+  can: (capability: PlanningWorkflowCapability) => boolean,
+): readonly PlanningWorkflowAction[] {
+  const actions: PlanningWorkflowAction[] = [];
+  if (status === 'draft' && can('workflow:submit')) actions.push('submit');
+  if (status === 'pending_approval' && can('workflow:return_to_draft')) actions.push('return');
+  if (status === 'pending_approval' && can('workflow:approve')) actions.push('approve');
+  if (status === 'approved' && can('workflow:lock')) actions.push('lock');
+  if ((status === 'approved' || status === 'locked') && can('workflow:archive'))
+    actions.push('archive');
+  if ((status === 'approved' || status === 'locked') && can('workflow:reopen'))
+    actions.push('reopen');
+  return actions;
 }
 
 function financial(value: unknown): PlanningFinancialSummary {

@@ -31,11 +31,13 @@ import {
   parsePlanningEditorResponse,
   parsePlanningProjectsResponse,
   parsePlanningVersionsResponse,
+  planningWorkflowActions,
   planningCellKey,
   signedDecimalToCents,
   type PlanningEditorResponse,
   type PlanningProjectOption,
   type PlanningVersionOption,
+  type PlanningWorkflowAction,
 } from '../planning/planning';
 
 type LoadState =
@@ -55,6 +57,10 @@ function errorLabel(error: unknown): string {
       return 'O excesso ultrapassa o valor contratual e exige a permissÃ£o de override de saldo.';
     if (error.code === 'P029_BASELINE_IMMUTABLE')
       return 'Este baseline importado é imutável e não pode ser editado neste fluxo.';
+    if (error.code === 'P031_VERSION_CONFLICT')
+      return 'A versão mudou por outra ação. Recarregue o histórico antes de continuar.';
+    if (error.code === 'P031_JUSTIFICATION_REQUIRED')
+      return 'Informe uma justificativa para esta transição.';
   }
   return 'Não foi possível carregar ou salvar o planejamento.';
 }
@@ -107,6 +113,8 @@ export function MonthlyPlanningPage() {
   const [original, setOriginal] = useState<Record<string, string>>({});
   const [view, setView] = useState<'item' | 'project'>('item');
   const [justification, setJustification] = useState('');
+  const [workflowJustification, setWorkflowJustification] = useState('');
+  const [newVersionName, setNewVersionName] = useState('');
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedCells, setSelectedCells] = useState<ReadonlySet<string>>(new Set());
@@ -207,6 +215,7 @@ export function MonthlyPlanningPage() {
   );
   const selectedVersion = versions.find((item) => item.versionId === versionId);
   const editable = Boolean(data?.version.editable && can('forecast:edit_draft'));
+  const workflowActions = data ? planningWorkflowActions(data.version.status, can) : [];
   const localFinancial = useMemo(() => {
     if (!data) return null;
     const contractValue = signedDecimalToCents(data.financial.contractValue) ?? 0n;
@@ -260,8 +269,11 @@ export function MonthlyPlanningPage() {
     setOriginal({});
   }
   function changeVersion(event: ChangeEvent<HTMLSelectElement>) {
+    selectVersion(event.target.value);
+  }
+  function selectVersion(nextVersionId: string) {
     if (!confirmDiscard()) return;
-    setVersionId(event.target.value);
+    setVersionId(nextVersionId);
     setValues({});
     setOriginal({});
   }
@@ -346,6 +358,65 @@ export function MonthlyPlanningPage() {
       setSelectedCells(new Set());
       setWeights({});
       setNotice('Planejamento mensal salvo.');
+    } catch (error) {
+      setNotice(errorLabel(error));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function actionLabel(action: PlanningWorkflowAction): string {
+    return {
+      submit: 'Enviar para aprovação',
+      return: 'Devolver para draft',
+      approve: 'Aprovar versão',
+      lock: 'Bloquear versão',
+      archive: 'Arquivar versão',
+      reopen: 'Criar revisão draft',
+    }[action];
+  }
+
+  async function runWorkflow(action: PlanningWorkflowAction) {
+    if (!apiClient || !data) return;
+    const needsJustification = action !== 'submit' && action !== 'approve';
+    if (needsJustification && !workflowJustification.trim()) {
+      setNotice('Informe uma justificativa para esta transição.');
+      return;
+    }
+    if (action === 'reopen' && !newVersionName.trim()) {
+      setNotice('Informe o nome da nova revisão.');
+      return;
+    }
+    setPending(true);
+    setNotice(null);
+    try {
+      const body = {
+        expectedRowVersion: data.version.rowVersion,
+        ...(workflowJustification.trim() ? { justification: workflowJustification.trim() } : {}),
+        ...(action === 'reopen' ? { newName: newVersionName.trim() } : {}),
+      };
+      const response = await apiClient.sendJson<unknown>(
+        `/planning/projects/${encodeURIComponent(data.project.projectId)}/versions/${encodeURIComponent(data.version.versionId)}/${action}`,
+        'POST',
+        body,
+      );
+      const parsed = parsePlanningEditorResponse(response);
+      const nextValues = mapValues(parsed);
+      setState({ kind: 'success', data: parsed });
+      setValues(nextValues);
+      setOriginal(nextValues);
+      setVersionId(parsed.version.versionId);
+      setVersions((current) => {
+        return action === 'reopen'
+          ? [parsed.version, ...current]
+          : [
+              parsed.version,
+              ...current.filter((item) => item.versionId !== parsed.version.versionId),
+            ];
+      });
+      setWorkflowJustification('');
+      if (action === 'reopen') setNewVersionName('');
+      setNotice(`Transição concluída: ${actionLabel(action)}.`);
     } catch (error) {
       setNotice(errorLabel(error));
     } finally {
@@ -459,6 +530,72 @@ export function MonthlyPlanningPage() {
               </span>
             </div>
           </div>
+          <section className="planning-version-history" aria-labelledby="planning-history-title">
+            <h2 id="planning-history-title">Histórico e linhagem</h2>
+            <p>
+              Baseline canônico:{' '}
+              {data.version.baselinePlanVersionId ??
+                (data.version.isBaseline ? data.version.versionId : 'não associado')}
+              .
+              {data.version.sourcePlanVersionId
+                ? ` Revisão criada a partir de ${data.version.sourcePlanVersionId}.`
+                : ' Esta é a versão de origem da cadeia.'}
+            </p>
+            <ul>
+              {versions.map((version) => (
+                <li key={version.versionId}>
+                  <button
+                    type="button"
+                    onClick={() => selectVersion(version.versionId)}
+                    disabled={pending}
+                  >
+                    {version.name} — {version.status} — row_version {version.rowVersion}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+          {workflowActions.length > 0 ? (
+            <section className="planning-workflow-panel" aria-labelledby="planning-workflow-title">
+              <h2 id="planning-workflow-title">Workflow da versão</h2>
+              <p>As transições usam row_version e não alteram as linhas financeiras.</p>
+              {workflowActions.some((action) => action !== 'submit' && action !== 'approve') ? (
+                <Field
+                  id="planning-workflow-justification"
+                  label="Justificativa da transição"
+                  required
+                >
+                  <Textarea
+                    value={workflowJustification}
+                    onChange={(event) => setWorkflowJustification(event.target.value)}
+                    maxLength={2_000}
+                    disabled={pending}
+                  />
+                </Field>
+              ) : null}
+              {workflowActions.includes('reopen') ? (
+                <Field id="planning-new-version-name" label="Nome da nova revisão" required>
+                  <Input
+                    value={newVersionName}
+                    onChange={(event) => setNewVersionName(event.target.value)}
+                    disabled={pending}
+                  />
+                </Field>
+              ) : null}
+              <div className="planning-workflow-actions">
+                {workflowActions.map((action) => (
+                  <Button
+                    key={action}
+                    type="button"
+                    onClick={() => void runWorkflow(action)}
+                    disabled={pending}
+                  >
+                    {actionLabel(action)}
+                  </Button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           <div className="planning-view-switch" role="group" aria-label="Visão da grade">
             <Button
               type="button"

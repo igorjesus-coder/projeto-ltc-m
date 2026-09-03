@@ -1,9 +1,9 @@
 # Dicionário de dados do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `63866804fe6f5247d9193bad2448253641bee6a45daccacec3c7986d22090b8e`
+Fingerprint: `0b066f70d99842f1a97345c196750b839dd4ee8595ce71ddd7d87e1e41f8f836`
 
-Inventário: 28 relações (19 tabelas, 9 views), 487 colunas, 54 FKs e 49 policies.
+Inventário: 28 relações (19 tabelas, 9 views), 488 colunas, 55 FKs e 49 policies.
 
 O conteúdo é gerado do modelo canônico PostgreSQL 17. Descrições ausentes são declaradas como
 ausentes, sem inferência de negócio. Valores financeiros `numeric` permanecem exatos; sua
@@ -450,6 +450,7 @@ aditividade depende do grão documentado.
 | `updated_by_user_id` | `uuid` | sim | — | ltc_m.app_users.id | — |
 | `source_plan_version_id` | `uuid` | sim | — | ltc_m.plan_versions.id | Linhagem imutável da reabertura por clonagem; a origem permanece preservada. |
 | `content_revision` | `bigint` | não | 1 | — | Revisão monotônica do conteúdo mensal editável; usada para concorrência de batches P029. |
+| `baseline_plan_version_id` | `uuid` | sim | — | ltc_m.plan_versions.id | Referência explícita ao baseline canônico herdado pela cadeia de revisões P031. |
 | `name` | `text` | não | — | — | — |
 | `reference_date` | `date` | não | — | — | — |
 | `status` | `ltc_m.plan_status` | não | 'draft'::ltc_m.plan_status | — | — |

@@ -44,7 +44,7 @@ test('aceita os artefatos RLS P008 versionados', () => {
   const result = checkMigrations(migrationsDirectory);
 
   assert.deepEqual(result.issues, []);
-  assert.equal(result.files.length, 17);
+  assert.equal(result.files.length, 18);
 });
 
 test('P029 aceita somente a revisão aditiva de concorrência', () => {

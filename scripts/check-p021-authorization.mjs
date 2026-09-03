@@ -19,7 +19,7 @@ const REQUIRED_FILES = [
 ];
 
 const ROLES = ['viewer', 'editor', 'approver', 'admin'];
-const UNSUPPORTED_CAPABILITIES = ['physical_delete', 'archive', 'unlock_direct'];
+const UNSUPPORTED_CAPABILITIES = ['physical_delete', 'unlock_direct'];
 
 function read(root, relativePath) {
   const filename = path.join(root, relativePath);
