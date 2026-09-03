@@ -23,27 +23,10 @@ const P021_POLICY_NAMES = new Set([
   'monthly_executions_select_p013',
   'monthly_plan_cells_select_p013',
 ]);
-const P021_FUNCTION_NAMES = new Set([
-  'resolve_authorization',
-  'return_plan_version_to_draft_as_approver',
-  'approve_plan_version_as_approver',
-]);
-
 function projectP017Baseline(model, baseline) {
-  const baselineFunctions = new Map(
-    baseline.functions.map((routine) => [
-      `${routine.schema}.${routine.name}.${routine.identityArguments}`,
-      routine,
-    ]),
-  );
   return {
     ...model,
-    functions: model.functions
-      .filter((routine) => !(routine.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(routine.name)))
-      .map((routine) => {
-        const key = `${routine.schema}.${routine.name}.${routine.identityArguments}`;
-        return baselineFunctions.get(key) ?? routine;
-      }),
+    functions: model.functions,
     policies: model.policies.map((policy) =>
       policy.schema === 'ltc_m' && P021_POLICY_NAMES.has(policy.name)
         ? (baseline.policies.find(
@@ -51,9 +34,7 @@ function projectP017Baseline(model, baseline) {
           ) ?? policy)
         : policy,
     ),
-    grants: model.grants.filter(
-      (grant) => !(grant.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(grant.object)),
-    ),
+    grants: model.grants,
     types: model.types,
   };
 }

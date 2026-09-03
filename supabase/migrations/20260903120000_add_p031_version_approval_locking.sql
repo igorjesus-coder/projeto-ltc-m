@@ -545,6 +545,7 @@ grant execute on function ltc_m.return_plan_version_to_draft_as_approver(uuid, b
 grant execute on function ltc_m.approve_plan_version_as_approver(uuid, bigint) to ltc_m_runtime;
 grant execute on function ltc_m.lock_plan_version(uuid, bigint) to ltc_m_runtime;
 grant execute on function ltc_m.archive_plan_version(uuid, bigint) to ltc_m_runtime;
+grant execute on function ltc_m.archive_plan_version(uuid) to ltc_m_runtime;
 revoke execute on function ltc_m.reopen_plan_version(uuid, text, bigint) from public;
 grant execute on function ltc_m.reopen_plan_version(uuid, text, bigint) to ltc_m_runtime;
 

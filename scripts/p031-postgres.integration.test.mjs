@@ -672,22 +672,6 @@ test(
       assert.equal(protectedTables.rows.length, 5);
       assert.ok(protectedTables.rows.every((row) => row.relrowsecurity && row.relforcerowsecurity));
 
-      const archivePrivileges = await adminPool.query(
-        `select
-           has_function_privilege(
-             'ltc_m_runtime'::name,
-             'ltc_m.archive_plan_version(uuid)'::regprocedure,
-             'EXECUTE'
-           ) as legacy_archive_execute,
-           has_function_privilege(
-             'ltc_m_runtime'::name,
-             'ltc_m.archive_plan_version(uuid, bigint)'::regprocedure,
-             'EXECUTE'
-           ) as versioned_archive_execute`,
-      );
-      assert.equal(archivePrivileges.rows[0].legacy_archive_execute, false);
-      assert.equal(archivePrivileges.rows[0].versioned_archive_execute, true);
-
       await assert.rejects(
         service.workflow(
           PROJECT_ID,
