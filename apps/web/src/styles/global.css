@@ -861,6 +861,137 @@ textarea.form-control {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.planning-controls {
+  align-items: end;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-7);
+  padding: 18px 22px 2px;
+}
+
+.planning-controls .field {
+  flex: 1 1 180px;
+  margin-bottom: var(--space-4);
+}
+
+.planning-controls > .button {
+  margin-bottom: var(--space-4);
+}
+
+.planning-notice {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+  margin-top: var(--space-4);
+}
+
+.monthly-planning-panel {
+  margin-top: var(--space-7);
+}
+
+.planning-summary,
+.planning-view-switch,
+.planning-save-area {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.planning-summary {
+  justify-content: space-between;
+}
+
+.planning-summary div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.planning-summary span,
+.planning-table small {
+  color: var(--color-text-muted);
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+}
+
+.planning-view-switch {
+  margin-top: var(--space-4);
+}
+
+.planning-table-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  margin-top: var(--space-4);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.planning-table {
+  border-collapse: collapse;
+  min-width: 960px;
+  width: 100%;
+}
+
+.planning-table th,
+.planning-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 10px 12px;
+  text-align: right;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.planning-table th:first-child,
+.planning-table td:first-child {
+  text-align: left;
+}
+
+.planning-table thead th {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+}
+
+.planning-table .form-control {
+  min-width: 110px;
+  text-align: right;
+}
+
+.planning-table caption {
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.planning-item-inactive {
+  background: #f7f4f1;
+  color: var(--color-text-muted);
+}
+
+.planning-difference {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-semibold);
+}
+
+.planning-save-area {
+  align-items: end;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  justify-content: flex-end;
+  margin-top: var(--space-5);
+  padding: 18px 22px;
+}
+
+.planning-save-area .field {
+  flex: 1 1 420px;
+  margin: 0;
+}
+
 .error-panel {
   border-left: 4px solid var(--color-danger);
 }
@@ -957,6 +1088,11 @@ textarea.form-control {
 
   .project-detail-list {
     grid-template-columns: 1fr;
+  }
+
+  .planning-save-area {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 

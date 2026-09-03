@@ -44,7 +44,15 @@ test('aceita os artefatos RLS P008 versionados', () => {
   const result = checkMigrations(migrationsDirectory);
 
   assert.deepEqual(result.issues, []);
-  assert.equal(result.files.length, 16);
+  assert.equal(result.files.length, 17);
+});
+
+test('P029 aceita somente a revisão aditiva de concorrência', () => {
+  const migrationName = '20260903100000_add_p029_plan_content_revision.sql';
+  const sql = fs.readFileSync(path.resolve('supabase', 'migrations', migrationName), 'utf8');
+
+  assert.deepEqual(scanMigrationText(sql, { migrationName }), []);
+  assert.match(sql, /add column content_revision bigint not null default 1/iu);
 });
 
 test('P026-D21 aceita somente a correção auditável de identidade dos catálogos', () => {

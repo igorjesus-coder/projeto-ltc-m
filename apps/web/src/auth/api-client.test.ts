@@ -70,4 +70,20 @@ describe('cliente autenticado da API', () => {
     expect(fetchImpl.mock.results).toBeDefined();
     expect(new ApiRequestError(409, 'P024_VERSION_CONFLICT').code).toBe('P024_VERSION_CONFLICT');
   });
+
+  it('suporta PUT para o batch mensal', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+    const client = createAuthenticatedApiClient({
+      baseUrl: 'https://api.example.invalid',
+      audience: 'https://api.example.invalid',
+      getAccessToken: vi.fn(async () => 'synthetic-token'),
+      fetchImpl,
+    });
+    await client.sendJson('/planning/projects/p/versions/v/months', 'PUT', {
+      expectedVersion: 1,
+      entries: [{ itemId: 'i', competence: '2026-12-01', amount: '1.00' }],
+    });
+    const requestInit = (fetchImpl.mock.calls[0] as unknown[] | undefined)?.[1] as RequestInit;
+    expect(requestInit.method).toBe('PUT');
+  });
 });

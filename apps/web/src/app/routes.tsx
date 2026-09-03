@@ -6,6 +6,7 @@ import { ProjectDetailPage } from '../routes/ProjectDetailPage';
 import { ProjectsPage } from '../routes/ProjectsPage';
 import { ProjectFormPage } from '../routes/ProjectFormPage';
 import { AdminMasterDataPage } from '../routes/AdminMasterDataPage';
+import { MonthlyPlanningPage } from '../routes/MonthlyPlanningPage';
 
 export type AppRoute =
   | 'home'
@@ -14,6 +15,7 @@ export type AppRoute =
   | 'project-new'
   | 'project-edit'
   | 'admin-master-data'
+  | 'monthly-planning'
   | 'not-found';
 
 export interface NavigationItem {
@@ -32,6 +34,7 @@ export const APP_NAVIGATION: readonly NavigationItem[] = Object.freeze([
     href: '/admin/clients',
     capability: 'catalog:manage',
   },
+  { route: 'monthly-planning', label: 'Planejamento mensal', href: '/planning' },
 ]);
 
 export interface ResolvedRoute {
@@ -60,6 +63,9 @@ export function resolveRoute(pathname: string, search = ''): ResolvedRoute {
   }
   if (normalized === '/admin/clients') {
     return { id: 'admin-master-data', content: <AdminMasterDataPage />, protected: true };
+  }
+  if (normalized === '/planning') {
+    return { id: 'monthly-planning', content: <MonthlyPlanningPage />, protected: true };
   }
   if (normalized === '/projects/new') {
     return {

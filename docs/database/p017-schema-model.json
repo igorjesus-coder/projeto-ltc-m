@@ -1,25 +1,25 @@
 {
   "schemaContract": "ltcm.p017.schema-integrity.v1",
   "fingerprintContract": "ltcm.p017.schema-fingerprint.v1",
-  "migrationCount": 16,
-  "fingerprint": "53bdf3482a5133c74bc5cbb5b56867fbce7f5ec1050a1c67c847844e87a04f47",
+  "migrationCount": 17,
+  "fingerprint": "d5a2aa655bc2ea8694fd73c14474d561f90b053fc482c5789a539a5b11c7155e",
   "summary": {
     "relationCount": 28,
     "tableCount": 19,
     "viewCount": 9,
     "materializedViewCount": 0,
-    "columnCount": 486,
-    "functionCount": 23,
+    "columnCount": 487,
+    "functionCount": 26,
     "triggerCount": 66,
     "indexCount": 79,
     "primaryKeyCount": 19,
     "uniqueConstraintCount": 20,
     "foreignKeyCount": 54,
-    "checkConstraintCount": 100,
+    "checkConstraintCount": 101,
     "protectedRlsTableCount": 19,
     "forceRlsTableCount": 19,
     "policyCount": 49,
-    "grantCount": 66,
+    "grantCount": 69,
     "typeCount": 10
   },
   "model": {
@@ -2313,6 +2313,15 @@
             "default": null,
             "generated": null,
             "comment": "Linhagem imutável da reabertura por clonagem; a origem permanece preservada."
+          },
+          {
+            "position": 15,
+            "name": "content_revision",
+            "type": "bigint",
+            "nullable": false,
+            "default": "1",
+            "generated": null,
+            "comment": "Revisão monotônica do conteúdo mensal editável; usada para concorrência de batches P029."
           },
           {
             "position": 2,
@@ -6926,6 +6935,19 @@
       {
         "schema": "ltc_m",
         "table": "plan_versions",
+        "name": "ck_plan_versions_content_revision",
+        "type": "check",
+        "columns": [
+          "content_revision"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (content_revision > 0)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "plan_versions",
         "name": "ck_plan_versions_name_not_blank",
         "type": "check",
         "columns": [
@@ -8323,6 +8345,17 @@
       },
       {
         "schema": "ltc_m",
+        "name": "approve_plan_version_as_approver",
+        "identityArguments": "p_plan_version_id uuid",
+        "resultType": "TABLE(plan_version_id uuid, status ltc_m.plan_status, row_version bigint)",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": true,
+        "volatility": "volatile",
+        "definitionHash": "5b2f77361bb2bae4778da9d3276b497ce6c0bd3bfaa1b1ace478b17d732c5062"
+      },
+      {
+        "schema": "ltc_m",
         "name": "audit_row_change",
         "identityArguments": "",
         "resultType": "trigger",
@@ -8510,6 +8543,17 @@
       },
       {
         "schema": "ltc_m",
+        "name": "resolve_authorization",
+        "identityArguments": "p_auth_subject text",
+        "resultType": "TABLE(app_user_id uuid, display_name text, app_role ltc_m.app_role)",
+        "kind": "function",
+        "language": "sql",
+        "securityDefiner": true,
+        "volatility": "stable",
+        "definitionHash": "f27ba1d61fc0ac8a435a1435f9743505d98577850380037b5c8af28fb8443d5d"
+      },
+      {
+        "schema": "ltc_m",
         "name": "return_plan_version_to_draft",
         "identityArguments": "p_plan_version_id uuid",
         "resultType": "TABLE(plan_version_id uuid, status ltc_m.plan_status, row_version bigint)",
@@ -8518,6 +8562,17 @@
         "securityDefiner": true,
         "volatility": "volatile",
         "definitionHash": "a4713add6eda17c60c3c037db6cd5585863777146d38bcf233cca42e0cbb067e"
+      },
+      {
+        "schema": "ltc_m",
+        "name": "return_plan_version_to_draft_as_approver",
+        "identityArguments": "p_plan_version_id uuid",
+        "resultType": "TABLE(plan_version_id uuid, status ltc_m.plan_status, row_version bigint)",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": true,
+        "volatility": "volatile",
+        "definitionHash": "e1c558cc93a06712fdc237e454ea75946ad7800763816270459b8f76c0cb8b27"
       },
       {
         "schema": "ltc_m",
@@ -9128,7 +9183,7 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) OR (EXISTS ( SELECT 1\n   FROM ltc_m.plan_versions\n  WHERE plan_versions.id = financial_plan_lines.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))",
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role::text = ANY (ARRAY['editor'::text, 'approver'::text, 'admin'::text]))) OR (EXISTS ( SELECT 1\n   FROM ltc_m.plan_versions\n  WHERE plan_versions.id = financial_plan_lines.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))",
         "check": null
       },
       {
@@ -9164,7 +9219,7 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) OR (EXISTS ( SELECT 1\n   FROM ltc_m.plan_versions\n  WHERE plan_versions.id = financial_plan_scopes.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))",
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role::text = ANY (ARRAY['editor'::text, 'approver'::text, 'admin'::text]))) OR (EXISTS ( SELECT 1\n   FROM ltc_m.plan_versions\n  WHERE plan_versions.id = financial_plan_scopes.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))",
         "check": null
       },
       {
@@ -9332,7 +9387,7 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE (authorization_context.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role])) OR authorization_context.app_role = 'viewer'::ltc_m.app_role AND (EXISTS ( SELECT 1\n           FROM ltc_m.plan_versions\n          WHERE plan_versions.id = monthly_plan_baselines.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))))",
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role::text = ANY (ARRAY['editor'::text, 'approver'::text, 'admin'::text]))) OR (EXISTS ( SELECT 1\n   FROM ltc_m.plan_versions\n  WHERE plan_versions.id = monthly_plan_baselines.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))",
         "check": null
       },
       {
@@ -9356,7 +9411,7 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE (authorization_context.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role])) OR authorization_context.app_role = 'viewer'::ltc_m.app_role AND (EXISTS ( SELECT 1\n           FROM ltc_m.plan_versions\n          WHERE plan_versions.id = monthly_plan_cells.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))))",
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role::text = ANY (ARRAY['editor'::text, 'approver'::text, 'admin'::text]))) OR (EXISTS ( SELECT 1\n   FROM ltc_m.plan_versions\n  WHERE plan_versions.id = monthly_plan_cells.plan_version_id AND (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))",
         "check": null
       },
       {
@@ -9380,7 +9435,7 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role])))",
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role::text = ANY (ARRAY['editor'::text, 'approver'::text, 'admin'::text])))",
         "check": null
       },
       {
@@ -9404,7 +9459,7 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role])))",
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role::text = ANY (ARRAY['editor'::text, 'approver'::text, 'admin'::text])))",
         "check": null
       },
       {
@@ -9428,7 +9483,7 @@
         "roles": [
           "ltc_m_runtime"
         ],
-        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE (authorization_context.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role])) OR (plan_versions.status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))))",
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role::text = ANY (ARRAY['editor'::text, 'approver'::text, 'admin'::text]))) OR (status = ANY (ARRAY['approved'::ltc_m.plan_status, 'locked'::ltc_m.plan_status]))",
         "check": null
       },
       {
@@ -9572,6 +9627,14 @@
       {
         "schema": "ltc_m",
         "object": "approve_plan_version",
+        "objectType": "routine",
+        "grantee": "ltc_m_runtime",
+        "privilege": "EXECUTE",
+        "grantable": false
+      },
+      {
+        "schema": "ltc_m",
+        "object": "approve_plan_version_as_approver",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
         "privilege": "EXECUTE",
@@ -9963,7 +10026,23 @@
       },
       {
         "schema": "ltc_m",
+        "object": "resolve_authorization",
+        "objectType": "routine",
+        "grantee": "ltc_m_runtime",
+        "privilege": "EXECUTE",
+        "grantable": false
+      },
+      {
+        "schema": "ltc_m",
         "object": "return_plan_version_to_draft",
+        "objectType": "routine",
+        "grantee": "ltc_m_runtime",
+        "privilege": "EXECUTE",
+        "grantable": false
+      },
+      {
+        "schema": "ltc_m",
+        "object": "return_plan_version_to_draft_as_approver",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
         "privilege": "EXECUTE",
