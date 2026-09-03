@@ -152,6 +152,8 @@ function createDatabase(
     readonly aggregateOverflow?: boolean;
     readonly existingAmount?: string;
     readonly justification?: string;
+    readonly workflowStatus?: string;
+    readonly workflowRowVersion?: number;
   } = {},
 ) {
   const calls: Array<{ readonly text: string; readonly values: readonly unknown[] }> = [];
@@ -168,8 +170,8 @@ function createDatabase(
   const plan = {
     version_id: versionId,
     version_name: 'Forecast 2026',
-    version_status: 'draft',
-    row_version: options.stale ? 3 : 4,
+    version_status: options.workflowStatus ?? 'draft',
+    row_version: options.workflowRowVersion ?? (options.stale ? 3 : 4),
     content_revision: options.stale ? 3 : 4,
     is_baseline: false,
   };
@@ -187,6 +189,19 @@ function createDatabase(
       return operation({
         query: async <Row>(text: string, values: readonly unknown[] = []) => {
           calls.push({ text, values });
+          if (text.includes('approve_plan_version')) {
+            plan.version_status = 'approved';
+            plan.row_version += 1;
+            return {
+              rows: [
+                {
+                  plan_version_id: versionId,
+                  status: 'approved',
+                  row_version: plan.row_version,
+                } as Row,
+              ],
+            };
+          }
           if (options.aggregateOverflow && text.includes('financial_actual_events'))
             throw Object.assign(new Error('numeric field overflow'), { code: '22003' });
           if (text.includes('for update')) return { rows: [plan as Row] };
@@ -461,4 +476,34 @@ test('P031 rejeita row_version stale antes de chamar a função SQL', async () =
       error instanceof ConflictException && error.message.includes('P031_VERSION_CONFLICT'),
   );
   assert.equal(calls.filter((text) => text.includes('submit_plan_version')).length, 0);
+});
+
+test('P031 rejeita stale approve depois de uma aprovação válida', async () => {
+  const { database, calls } = createDatabase({
+    workflowStatus: 'pending_approval',
+    workflowRowVersion: 4,
+    justification: 'Aprovação concorrente',
+  });
+  const service = new PlanningService(database as never);
+  const approved = await service.workflow(
+    projectId,
+    versionId,
+    'approve',
+    { expectedRowVersion: 4, justification: 'Aprovação concorrente' },
+    actor,
+  );
+  assert.equal(approved.version.status, 'approved');
+  assert.equal(approved.version.rowVersion, 5);
+  await assert.rejects(
+    service.workflow(
+      projectId,
+      versionId,
+      'approve',
+      { expectedRowVersion: 4, justification: 'Aprovação concorrente' },
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ConflictException && error.message.includes('P031_VERSION_CONFLICT'),
+  );
+  assert.equal(calls.filter((call) => call.text.includes('approve_plan_version')).length, 1);
 });
