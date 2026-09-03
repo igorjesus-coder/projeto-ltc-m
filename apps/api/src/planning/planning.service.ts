@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnprocessableEntityException,
@@ -8,6 +9,7 @@ import type { PoolClient, QueryResultRow } from 'pg';
 
 import type { ActorContext } from '../database/transaction.js';
 import { DatabaseService } from '../database/database.service.js';
+import { calculateFinancialSummary, parseFinancialCents } from './financial.js';
 import {
   P029_MONTHLY_PLANNING_CONTRACT,
   P029_PLANNED_METRIC,
@@ -15,6 +17,7 @@ import {
   type PlanningCompetence,
   type PlanningEditorResponse,
   type PlanningEntry,
+  type PlanningFinancialSummary,
   type PlanningItem,
   type PlanningMonthQuery,
   type PlanningMonthlyTotal,
@@ -30,6 +33,7 @@ interface ProjectRow extends QueryResultRow {
   readonly project_code: string;
   readonly project_name: string;
   readonly currency_code: string;
+  readonly contract_value: string;
   readonly project_status: string;
   readonly start_date: string | null;
   readonly end_date: string | null;
@@ -70,10 +74,37 @@ interface BoundRow extends QueryResultRow {
   readonly max_month: string | null;
 }
 
+interface FinancialRow extends QueryResultRow {
+  readonly contract_value: string;
+  readonly currency_code: string;
+  readonly actual_posted: string;
+  readonly planned_draft: string;
+  readonly currency_mismatch: boolean;
+  readonly planned_currency_mismatch: boolean;
+}
+
+interface PlanAmountRow extends QueryResultRow {
+  readonly item_id: string;
+  readonly competence_month: string;
+  readonly amount: string;
+}
+
 function version(value: string | number): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < 1) throw new Error('P029_ROW_VERSION_INVALID');
   return parsed;
+}
+
+function mapFinancialQueryError(error: unknown): never {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { readonly code?: unknown }).code === '22003'
+  ) {
+    throw new UnprocessableEntityException('P030_FINANCIAL_AGGREGATE_OVERFLOW');
+  }
+  throw error;
 }
 
 function projectOption(row: ProjectRow): PlanningProjectOption {
@@ -149,6 +180,7 @@ export class PlanningService {
            project_code,
            project_name,
            base_currency as currency_code,
+           contract_value::text,
            status::text as project_status,
            start_date,
            end_date
@@ -196,9 +228,10 @@ export class PlanningService {
     projectId: string,
     query: PlanningMonthQuery,
     actor: ActorContext,
+    canOverrideBalance = false,
   ): Promise<PlanningEditorResponse> {
     return this.database.actorTransaction(actor, async (client) =>
-      this.readEditor(client, projectId, query),
+      this.readEditor(client, projectId, query, canOverrideBalance),
     );
   }
 
@@ -207,6 +240,7 @@ export class PlanningService {
     versionId: string,
     payload: PlanningBatchPayload,
     actor: ActorContext,
+    canOverrideBalance = false,
   ): Promise<PlanningEditorResponse> {
     return this.database.actorTransaction(
       { ...actor, justification: payload.justification },
@@ -270,6 +304,62 @@ export class PlanningService {
           throw new UnprocessableEntityException('P029_ITEM_NOT_ELIGIBLE');
         }
 
+        const existingLines = await client.query<PlanAmountRow>(
+          `select project_item_id as item_id, competence_month::text, amount::text
+           from ltc_m.financial_plan_lines
+           where plan_version_id = $1::uuid
+             and project_id = $2::uuid
+             and metric_type = $3::ltc_m.planned_financial_metric
+             and planning_level = 'item'::ltc_m.planning_level`,
+          [versionId, projectId, P029_PLANNED_METRIC],
+        );
+        const existingByKey = new Map<string, bigint>();
+        let plannedDraft = 0n;
+        for (const line of existingLines.rows) {
+          const amount = parseFinancialCents(line.amount);
+          existingByKey.set(`${line.item_id}\u0000${line.competence_month}`, amount);
+          plannedDraft += amount;
+        }
+        const finalPlanned = payload.entries.reduce(
+          (total, entry) =>
+            total -
+            (existingByKey.get(`${entry.itemId}\u0000${entry.competence}`) ?? 0n) +
+            parseFinancialCents(entry.amount),
+          plannedDraft,
+        );
+        const actualResult = await client
+          .query<{
+            readonly actual_posted: string;
+            readonly currency_mismatch: boolean;
+          }>(
+            `select coalesce(sum(events.amount), 0)::numeric(20,2)::text as actual_posted
+                , exists (
+                    select 1
+                    from ltc_m.financial_actual_events as mismatch_events
+                    join ltc_m.projects as mismatch_projects on mismatch_projects.id = mismatch_events.project_id
+                    where mismatch_events.project_id = $1::uuid
+                      and mismatch_events.metric_type = 'billing_actual'::ltc_m.actual_financial_metric
+                      and mismatch_events.status = 'posted'::ltc_m.actual_status
+                      and mismatch_events.currency_code <> mismatch_projects.base_currency
+                  ) as currency_mismatch
+           from ltc_m.financial_actual_events as events
+           join ltc_m.projects as projects on projects.id = events.project_id
+           where events.project_id = $1::uuid
+             and events.metric_type = 'billing_actual'::ltc_m.actual_financial_metric
+             and events.status = 'posted'::ltc_m.actual_status
+             and events.currency_code = projects.base_currency`,
+            [projectId],
+          )
+          .catch(mapFinancialQueryError);
+        if (actualResult.rows[0]?.currency_mismatch) {
+          throw new UnprocessableEntityException('P030_CURRENCY_MISMATCH');
+        }
+        const actualPosted = parseFinancialCents(actualResult.rows[0]?.actual_posted ?? '0.00');
+        const contractValue = parseFinancialCents(project.contract_value);
+        if (actualPosted + finalPlanned > contractValue && !canOverrideBalance) {
+          throw new ForbiddenException('P030_BALANCE_OVERRIDE_REQUIRED');
+        }
+
         for (const entry of payload.entries) {
           await client.query(
             `insert into ltc_m.financial_plan_lines (
@@ -325,7 +415,7 @@ export class PlanningService {
           [actor.appUserId, versionId, payload.expectedVersion],
         );
         if (!bumped.rows[0]) throw new ConflictException('P029_BATCH_CONFLICT');
-        return this.readEditor(client, projectId, { versionId });
+        return this.readEditor(client, projectId, { versionId }, canOverrideBalance);
       },
     );
   }
@@ -340,6 +430,7 @@ export class PlanningService {
          project_code,
          project_name,
          base_currency as currency_code,
+         contract_value::text,
          status::text as project_status,
          start_date,
          end_date
@@ -350,10 +441,73 @@ export class PlanningService {
     return result.rows[0];
   }
 
+  private async readFinancialSummary(
+    client: PoolClient,
+    projectId: string,
+    versionId: string,
+    versionStatus: string,
+    canOverrideBalance: boolean,
+  ): Promise<PlanningFinancialSummary> {
+    const result = await client
+      .query<FinancialRow>(
+        `select
+         projects.contract_value::text,
+         projects.base_currency as currency_code,
+         coalesce((
+           select sum(events.amount)
+           from ltc_m.financial_actual_events as events
+           where events.project_id = projects.id
+             and events.metric_type = 'billing_actual'::ltc_m.actual_financial_metric
+             and events.status = 'posted'::ltc_m.actual_status
+         ), 0)::numeric(20,2)::text as actual_posted,
+         case when $3::text = 'draft' then coalesce((
+           select sum(lines.amount)
+           from ltc_m.financial_plan_lines as lines
+           where lines.plan_version_id = $2::uuid
+             and lines.project_id = projects.id
+             and lines.metric_type = $4::ltc_m.planned_financial_metric
+             and lines.planning_level = 'item'::ltc_m.planning_level
+         ), 0)::numeric(20,2)::text else '0.00' end as planned_draft
+         , exists (
+             select 1
+             from ltc_m.financial_actual_events as mismatch_events
+             where mismatch_events.project_id = projects.id
+               and mismatch_events.metric_type = 'billing_actual'::ltc_m.actual_financial_metric
+               and mismatch_events.status = 'posted'::ltc_m.actual_status
+               and mismatch_events.currency_code <> projects.base_currency
+           ) as currency_mismatch
+         , exists (
+             select 1
+             from ltc_m.financial_plan_lines as mismatch_lines
+             where mismatch_lines.plan_version_id = $2::uuid
+               and mismatch_lines.project_id = projects.id
+               and mismatch_lines.metric_type = $4::ltc_m.planned_financial_metric
+               and mismatch_lines.planning_level = 'item'::ltc_m.planning_level
+               and mismatch_lines.currency_code <> projects.base_currency
+           ) as planned_currency_mismatch
+       from ltc_m.projects as projects
+       where projects.id = $1::uuid`,
+        [projectId, versionId, versionStatus, P029_PLANNED_METRIC],
+      )
+      .catch(mapFinancialQueryError);
+    const row = result.rows[0];
+    if (!row) throw new Error('P030_FINANCIAL_STATE_UNAVAILABLE');
+    if (row.currency_mismatch || row.planned_currency_mismatch)
+      throw new UnprocessableEntityException('P030_CURRENCY_MISMATCH');
+    return calculateFinancialSummary(
+      row.contract_value,
+      row.actual_posted,
+      row.planned_draft,
+      row.currency_code,
+      canOverrideBalance,
+    );
+  }
+
   private async readEditor(
     client: PoolClient,
     projectId: string,
     query: PlanningMonthQuery,
+    canOverrideBalance: boolean,
   ): Promise<PlanningEditorResponse> {
     const project = await this.findProject(client, projectId);
     if (!project) throw new NotFoundException('P029_PROJECT_NOT_FOUND');
@@ -433,6 +587,13 @@ export class PlanningService {
        order by competence_month asc`,
       entryValues,
     );
+    const financial = await this.readFinancialSummary(
+      client,
+      projectId,
+      query.versionId,
+      plan.version_status,
+      canOverrideBalance,
+    );
     const versionValue = versionOption(plan);
     return {
       contract: P029_MONTHLY_PLANNING_CONTRACT,
@@ -449,6 +610,7 @@ export class PlanningService {
       })),
       entries: entriesResult.rows.map(mapEntry),
       projectTotals: totalsResult.rows.map(mapTotal),
+      financial,
       range: { from: from ?? null, to: to ?? null },
     };
   }

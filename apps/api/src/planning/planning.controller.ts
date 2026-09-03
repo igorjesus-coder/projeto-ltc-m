@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Put, Query, Req, UseGuards } from '@nestjs/common';
 
-import { AuthorizationGuard, RequireCapabilities } from '../auth/authorization.js';
+import { AuthorizationGuard, hasCapabilities, RequireCapabilities } from '../auth/authorization.js';
 import type { AuthenticatedRequest } from '../auth/auth.guard.js';
 import {
   parsePlanningBatchPayload,
@@ -25,6 +25,12 @@ function actorFromRequest(request: AuthenticatedRequest) {
     requestId: request.headers['x-request-id'] ?? null,
     source: 'api' as const,
   };
+}
+
+function canOverrideBalance(request: AuthenticatedRequest): boolean {
+  const profile = request.authorization;
+  if (!profile) throw new Error('P021_AUTHORIZATION_CONTEXT_MISSING');
+  return hasCapabilities(profile, ['forecast:override_balance']);
 }
 
 @Controller('planning')
@@ -53,6 +59,7 @@ export class PlanningController {
       parsePlanningProjectId(projectId),
       parsePlanningMonthQuery(parsePlanningVersionId(versionId), request.query),
       actorFromRequest(request),
+      canOverrideBalance(request),
     );
   }
 
@@ -69,6 +76,7 @@ export class PlanningController {
       parsePlanningVersionId(versionId),
       parsePlanningBatchPayload(body),
       actorFromRequest(request),
+      canOverrideBalance(request),
     );
   }
 }

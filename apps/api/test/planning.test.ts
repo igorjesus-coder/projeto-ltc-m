@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 
@@ -118,13 +119,23 @@ test('P029 exige justificativa não vazia, limitada e normalizada', () => {
   }
 });
 
-function createDatabase(options: { readonly inactive?: boolean; readonly stale?: boolean } = {}) {
+function createDatabase(
+  options: {
+    readonly inactive?: boolean;
+    readonly stale?: boolean;
+    readonly contractValue?: string;
+    readonly aggregateOverflow?: boolean;
+    readonly existingAmount?: string;
+    readonly justification?: string;
+  } = {},
+) {
   const calls: Array<{ readonly text: string; readonly values: readonly unknown[] }> = [];
   const project = {
     project_id: projectId,
     project_code: 'P029',
     project_name: 'Projeto P029',
     currency_code: 'BRL',
+    contract_value: options.contractValue ?? '1000.00',
     project_status: 'active',
     start_date: '2026-12-01',
     end_date: '2027-01-01',
@@ -144,12 +155,30 @@ function createDatabase(options: { readonly inactive?: boolean; readonly stale?:
         query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
       }) => Promise<Result>,
     ) => {
-      assert.deepEqual(receivedActor, { ...actor, justification: 'Reprogramação mensal' });
+      assert.deepEqual(receivedActor, {
+        ...actor,
+        justification: options.justification ?? 'Reprogramação mensal',
+      });
       return operation({
         query: async <Row>(text: string, values: readonly unknown[] = []) => {
           calls.push({ text, values });
+          if (options.aggregateOverflow && text.includes('financial_actual_events'))
+            throw Object.assign(new Error('numeric field overflow'), { code: '22003' });
           if (text.includes('for update')) return { rows: [plan as Row] };
           if (text.includes('join ltc_m.financial_plan_scopes')) return { rows: [plan as Row] };
+          if (text.includes('projects.contract_value'))
+            return {
+              rows: [
+                {
+                  contract_value: '1000.00',
+                  currency_code: 'BRL',
+                  actual_posted: '0.00',
+                  planned_draft: '19.40',
+                  currency_mismatch: false,
+                  planned_currency_mismatch: false,
+                } as Row,
+              ],
+            };
           if (text.includes('from ltc_m.projects')) return { rows: [project as Row] };
           if (text.includes('id = any'))
             return {
@@ -161,6 +190,8 @@ function createDatabase(options: { readonly inactive?: boolean; readonly stale?:
           if (text.startsWith('insert into')) return { rows: [] as Row[] };
           if (text.startsWith('update ltc_m.plan_versions'))
             return { rows: [{ content_revision: 5 } as Row] };
+          if (text.includes('from ltc_m.financial_actual_events'))
+            return { rows: [{ actual_posted: '0.00' } as Row] };
           if (text.includes('min(competence_month)'))
             return { rows: [{ min_month: '2026-12-01', max_month: '2027-01-01' } as Row] };
           if (text.includes('from ltc_m.project_items'))
@@ -188,7 +219,12 @@ function createDatabase(options: { readonly inactive?: boolean; readonly stale?:
             return { rows: [{ competence_month: '2026-12-01', amount: '7.00' }] as Row[] };
           return {
             rows: [
-              { item_id: itemA, competence_month: '2026-12-01', amount: '0.10', row_version: 1 },
+              {
+                item_id: itemA,
+                competence_month: '2026-12-01',
+                amount: options.existingAmount ?? '0.10',
+                row_version: 1,
+              },
             ] as Row[],
           };
         },
@@ -240,4 +276,105 @@ test('P029 bloqueia versão stale ou item inativo antes de persistir', async () 
       error.message.includes('P029_ITEM_NOT_ELIGIBLE'),
   );
   assert.equal(inactive.calls.filter((call) => call.text.startsWith('insert into')).length, 0);
+});
+
+test('P030 bloqueia excesso sem override antes de qualquer escrita', async () => {
+  const { database, calls } = createDatabase({ contractValue: '10.00' });
+  await assert.rejects(
+    new PlanningService(database as never).save(
+      projectId,
+      versionId,
+      parsePlanningBatchPayload(validPayload),
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ForbiddenException &&
+      error.message.includes('P030_BALANCE_OVERRIDE_REQUIRED'),
+  );
+  assert.equal(calls.filter((call) => call.text.startsWith('insert into')).length, 0);
+  assert.equal(
+    calls.filter((call) => call.text.startsWith('update ltc_m.plan_versions')).length,
+    0,
+  );
+});
+
+test('P030 permite excesso somente quando o capability admin foi derivado', async () => {
+  const { database } = createDatabase({ contractValue: '10.00' });
+  const response = await new PlanningService(database as never).save(
+    projectId,
+    versionId,
+    parsePlanningBatchPayload(validPayload),
+    actor,
+    true,
+  );
+  assert.equal(response.financial.canOverrideBalance, true);
+});
+
+test('P030 aplica replacement semantics ao calcular o total final', async () => {
+  const { database } = createDatabase({ contractValue: '19.40' });
+  const response = await new PlanningService(database as never).save(
+    projectId,
+    versionId,
+    parsePlanningBatchPayload(validPayload),
+    actor,
+  );
+  assert.equal(response.version.contentRevision, 4);
+});
+
+test('P030 sanitiza overflow de agregado financeiro', async () => {
+  const { database, calls } = createDatabase({ aggregateOverflow: true });
+  await assert.rejects(
+    new PlanningService(database as never).save(
+      projectId,
+      versionId,
+      parsePlanningBatchPayload(validPayload),
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof UnprocessableEntityException &&
+      error.message.includes('P030_FINANCIAL_AGGREGATE_OVERFLOW'),
+  );
+  assert.equal(calls.filter((call) => call.text.startsWith('insert into')).length, 0);
+});
+
+test('P030 permite reduzir excesso até o contrato e bloqueia manter ou aumentar', async () => {
+  const payload = parsePlanningBatchPayload({
+    expectedVersion: 4,
+    justification: 'Correção de excesso',
+    entries: [
+      { itemId: itemA, competence: '2026-12-01', amount: '100.00' },
+      { itemId: itemB, competence: '2026-12-01', amount: '0.00' },
+    ],
+  });
+  const firstEntry = payload.entries[0];
+  const secondEntry = payload.entries[1];
+  assert.ok(firstEntry);
+  assert.ok(secondEntry);
+  const corrected = createDatabase({
+    contractValue: '100.00',
+    existingAmount: '200.00',
+    justification: 'Correção de excesso',
+  });
+  await new PlanningService(corrected.database as never).save(projectId, versionId, payload, actor);
+
+  const maintained = createDatabase({
+    contractValue: '100.00',
+    existingAmount: '200.00',
+    justification: 'Correção de excesso',
+  });
+  await assert.rejects(
+    new PlanningService(maintained.database as never).save(
+      projectId,
+      versionId,
+      {
+        ...payload,
+        entries: [
+          { ...firstEntry, amount: '200.00' },
+          { ...secondEntry, amount: '0.00' },
+        ],
+      },
+      actor,
+    ),
+    /P030_BALANCE_OVERRIDE_REQUIRED/u,
+  );
 });
