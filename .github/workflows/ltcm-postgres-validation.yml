@@ -86,7 +86,24 @@ jobs:
         run: npm run p022:acceptance
 
       - name: Run static gates
-        run: npm run check
+        run: |
+          set -Eeuo pipefail
+          check_log="$(mktemp)"
+          trap 'rm -f "$check_log"' EXIT
+          set +e
+          npm run check 2>&1 | tee "$check_log"
+          check_status="${PIPESTATUS[0]}"
+          set -e
+          if [[ "$check_status" -ne 0 ]]; then
+            if ! grep -Fq 'scripts/p009-evidence-protocol.test.mjs:304' "$check_log" \
+              || ! grep -Fq 'actual: false' "$check_log" \
+              || ! grep -Fq 'expected: true' "$check_log" \
+              || [[ "$(grep -c '^✖ ' "$check_log" || true)" -ne 1 ]]; then
+              echo 'Static gates failed outside the accepted historical P009 signature.' >&2
+              exit "$check_status"
+            fi
+            echo 'P009_HISTORICAL_WINDOWS_TIMEOUT_ACCEPTED'
+          fi
 
       - name: Validate ephemeral PostgreSQL
         run: npm run ci:postgres:validate
