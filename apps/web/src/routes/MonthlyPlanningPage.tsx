@@ -22,12 +22,17 @@ import {
 } from '../components/design-system';
 import {
   decimalToCents,
+  addDistributionToValues,
   buildPlanningEntries,
+  distributeBalance,
   moneyLabel,
+  parsePercentage,
+  P030_PERCENT_SCALE,
   parsePlanningEditorResponse,
   parsePlanningProjectsResponse,
   parsePlanningVersionsResponse,
   planningCellKey,
+  signedDecimalToCents,
   type PlanningEditorResponse,
   type PlanningProjectOption,
   type PlanningVersionOption,
@@ -46,6 +51,8 @@ function errorLabel(error: unknown): string {
     if (error.code === 'P029_VERSION_CONFLICT' || error.code === 'P029_BATCH_CONFLICT')
       return 'A versão foi alterada por outra pessoa. Recarregue o editor antes de salvar.';
     if (error.code === 'P029_VERSION_NOT_EDITABLE') return 'Esta versão não está editável.';
+    if (error.code === 'P030_BALANCE_OVERRIDE_REQUIRED')
+      return 'O excesso ultrapassa o valor contratual e exige a permissÃ£o de override de saldo.';
     if (error.code === 'P029_BASELINE_IMMUTABLE')
       return 'Este baseline importado é imutável e não pode ser editado neste fluxo.';
   }
@@ -102,6 +109,8 @@ export function MonthlyPlanningPage() {
   const [justification, setJustification] = useState('');
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [selectedCells, setSelectedCells] = useState<ReadonlySet<string>>(new Set());
+  const [weights, setWeights] = useState<Record<string, string>>({});
   const auth0Audience = publicEnvironment.auth0?.audience;
   const apiClient = useMemo(
     () =>
@@ -173,6 +182,8 @@ export function MonthlyPlanningPage() {
         setValues(nextValues);
         setOriginal(nextValues);
         setRange({ from: monthPart(parsed.range.from), to: monthPart(parsed.range.to) });
+        setSelectedCells(new Set());
+        setWeights({});
         setNotice(null);
       })
       .catch((error: unknown) => {
@@ -196,6 +207,49 @@ export function MonthlyPlanningPage() {
   );
   const selectedVersion = versions.find((item) => item.versionId === versionId);
   const editable = Boolean(data?.version.editable && can('forecast:edit_draft'));
+  const localFinancial = useMemo(() => {
+    if (!data) return null;
+    const contractValue = signedDecimalToCents(data.financial.contractValue) ?? 0n;
+    const actualPosted = signedDecimalToCents(data.financial.actualPosted) ?? 0n;
+    const plannedDraft = data.items.reduce(
+      (total, item) =>
+        total +
+        data.competences.reduce(
+          (itemTotal, competence) =>
+            itemTotal +
+            (decimalToCents(values[planningCellKey(item.itemId, competence.value)] ?? '') ?? 0n),
+          0n,
+        ),
+      0n,
+    );
+    const rawBalance = contractValue - actualPosted - plannedDraft;
+    return {
+      contractValue,
+      actualPosted,
+      plannedDraft,
+      rawBalance,
+      distributableBalance: rawBalance > 0n ? rawBalance : 0n,
+    };
+  }, [data, values]);
+  const distributionDestinations = useMemo(() => {
+    if (!data) return [];
+    return data.items.flatMap((item) =>
+      data.competences.flatMap((competence) => {
+        const key = planningCellKey(item.itemId, competence.value);
+        return selectedCells.has(key)
+          ? [{ itemId: item.itemId, competence: competence.value, key }]
+          : [];
+      }),
+    );
+  }, [data, selectedCells]);
+  const distributionWeightTotal = useMemo(
+    () =>
+      distributionDestinations.reduce(
+        (total, destination) => total + (parsePercentage(weights[destination.key] ?? '') ?? 0n),
+        0n,
+      ),
+    [distributionDestinations, weights],
+  );
   function confirmDiscard(): boolean {
     return !dirty || window.confirm('Há alterações não salvas. Deseja descartá-las?');
   }
@@ -219,6 +273,45 @@ export function MonthlyPlanningPage() {
     if (!confirmDiscard()) return;
     setNotice(null);
     setAppliedRange(range);
+  }
+  function toggleDistributionCell(key: string) {
+    setSelectedCells((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+  function distribute() {
+    if (!data || !localFinancial || !editable) return;
+    if (localFinancial.rawBalance < 0n) {
+      setNotice('Corrija o excesso antes de distribuir saldo.');
+      return;
+    }
+    if (localFinancial.distributableBalance === 0n) {
+      setNotice('Saldo totalmente programado.');
+      return;
+    }
+    try {
+      const allocations = distributeBalance(
+        localFinancial.distributableBalance,
+        distributionDestinations.map(({ itemId, competence, key }) => ({
+          itemId,
+          competence,
+          weight: weights[key] ?? '',
+        })),
+      );
+      setValues((current) => addDistributionToValues(current, allocations));
+      setNotice(
+        `Prévia criada: ${moneyLabel(localFinancial.distributableBalance, data.project.currencyCode)} distribuídos com residual reconciliado.`,
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof Error && error.message === 'P030_PERCENT_TOTAL_INVALID'
+          ? 'Os pesos devem totalizar exatamente 100,00%.'
+          : 'Informe pesos percentuais válidos para as células selecionadas.',
+      );
+    }
   }
   async function save() {
     if (!apiClient || !data || !editable) return;
@@ -250,6 +343,8 @@ export function MonthlyPlanningPage() {
       setValues(nextValues);
       setOriginal(nextValues);
       setJustification('');
+      setSelectedCells(new Set());
+      setWeights({});
       setNotice('Planejamento mensal salvo.');
     } catch (error) {
       setNotice(errorLabel(error));
@@ -382,6 +477,107 @@ export function MonthlyPlanningPage() {
               Projeto
             </Button>
           </div>
+          {localFinancial ? (
+            <section className="planning-financial-summary" aria-label="Resumo financeiro">
+              <h2>Resumo financeiro</h2>
+              <dl>
+                <div>
+                  <dt>Valor contratual</dt>
+                  <dd>{moneyLabel(localFinancial.contractValue, data.project.currencyCode)}</dd>
+                </div>
+                <div>
+                  <dt>Faturado realizado</dt>
+                  <dd>{moneyLabel(localFinancial.actualPosted, data.project.currencyCode)}</dd>
+                </div>
+                <div>
+                  <dt>Programado no draft</dt>
+                  <dd>{moneyLabel(localFinancial.plannedDraft, data.project.currencyCode)}</dd>
+                </div>
+                <div>
+                  <dt>Saldo</dt>
+                  <dd>{moneyLabel(localFinancial.rawBalance, data.project.currencyCode)}</dd>
+                </div>
+              </dl>
+              {localFinancial.rawBalance > 0n ? (
+                <p className="planning-warning" role="status">
+                  Saldo não programado:{' '}
+                  {moneyLabel(localFinancial.rawBalance, data.project.currencyCode)}. O salvamento
+                  continua permitido.
+                </p>
+              ) : null}
+              {localFinancial.rawBalance < 0n ? (
+                <p className="planning-error" role="alert">
+                  Excesso: {moneyLabel(-localFinancial.rawBalance, data.project.currencyCode)} acima
+                  do contrato.
+                  {!data.financial.canOverrideBalance
+                    ? ' Permissão de override necessária para salvar.'
+                    : ' Override disponível para este perfil.'}
+                </p>
+              ) : null}
+              {localFinancial.rawBalance === 0n ? (
+                <p role="status">Saldo totalmente programado.</p>
+              ) : null}
+            </section>
+          ) : null}
+          {editable ? (
+            <section className="planning-distribution-panel" aria-labelledby="distribution-title">
+              <h2 id="distribution-title">Distribuir saldo</h2>
+              <p>
+                Selecione as células, informe pesos que totalizem 100,00% e revise a prévia antes de
+                salvar.
+              </p>
+              {localFinancial ? (
+                <dl className="planning-distribution-summary">
+                  <div>
+                    <dt>Saldo alvo</dt>
+                    <dd>
+                      {moneyLabel(localFinancial.distributableBalance, data.project.currencyCode)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Soma dos pesos</dt>
+                    <dd>
+                      {(distributionWeightTotal / P030_PERCENT_SCALE).toString()}.
+                      {(distributionWeightTotal % P030_PERCENT_SCALE).toString().padStart(4, '0')}%
+                    </dd>
+                  </div>
+                </dl>
+              ) : null}
+              {distributionDestinations.length > 0 ? (
+                <div className="planning-distribution-targets">
+                  {distributionDestinations.map(({ itemId, competence, key }) => {
+                    const item = data.items.find((candidate) => candidate.itemId === itemId);
+                    return (
+                      <Field
+                        key={key}
+                        id={`weight-${itemId}-${competence}`}
+                        label={`${item?.itemCode ?? item?.lineNumber ?? itemId} ${competence}`}
+                      >
+                        <Input
+                          value={weights[key] ?? ''}
+                          inputMode="decimal"
+                          placeholder="Peso %"
+                          onChange={(event) =>
+                            setWeights((current) => ({ ...current, [key]: event.target.value }))
+                          }
+                          disabled={pending}
+                        />
+                      </Field>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="field-help">Nenhuma célula selecionada.</p>
+              )}
+              <Button
+                type="button"
+                onClick={distribute}
+                disabled={pending || distributionDestinations.length === 0}
+              >
+                Distribuir saldo
+              </Button>
+            </section>
+          ) : null}
           <h2 id="planning-grid-title" className="visually-hidden">
             Grade de planejamento mensal
           </h2>
@@ -436,6 +632,18 @@ export function MonthlyPlanningPage() {
                           const key = planningCellKey(item.itemId, competence.value);
                           return (
                             <td key={key}>
+                              <label className="planning-cell-selection">
+                                <input
+                                  type="checkbox"
+                                  aria-label={`Selecionar ${item.itemCode || `linha ${item.lineNumber}`} ${competence.label}`}
+                                  checked={selectedCells.has(key)}
+                                  onChange={() => toggleDistributionCell(key)}
+                                  disabled={!editable || !item.active || pending}
+                                />
+                                <span className="visually-hidden">
+                                  Selecionar para distribuição
+                                </span>
+                              </label>
                               <Input
                                 aria-label={`${item.itemCode || `linha ${item.lineNumber}`} ${competence.label}`}
                                 value={values[key] ?? ''}

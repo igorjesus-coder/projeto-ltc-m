@@ -15,18 +15,18 @@ Os perfis suportados são `viewer`, `editor`, `approver` e `admin`. O vocabulár
 tipado:
 
 `data:read`, `financial:read`, `audit:read`, `record:create`, `record:edit_draft`,
-`forecast:create`, `forecast:edit_draft`, `workflow:submit`, `workflow:approve`,
+`forecast:create`, `forecast:edit_draft`, `forecast:override_balance`, `workflow:submit`, `workflow:approve`,
 `workflow:return_to_draft`, `workflow:lock`, `workflow:reopen`, `soft_delete:execute`,
 `soft_delete:restore`, `catalog:manage`, `users:manage` e `roles:manage`.
 
 `physical_delete`, `archive` e `unlock_direct` não são capabilities concedidas.
 
-| Perfil     | Capabilities principais                                                          |
-| ---------- | -------------------------------------------------------------------------------- |
-| `viewer`   | leitura de dados e financeiros publicados                                        |
-| `editor`   | leitura, criação/edição de draft e submissão                                     |
-| `approver` | leitura de revisão, aprovação e devolução para draft                             |
-| `admin`    | administração, workflow privilegiado, soft delete/restore e auditoria controlada |
+| Perfil     | Capabilities principais                                                                             |
+| ---------- | --------------------------------------------------------------------------------------------------- |
+| `viewer`   | leitura de dados e financeiros publicados                                                           |
+| `editor`   | leitura, criação/edição de draft e submissão                                                        |
+| `approver` | leitura de revisão, aprovação e devolução para draft                                                |
+| `admin`    | administração, override de saldo, workflow privilegiado, soft delete/restore e auditoria controlada |
 
 ## Contrato de sessão
 

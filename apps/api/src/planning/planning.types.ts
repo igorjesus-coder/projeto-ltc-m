@@ -4,6 +4,7 @@ export const P029_MONTHLY_PLANNING_CONTRACT = 'ltcm.p029.monthly-planning-editor
 export const P029_PLANNED_METRIC = 'billing_planned' as const;
 export const P029_MAX_BATCH_ENTRIES = 5_000 as const;
 export const P029_MAX_RANGE_MONTHS = 240 as const;
+export const P030_FINANCIAL_CONTRACT = 'ltcm.p030.balance-distribution-validations.v1' as const;
 
 export interface PlanningProjectOption {
   readonly projectId: string;
@@ -60,6 +61,18 @@ export interface PlanningMonthlyTotal {
   readonly amount: string;
 }
 
+export interface PlanningFinancialSummary {
+  readonly contractValue: string;
+  readonly actualPosted: string;
+  readonly plannedDraft: string;
+  readonly rawBalance: string;
+  readonly distributableBalance: string;
+  readonly unplannedBalance: string;
+  readonly hasExcess: boolean;
+  readonly currency: string;
+  readonly canOverrideBalance: boolean;
+}
+
 export interface PlanningEditorResponse {
   readonly contract: typeof P029_MONTHLY_PLANNING_CONTRACT;
   readonly project: PlanningProjectOption;
@@ -68,6 +81,7 @@ export interface PlanningEditorResponse {
   readonly items: readonly PlanningItem[];
   readonly entries: readonly PlanningEntry[];
   readonly projectTotals: readonly PlanningMonthlyTotal[];
+  readonly financial: PlanningFinancialSummary;
   readonly range: { readonly from: string | null; readonly to: string | null };
 }
 

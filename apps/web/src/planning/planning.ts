@@ -1,4 +1,7 @@
 export const P029_MONTHLY_PLANNING_CONTRACT = 'ltcm.p029.monthly-planning-editor.v1' as const;
+export const P030_PERCENT_SCALE = 10_000n;
+export const P030_PERCENT_TOTAL = 100n * P030_PERCENT_SCALE;
+export const P030_MAX_DESTINATIONS = 5_000;
 
 export interface PlanningProjectOption {
   readonly projectId: string;
@@ -64,7 +67,32 @@ export interface PlanningEditorResponse {
   readonly items: readonly PlanningItem[];
   readonly entries: readonly PlanningEntry[];
   readonly projectTotals: readonly { readonly competence: string; readonly amount: string }[];
+  readonly financial: PlanningFinancialSummary;
   readonly range: { readonly from: string | null; readonly to: string | null };
+}
+
+export interface PlanningFinancialSummary {
+  readonly contractValue: string;
+  readonly actualPosted: string;
+  readonly plannedDraft: string;
+  readonly rawBalance: string;
+  readonly distributableBalance: string;
+  readonly unplannedBalance: string;
+  readonly hasExcess: boolean;
+  readonly currency: string;
+  readonly canOverrideBalance: boolean;
+}
+
+export interface PlanningDistributionDestination {
+  readonly itemId: string;
+  readonly competence: string;
+  readonly weight: string;
+}
+
+export interface PlanningDistributionResult {
+  readonly itemId: string;
+  readonly competence: string;
+  readonly amount: string;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -107,6 +135,34 @@ function version(value: unknown): PlanningVersionOption {
     contentRevision: positiveInteger(item['contentRevision']),
     editable: item['editable'],
     isBaseline: item['isBaseline'],
+  };
+}
+
+function financial(value: unknown): PlanningFinancialSummary {
+  const item = record(value);
+  const fields = [
+    'contractValue',
+    'actualPosted',
+    'plannedDraft',
+    'rawBalance',
+    'distributableBalance',
+    'unplannedBalance',
+    'currency',
+  ];
+  if (fields.some((field) => typeof item[field] !== 'string'))
+    throw new Error('P029_RESPONSE_INVALID');
+  if (typeof item['hasExcess'] !== 'boolean' || typeof item['canOverrideBalance'] !== 'boolean')
+    throw new Error('P029_RESPONSE_INVALID');
+  return {
+    contractValue: item['contractValue'] as string,
+    actualPosted: item['actualPosted'] as string,
+    plannedDraft: item['plannedDraft'] as string,
+    rawBalance: item['rawBalance'] as string,
+    distributableBalance: item['distributableBalance'] as string,
+    unplannedBalance: item['unplannedBalance'] as string,
+    hasExcess: item['hasExcess'],
+    currency: item['currency'] as string,
+    canOverrideBalance: item['canOverrideBalance'],
   };
 }
 
@@ -191,6 +247,7 @@ export function parsePlanningEditorResponse(value: unknown): PlanningEditorRespo
         amount: requiredString(item['amount']),
       };
     }),
+    financial: financial(response['financial']),
     range: {
       from: range['from'] === null ? null : requiredString(range['from']),
       to: range['to'] === null ? null : requiredString(range['to']),
@@ -203,6 +260,73 @@ export function decimalToCents(value: string): bigint | null {
   if (!/^(?:0|[1-9]\d{0,17})(?:\.\d{1,2})?$/u.test(value)) return null;
   const [integer, fraction = ''] = value.split('.');
   return BigInt(integer ?? '0') * 100n + BigInt(fraction.padEnd(2, '0'));
+}
+
+export function signedDecimalToCents(value: string): bigint | null {
+  if (!/^-?(?:0|[1-9]\d{0,17})(?:\.\d{1,2})?$/u.test(value)) return null;
+  const negative = value.startsWith('-');
+  const unsigned = negative ? value.slice(1) : value;
+  const parsed = decimalToCents(unsigned);
+  return parsed === null ? null : negative ? -parsed : parsed;
+}
+
+export function parsePercentage(value: string): bigint | null {
+  if (!/^(?:0|[1-9]\d{0,2})(?:\.\d{1,4})?$/u.test(value.trim())) return null;
+  const [integer, fraction = ''] = value.trim().split('.');
+  const parsed =
+    BigInt(integer ?? '0') * P030_PERCENT_SCALE + BigInt((fraction ?? '').padEnd(4, '0'));
+  return parsed > P030_PERCENT_TOTAL ? null : parsed;
+}
+
+export function distributeBalance(
+  targetCents: bigint,
+  destinations: readonly PlanningDistributionDestination[],
+): readonly PlanningDistributionResult[] {
+  if (targetCents < 0n || destinations.length === 0) throw new Error('P030_DISTRIBUTION_INVALID');
+  if (destinations.length > P030_MAX_DESTINATIONS) throw new Error('P030_DISTRIBUTION_TOO_LARGE');
+  const seen = new Set<string>();
+  const parsed = destinations.map((destination) => {
+    const key = planningCellKey(destination.itemId, destination.competence);
+    if (seen.has(key)) throw new Error('P030_DISTRIBUTION_DUPLICATE_DESTINATION');
+    seen.add(key);
+    const weight = parsePercentage(destination.weight);
+    if (weight === null || weight === 0n) throw new Error('P030_PERCENT_INVALID');
+    return { ...destination, weight };
+  });
+  const totalWeight = parsed.reduce((total, destination) => total + destination.weight, 0n);
+  if (totalWeight !== P030_PERCENT_TOTAL) throw new Error('P030_PERCENT_TOTAL_INVALID');
+  const ordered = [...parsed].sort(
+    (left, right) =>
+      left.competence.localeCompare(right.competence) || left.itemId.localeCompare(right.itemId),
+  );
+  const floors = ordered.map((destination) => ({
+    ...destination,
+    cents: (targetCents * destination.weight) / P030_PERCENT_TOTAL,
+  }));
+  let residual = targetCents - floors.reduce((total, destination) => total + destination.cents, 0n);
+  return floors.map((destination) => {
+    const amount = destination.cents + (residual > 0n ? 1n : 0n);
+    if (residual > 0n) residual -= 1n;
+    return {
+      itemId: destination.itemId,
+      competence: destination.competence,
+      amount: formatCents(amount),
+    };
+  });
+}
+
+export function addDistributionToValues(
+  values: Readonly<Record<string, string>>,
+  allocations: readonly PlanningDistributionResult[],
+): Readonly<Record<string, string>> {
+  const next = { ...values };
+  for (const allocation of allocations) {
+    const key = planningCellKey(allocation.itemId, allocation.competence);
+    const currentCents = decimalToCents(next[key] ?? '') ?? 0n;
+    const allocationCents = decimalToCents(allocation.amount) ?? 0n;
+    next[key] = formatCents(currentCents + allocationCents);
+  }
+  return next;
 }
 
 export function formatCents(value: bigint, signed = false): string {

@@ -28,6 +28,10 @@ test('mapeia capabilities com least privilege e sem permissões proibidas', () =
     'workflow:return_to_draft',
   ]);
   assert.ok(capabilitiesForRole('admin').includes('roles:manage'));
+  assert.ok(capabilitiesForRole('admin').includes('forecast:override_balance'));
+  for (const role of ['viewer', 'editor', 'approver'] as const) {
+    assert.ok(!capabilitiesForRole(role).includes('forecast:override_balance'));
+  }
   for (const role of ['viewer', 'editor', 'approver', 'admin'] as const) {
     const capabilities = capabilitiesForRole(role) as readonly string[];
     assert.ok(!capabilities.includes('physical_delete'));
