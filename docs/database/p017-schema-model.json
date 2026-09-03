@@ -2,14 +2,14 @@
   "schemaContract": "ltcm.p017.schema-integrity.v1",
   "fingerprintContract": "ltcm.p017.schema-fingerprint.v1",
   "migrationCount": 17,
-  "fingerprint": "d5a2aa655bc2ea8694fd73c14474d561f90b053fc482c5789a539a5b11c7155e",
+  "fingerprint": "63866804fe6f5247d9193bad2448253641bee6a45daccacec3c7986d22090b8e",
   "summary": {
     "relationCount": 28,
     "tableCount": 19,
     "viewCount": 9,
     "materializedViewCount": 0,
     "columnCount": 487,
-    "functionCount": 26,
+    "functionCount": 23,
     "triggerCount": 66,
     "indexCount": 79,
     "primaryKeyCount": 19,
@@ -19,7 +19,7 @@
     "protectedRlsTableCount": 19,
     "forceRlsTableCount": 19,
     "policyCount": 49,
-    "grantCount": 69,
+    "grantCount": 66,
     "typeCount": 10
   },
   "model": {
@@ -8345,17 +8345,6 @@
       },
       {
         "schema": "ltc_m",
-        "name": "approve_plan_version_as_approver",
-        "identityArguments": "p_plan_version_id uuid",
-        "resultType": "TABLE(plan_version_id uuid, status ltc_m.plan_status, row_version bigint)",
-        "kind": "function",
-        "language": "plpgsql",
-        "securityDefiner": true,
-        "volatility": "volatile",
-        "definitionHash": "5b2f77361bb2bae4778da9d3276b497ce6c0bd3bfaa1b1ace478b17d732c5062"
-      },
-      {
-        "schema": "ltc_m",
         "name": "audit_row_change",
         "identityArguments": "",
         "resultType": "trigger",
@@ -8543,17 +8532,6 @@
       },
       {
         "schema": "ltc_m",
-        "name": "resolve_authorization",
-        "identityArguments": "p_auth_subject text",
-        "resultType": "TABLE(app_user_id uuid, display_name text, app_role ltc_m.app_role)",
-        "kind": "function",
-        "language": "sql",
-        "securityDefiner": true,
-        "volatility": "stable",
-        "definitionHash": "f27ba1d61fc0ac8a435a1435f9743505d98577850380037b5c8af28fb8443d5d"
-      },
-      {
-        "schema": "ltc_m",
         "name": "return_plan_version_to_draft",
         "identityArguments": "p_plan_version_id uuid",
         "resultType": "TABLE(plan_version_id uuid, status ltc_m.plan_status, row_version bigint)",
@@ -8562,17 +8540,6 @@
         "securityDefiner": true,
         "volatility": "volatile",
         "definitionHash": "a4713add6eda17c60c3c037db6cd5585863777146d38bcf233cca42e0cbb067e"
-      },
-      {
-        "schema": "ltc_m",
-        "name": "return_plan_version_to_draft_as_approver",
-        "identityArguments": "p_plan_version_id uuid",
-        "resultType": "TABLE(plan_version_id uuid, status ltc_m.plan_status, row_version bigint)",
-        "kind": "function",
-        "language": "plpgsql",
-        "securityDefiner": true,
-        "volatility": "volatile",
-        "definitionHash": "e1c558cc93a06712fdc237e454ea75946ad7800763816270459b8f76c0cb8b27"
       },
       {
         "schema": "ltc_m",
@@ -9634,14 +9601,6 @@
       },
       {
         "schema": "ltc_m",
-        "object": "approve_plan_version_as_approver",
-        "objectType": "routine",
-        "grantee": "ltc_m_runtime",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
         "object": "authorization_context",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
@@ -10026,23 +9985,7 @@
       },
       {
         "schema": "ltc_m",
-        "object": "resolve_authorization",
-        "objectType": "routine",
-        "grantee": "ltc_m_runtime",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
         "object": "return_plan_version_to_draft",
-        "objectType": "routine",
-        "grantee": "ltc_m_runtime",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
-        "object": "return_plan_version_to_draft_as_approver",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
         "privilege": "EXECUTE",

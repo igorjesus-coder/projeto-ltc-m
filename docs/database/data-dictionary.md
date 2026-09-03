@@ -1,7 +1,7 @@
 # Dicionário de dados do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `d5a2aa655bc2ea8694fd73c14474d561f90b053fc482c5789a539a5b11c7155e`
+Fingerprint: `63866804fe6f5247d9193bad2448253641bee6a45daccacec3c7986d22090b8e`
 
 Inventário: 28 relações (19 tabelas, 9 views), 487 colunas, 54 FKs e 49 policies.
 

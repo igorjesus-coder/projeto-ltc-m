@@ -62,6 +62,6 @@ provou que o trigger P007 ignora alterações isoladas de `updated_by_user_id`, 
 ranges a 240 meses como proteção técnica, sem definir horizonte financeiro. Migrations
 antes/depois: 16/17. O fingerprint
 P017 após a migration é
-`d5a2aa655bc2ea8694fd73c14474d561f90b053fc482c5789a539a5b11c7155e`. O checker
+`63866804fe6f5247d9193bad2448253641bee6a45daccacec3c7986d22090b8e`. O checker
 `scripts/check-p029-tests.mjs` verifica contrato, endpoints, guard, upsert, concorrência, precisão,
 competência mensal, testes e documentação.
