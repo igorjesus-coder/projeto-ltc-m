@@ -22,6 +22,7 @@ import {
   type PlanningProjectsResponse,
   type PlanningVersionOption,
   type PlanningVersionsResponse,
+  P029_MAX_RANGE_MONTHS,
 } from './planning.types.js';
 
 interface ProjectRow extends QueryResultRow {
@@ -39,6 +40,7 @@ interface VersionRow extends QueryResultRow {
   readonly version_name: string;
   readonly version_status: string;
   readonly row_version: string | number;
+  readonly content_revision: string | number;
   readonly is_baseline: boolean;
 }
 
@@ -90,6 +92,7 @@ function versionOption(row: VersionRow): PlanningVersionOption {
     name: row.version_name,
     status: row.version_status,
     rowVersion: version(row.row_version),
+    contentRevision: version(row.content_revision),
     editable: row.version_status === 'draft',
     isBaseline: row.is_baseline,
   };
@@ -106,6 +109,9 @@ function monthsBetween(from: string, to: string): readonly PlanningCompetence[] 
   let month = Number(from.slice(5, 7));
   const endYear = Number(to.slice(0, 4));
   const endMonth = Number(to.slice(5, 7));
+  const distance = (endYear - year) * 12 + endMonth - month + 1;
+  if (distance > P029_MAX_RANGE_MONTHS)
+    throw new UnprocessableEntityException('P029_RANGE_TOO_LARGE');
   while (year < endYear || (year === endYear && month <= endMonth)) {
     const value = `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-01`;
     result.push({ value, label: monthLabel(value) });
@@ -167,6 +173,7 @@ export class PlanningService {
            versions.name as version_name,
            versions.status::text as version_status,
            versions.row_version,
+           versions.content_revision,
            versions.is_baseline
          from ltc_m.plan_versions as versions
          join ltc_m.financial_plan_scopes as scopes
@@ -212,6 +219,7 @@ export class PlanningService {
              versions.name as version_name,
              versions.status::text as version_status,
              versions.row_version,
+             versions.content_revision,
              versions.is_baseline
            from ltc_m.plan_versions as versions
            join ltc_m.financial_plan_scopes as scopes
@@ -228,7 +236,7 @@ export class PlanningService {
         if (plan.version_status !== 'draft') {
           throw new ConflictException('P029_VERSION_NOT_EDITABLE');
         }
-        if (version(plan.row_version) !== payload.expectedVersion) {
+        if (version(plan.content_revision) !== payload.expectedVersion) {
           throw new ConflictException('P029_VERSION_CONFLICT');
         }
 
@@ -308,12 +316,12 @@ export class PlanningService {
           );
         }
 
-        const bumped = await client.query<{ readonly row_version: string | number }>(
+        const bumped = await client.query<{ readonly content_revision: string | number }>(
           `update ltc_m.plan_versions
            set content_revision = content_revision + 1,
                updated_by_user_id = $1::uuid
-           where id = $2::uuid and row_version = $3::bigint
-           returning row_version`,
+           where id = $2::uuid and content_revision = $3::bigint
+           returning content_revision`,
           [actor.appUserId, versionId, payload.expectedVersion],
         );
         if (!bumped.rows[0]) throw new ConflictException('P029_BATCH_CONFLICT');
@@ -354,7 +362,8 @@ export class PlanningService {
          versions.id as version_id,
          versions.name as version_name,
          versions.status::text as version_status,
-         versions.row_version,
+           versions.row_version,
+           versions.content_revision,
          versions.is_baseline
        from ltc_m.plan_versions as versions
        join ltc_m.financial_plan_scopes as scopes

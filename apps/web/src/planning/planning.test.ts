@@ -23,6 +23,7 @@ describe('contrato P029 de planejamento', () => {
         name: 'V1',
         status: 'draft',
         rowVersion: 1,
+        contentRevision: 1,
         editable: true,
         isBaseline: false,
       },

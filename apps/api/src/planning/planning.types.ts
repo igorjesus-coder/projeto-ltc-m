@@ -2,6 +2,8 @@ import { BadRequestException } from '@nestjs/common';
 
 export const P029_MONTHLY_PLANNING_CONTRACT = 'ltcm.p029.monthly-planning-editor.v1' as const;
 export const P029_PLANNED_METRIC = 'billing_planned' as const;
+export const P029_MAX_BATCH_ENTRIES = 5_000 as const;
+export const P029_MAX_RANGE_MONTHS = 240 as const;
 
 export interface PlanningProjectOption {
   readonly projectId: string;
@@ -21,6 +23,7 @@ export interface PlanningVersionOption {
   readonly name: string;
   readonly status: string;
   readonly rowVersion: number;
+  readonly contentRevision: number;
   readonly editable: boolean;
   readonly isBaseline: boolean;
 }
@@ -124,6 +127,15 @@ function month(value: unknown, code: string): string {
   return value;
 }
 
+function rangeMonths(from: string, to: string): number {
+  return (
+    (Number(to.slice(0, 4)) - Number(from.slice(0, 4))) * 12 +
+    Number(to.slice(5, 7)) -
+    Number(from.slice(5, 7)) +
+    1
+  );
+}
+
 function amount(value: unknown): string {
   if (typeof value !== 'string' || !/^(?:0|[1-9]\d{0,17})(?:\.\d{1,2})?$/u.test(value)) {
     invalid('P029_INVALID_AMOUNT');
@@ -159,6 +171,7 @@ export function parsePlanningMonthQuery(
   const from = query['from'] === undefined ? undefined : month(query['from'], 'P029_INVALID_RANGE');
   const to = query['to'] === undefined ? undefined : month(query['to'], 'P029_INVALID_RANGE');
   if (from && to && from > to) invalid('P029_INVALID_RANGE');
+  if (from && to && rangeMonths(from, to) > P029_MAX_RANGE_MONTHS) invalid('P029_RANGE_TOO_LARGE');
   return { versionId: parsedVersionId, ...(from ? { from } : {}), ...(to ? { to } : {}) };
 }
 
@@ -168,6 +181,7 @@ export function parsePlanningBatchPayload(value: unknown): PlanningBatchPayload 
   if (!Array.isArray(body['entries']) || body['entries'].length === 0) {
     invalid('P029_BATCH_EMPTY');
   }
+  if (body['entries'].length > P029_MAX_BATCH_ENTRIES) invalid('P029_BATCH_TOO_LARGE');
   const seen = new Set<string>();
   const entries = body['entries'].map((entry, index) => {
     const item = object(entry);

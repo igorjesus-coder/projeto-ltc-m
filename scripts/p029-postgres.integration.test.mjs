@@ -145,7 +145,7 @@ test(
     try {
       await rebuildFromZero(admin);
       await setupFixtures(admin);
-      databasePool = new DatabasePool(new Pool({ connectionString: databaseUrl(), max: 1 }));
+      databasePool = new DatabasePool(new Pool({ connectionString: databaseUrl(), max: 2 }));
       const database = {
         actorTransaction: (context, operation) =>
           withActorTransaction(databasePool, context, async (client) => {
@@ -171,11 +171,27 @@ test(
       };
       const saved = await service.save(PROJECT_ID, VERSION_ID, payload, actor);
       assert.equal(saved.entries.length, 3);
-      assert.equal(saved.version.rowVersion, 2);
+      assert.equal(saved.version.contentRevision, 2);
       assert.deepEqual(saved.projectTotals, [
         { competence: '2026-12-01', amount: '7.10' },
         { competence: '2027-01-01', amount: '12.30' },
       ]);
+      const audit = await admin.query(
+        `select count(*)::integer as count,
+                count(*) filter (
+                  where changed_by_user_id = $1::uuid
+                    and request_id = $2::text
+                    and justification = $3::text
+                    and old_data is not null
+                    and new_data is not null
+                )::integer as complete_count
+           from ltc_m.audit_log
+          where request_id = $2::text
+            and table_name in ('ltc_m.financial_plan_lines', 'ltc_m.plan_versions')`,
+        [ADMIN_ID, actor.requestId, payload.justification],
+      );
+      assert.ok(audit.rows[0].count >= 4);
+      assert.ok(audit.rows[0].complete_count >= 1);
 
       const repeated = await service.save(
         PROJECT_ID,
@@ -188,7 +204,7 @@ test(
         actor,
       );
       assert.equal(repeated.entries.length, 3);
-      assert.equal(repeated.version.rowVersion, 3);
+      assert.equal(repeated.version.contentRevision, 3);
       const count = await admin.query(
         `select count(*)::integer as count from ltc_m.financial_plan_lines
        where plan_version_id = $1::uuid and project_id = $2::uuid`,
@@ -196,29 +212,57 @@ test(
       );
       assert.equal(count.rows[0].count, 3);
 
-      await assert.rejects(
+      const concurrent = await Promise.allSettled([
         service.save(
           PROJECT_ID,
           VERSION_ID,
           {
             expectedVersion: 3,
+            justification: 'writer-a',
+            entries: [{ itemId: ITEM_A_ID, competence: '2027-02-01', amount: '2.00' }],
+          },
+          actor,
+        ),
+        service.save(
+          PROJECT_ID,
+          VERSION_ID,
+          {
+            expectedVersion: 3,
+            justification: 'writer-b',
+            entries: [{ itemId: ITEM_B_ID, competence: '2027-03-01', amount: '3.00' }],
+          },
+          actor,
+        ),
+      ]);
+      assert.equal(concurrent.filter(({ status }) => status === 'fulfilled').length, 1);
+      const rejected = concurrent.find(({ status }) => status === 'rejected');
+      assert.equal(rejected?.status, 'rejected');
+      if (rejected?.status === 'rejected')
+        assert.match(String(rejected.reason?.message), /P029_VERSION_CONFLICT/u);
+
+      await assert.rejects(
+        service.save(
+          PROJECT_ID,
+          VERSION_ID,
+          {
+            expectedVersion: 4,
             justification: 'rollback',
             entries: [
-              { itemId: ITEM_A_ID, competence: '2027-02-01', amount: '2.00' },
-              { itemId: ITEM_B_ID, competence: '2027-03-01', amount: '99999999999999999999.00' },
+              { itemId: ITEM_A_ID, competence: '2027-04-01', amount: '2.00' },
+              { itemId: ITEM_B_ID, competence: '2027-05-01', amount: '99999999999999999999.00' },
             ],
           },
           actor,
         ),
       );
       const rollback = await admin.query(
-        `select count(*) filter (where competence_month = date '2027-02-01')::integer as inserted,
-              (select row_version from ltc_m.plan_versions where id = $1::uuid)::integer as row_version
+        `select count(*) filter (where competence_month = date '2027-04-01')::integer as inserted,
+              (select content_revision from ltc_m.plan_versions where id = $1::uuid)::integer as content_revision
          from ltc_m.financial_plan_lines
         where plan_version_id = $1::uuid`,
         [VERSION_ID],
       );
-      assert.deepEqual(rollback.rows[0], { inserted: 0, row_version: 3 });
+      assert.deepEqual(rollback.rows[0], { inserted: 0, content_revision: 4 });
     } finally {
       await databasePool?.close().catch(() => undefined);
       await rebuildFromZero(admin).catch(() => undefined);

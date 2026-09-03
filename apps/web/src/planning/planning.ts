@@ -18,6 +18,7 @@ export interface PlanningVersionOption {
   readonly name: string;
   readonly status: string;
   readonly rowVersion: number;
+  readonly contentRevision: number;
   readonly editable: boolean;
   readonly isBaseline: boolean;
 }
@@ -97,6 +98,7 @@ function version(value: unknown): PlanningVersionOption {
     name: requiredString(item['name']),
     status: requiredString(item['status']),
     rowVersion: positiveInteger(item['rowVersion']),
+    contentRevision: positiveInteger(item['contentRevision']),
     editable: item['editable'],
     isBaseline: item['isBaseline'],
   };

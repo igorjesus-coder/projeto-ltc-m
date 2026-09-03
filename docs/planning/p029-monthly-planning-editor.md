@@ -35,9 +35,10 @@ O editor não remove linhas fisicamente; para zerar uma declaração existente d
   item inativo, versão incompatível ou versão stale falham fechado.
 
 `forecast:edit_draft` é a capability usada para escrita; nenhuma nova capability foi criada.
-`plan_versions.row_version` é bloqueado e comparado no batch; `content_revision` é incrementado
-para produzir uma mudança de conteúdo que aciona o metadata trigger e avança o token. Repetição
-com token obsoleto recebe `P029_VERSION_CONFLICT`; não há last-write-wins.
+`plan_versions.row_version` é o token de metadados da própria versão; `content_revision` é o token
+agregado do conteúdo mensal e é comparado/incrementado no batch. O incremento de conteúdo aciona
+também o metadata trigger. Repetição com `contentRevision` obsoleto recebe
+`P029_VERSION_CONFLICT`; não há last-write-wins.
 Triggers existentes geram auditoria com `justification`; não há `DELETE` no fluxo.
 
 Baselines P013 com `monthly_plan_cells` permanecem imutáveis, pois a proveniência mantém uma FK
@@ -57,7 +58,9 @@ confirmação.
 
 Foi criada a migration aditiva `20260903100000_add_p029_plan_content_revision.sql`: a revisão
 provou que o trigger P007 ignora alterações isoladas de `updated_by_user_id`, portanto o
-`row_version` não avançava para batches mensais. Migrations antes/depois: 16/17. O fingerprint
+`row_version` não avançava para batches mensais. O contrato limita batches a 5.000 entradas e
+ranges a 240 meses como proteção técnica, sem definir horizonte financeiro. Migrations
+antes/depois: 16/17. O fingerprint
 P017 após a migration é
 `d5a2aa655bc2ea8694fd73c14474d561f90b053fc482c5789a539a5b11c7155e`. O checker
 `scripts/check-p029-tests.mjs` verifica contrato, endpoints, guard, upsert, concorrência, precisão,

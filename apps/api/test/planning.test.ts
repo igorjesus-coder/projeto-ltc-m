@@ -11,6 +11,7 @@ import { PlanningService } from '../src/planning/planning.service.js';
 import {
   parsePlanningBatchPayload,
   parsePlanningMonthQuery,
+  P029_MAX_BATCH_ENTRIES,
 } from '../src/planning/planning.types.js';
 
 const projectId = '00000000-0000-4000-8000-000000029001';
@@ -80,6 +81,27 @@ test('P029 parser rejeita duplicata, competência deslocada e valor fora da esca
   );
 });
 
+test('P029 parser limita batch técnico sem impor horizonte financeiro', () => {
+  assert.throws(
+    () =>
+      parsePlanningBatchPayload({
+        expectedVersion: 1,
+        entries: Array.from({ length: P029_MAX_BATCH_ENTRIES + 1 }, (_, index) => ({
+          itemId: `00000000-0000-4000-8000-${(index + 1).toString().padStart(12, '0')}`,
+          competence: '2026-12-01',
+          amount: '1.00',
+        })),
+      }),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.message.includes('P029_BATCH_TOO_LARGE'),
+  );
+  assert.throws(
+    () => parsePlanningMonthQuery(versionId, { from: '2020-01-01', to: '2040-01-01' }),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.message.includes('P029_RANGE_TOO_LARGE'),
+  );
+});
+
 function createDatabase(options: { readonly inactive?: boolean; readonly stale?: boolean } = {}) {
   const calls: Array<{ readonly text: string; readonly values: readonly unknown[] }> = [];
   const project = {
@@ -96,6 +118,7 @@ function createDatabase(options: { readonly inactive?: boolean; readonly stale?:
     version_name: 'Forecast 2026',
     version_status: 'draft',
     row_version: options.stale ? 3 : 4,
+    content_revision: options.stale ? 3 : 4,
     is_baseline: false,
   };
   const database = {
@@ -121,7 +144,7 @@ function createDatabase(options: { readonly inactive?: boolean; readonly stale?:
             };
           if (text.startsWith('insert into')) return { rows: [] as Row[] };
           if (text.startsWith('update ltc_m.plan_versions'))
-            return { rows: [{ row_version: 5 } as Row] };
+            return { rows: [{ content_revision: 5 } as Row] };
           if (text.includes('min(competence_month)'))
             return { rows: [{ min_month: '2026-12-01', max_month: '2027-01-01' } as Row] };
           if (text.includes('from ltc_m.project_items'))

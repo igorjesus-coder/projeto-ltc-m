@@ -244,7 +244,7 @@ export function MonthlyPlanningPage() {
         `/planning/projects/${encodeURIComponent(data.project.projectId)}/versions/${encodeURIComponent(data.version.versionId)}/months`,
         'PUT',
         {
-          expectedVersion: data.version.rowVersion,
+          expectedVersion: data.version.contentRevision,
           justification: justification.trim() || null,
           entries,
         },

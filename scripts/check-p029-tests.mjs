@@ -14,7 +14,7 @@ export async function scanP029Sources(input) {
     ['batch route', input.controller, '@Put'],
     ['capability guard', input.controller, "'forecast:edit_draft'"],
     ['actor transaction', input.service, 'actorTransaction'],
-    ['optimistic lock', input.service, 'for update'],
+    ['optimistic lock', input.service, 'where id = $2::uuid and content_revision = $3::bigint'],
     ['natural upsert', input.service, 'on conflict'],
     ['content revision', input.service, 'content_revision = content_revision + 1'],
     ['financial line write', input.service, 'insert into ltc_m.financial_plan_lines'],
