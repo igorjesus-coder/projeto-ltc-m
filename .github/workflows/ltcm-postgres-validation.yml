@@ -91,6 +91,12 @@ jobs:
       - name: Validate ephemeral PostgreSQL
         run: npm run ci:postgres:validate
 
+      - name: Validate P030 PostgreSQL financial rules
+        env:
+          LTCM_P030_INTEGRATION: '1'
+          LTCM_P012_TEST_DATABASE_URL: postgresql://supabase_admin:ltcm_ci_bootstrap_only@127.0.0.1:5432/ltcm_ci
+        run: npm run test:p030:postgres
+
       - name: Confirm tracked files are unchanged
         run: git diff --exit-code
 

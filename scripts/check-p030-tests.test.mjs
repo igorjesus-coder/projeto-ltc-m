@@ -20,8 +20,10 @@ test('rejeita capability de override fora do admin', () => {
     financialTests: "excess.rawBalance, '-100.00'",
     webTests: '33.3333',
     authTests: 'forecast:override_balance',
-    apiTests: 'P030 bloqueia excesso',
-    postgres: 'P030 PostgreSQL unchanged',
+    apiTests: 'P030 bloqueia excesso replacement semantics AGGREGATE_OVERFLOW reduzir excesso',
+    postgres:
+      'P030 PostgreSQL unchanged audit_log P029_VERSION_CONFLICT monthly_plan_cells set local role ltc_m_runtime',
+    workflow: 'LTCM_P030_INTEGRATION',
     documentation:
       'P030-D01-DEC-01 P030-D01-DEC-02 P030-D01-DEC-03 P030-D01-DEC-04 P030-D01-DEC-05 P030_CURRENCY_MISMATCH',
     migrationFiles: [],

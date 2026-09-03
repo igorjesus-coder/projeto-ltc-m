@@ -29,7 +29,7 @@ function databaseUrl() {
   if (
     !['postgres:', 'postgresql:'].includes(parsed.protocol) ||
     !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname.toLowerCase()) ||
-    parsed.pathname !== '/ltcm_test' ||
+    parsed.pathname !== (process.env.CI ? '/ltcm_ci' : '/ltcm_test') ||
     parsed.search ||
     parsed.hash
   )
@@ -167,6 +167,12 @@ test(
       assert.equal(initial.financial.plannedDraft, '300.00');
       assert.equal(initial.financial.rawBalance, '500.00');
       assert.equal(initial.financial.distributableBalance, '500.00');
+      const protectedBefore = await admin.query(
+        `select
+           (select amount::text from ltc_m.financial_actual_events where id = $1::uuid) as actual,
+           (select count(*)::integer from ltc_m.monthly_plan_cells where project_id = $2::uuid) as baseline_cells`,
+        [ACTUAL_ID, PROJECT_ID],
+      );
 
       const payload = {
         expectedVersion: 1,
@@ -191,6 +197,30 @@ test(
       assert.equal(saved.financial.distributableBalance, '0.00');
       assert.equal(saved.financial.hasExcess, true);
       assert.equal(saved.financial.canOverrideBalance, true);
+      const protectedAfter = await admin.query(
+        `select
+           (select amount::text from ltc_m.financial_actual_events where id = $1::uuid) as actual,
+           (select count(*)::integer from ltc_m.monthly_plan_cells where project_id = $2::uuid) as baseline_cells`,
+        [ACTUAL_ID, PROJECT_ID],
+      );
+      assert.deepEqual(protectedAfter.rows[0], protectedBefore.rows[0]);
+      const audit = await admin.query(
+        `select count(*)::integer as count
+           from ltc_m.audit_log
+          where request_id = $1::text and justification = $2::text`,
+        [actor.requestId, payload.justification],
+      );
+      assert.ok(audit.rows[0].count >= 1);
+      await assert.rejects(
+        service.save(
+          PROJECT_ID,
+          VERSION_ID,
+          { ...payload, expectedVersion: 1, justification: 'P030 stale' },
+          actor,
+          true,
+        ),
+        /P029_VERSION_CONFLICT/u,
+      );
     } finally {
       await databasePool?.close().catch(() => undefined);
       await rebuildFromZero(admin).catch(() => undefined);

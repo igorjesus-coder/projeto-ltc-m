@@ -95,6 +95,18 @@ function version(value: string | number): number {
   return parsed;
 }
 
+function mapFinancialQueryError(error: unknown): never {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { readonly code?: unknown }).code === '22003'
+  ) {
+    throw new UnprocessableEntityException('P030_FINANCIAL_AGGREGATE_OVERFLOW');
+  }
+  throw error;
+}
+
 function projectOption(row: ProjectRow): PlanningProjectOption {
   return {
     projectId: row.project_id,
@@ -315,11 +327,12 @@ export class PlanningService {
             parseFinancialCents(entry.amount),
           plannedDraft,
         );
-        const actualResult = await client.query<{
-          readonly actual_posted: string;
-          readonly currency_mismatch: boolean;
-        }>(
-          `select coalesce(sum(events.amount), 0)::numeric(20,2)::text as actual_posted
+        const actualResult = await client
+          .query<{
+            readonly actual_posted: string;
+            readonly currency_mismatch: boolean;
+          }>(
+            `select coalesce(sum(events.amount), 0)::numeric(20,2)::text as actual_posted
                 , exists (
                     select 1
                     from ltc_m.financial_actual_events as mismatch_events
@@ -335,8 +348,9 @@ export class PlanningService {
              and events.metric_type = 'billing_actual'::ltc_m.actual_financial_metric
              and events.status = 'posted'::ltc_m.actual_status
              and events.currency_code = projects.base_currency`,
-          [projectId],
-        );
+            [projectId],
+          )
+          .catch(mapFinancialQueryError);
         if (actualResult.rows[0]?.currency_mismatch) {
           throw new UnprocessableEntityException('P030_CURRENCY_MISMATCH');
         }
@@ -434,8 +448,9 @@ export class PlanningService {
     versionStatus: string,
     canOverrideBalance: boolean,
   ): Promise<PlanningFinancialSummary> {
-    const result = await client.query<FinancialRow>(
-      `select
+    const result = await client
+      .query<FinancialRow>(
+        `select
          projects.contract_value::text,
          projects.base_currency as currency_code,
          coalesce((
@@ -472,8 +487,9 @@ export class PlanningService {
            ) as planned_currency_mismatch
        from ltc_m.projects as projects
        where projects.id = $1::uuid`,
-      [projectId, versionId, versionStatus, P029_PLANNED_METRIC],
-    );
+        [projectId, versionId, versionStatus, P029_PLANNED_METRIC],
+      )
+      .catch(mapFinancialQueryError);
     const row = result.rows[0];
     if (!row) throw new Error('P030_FINANCIAL_STATE_UNAVAILABLE');
     if (row.currency_mismatch || row.planned_currency_mismatch)
