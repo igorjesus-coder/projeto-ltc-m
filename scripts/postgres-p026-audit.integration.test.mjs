@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { Pool } from 'pg';
 
+import { assertP026MigrationInventory } from './p026-migration-inventory.mjs';
+
 const ENABLED = process.env.LTCM_P026_INTEGRATION === '1';
 const ISOLATED = process.env.LTCM_P026_ISOLATED_CLUSTER === '1';
 const DATABASE_URL = process.env.LTCM_P026_DATABASE_URL;
@@ -43,7 +45,7 @@ async function migrationInventory() {
   const names = (await readdir(directory))
     .filter((name) => /^\d{14}_[a-z0-9_]+\.sql$/u.test(name))
     .sort((left, right) => left.localeCompare(right, 'en'));
-  assert.equal(names.length, 17);
+  assertP026MigrationInventory(names);
   return Promise.all(
     names.map(async (name) => ({ name, sql: await readFile(path.join(directory, name), 'utf8') })),
   );
@@ -238,7 +240,10 @@ test('P026-D21 preserva code, id UUID, RLS/FORCE e bloqueia DELETE no runtime', 
       invalidIdentity.release();
     }
   } finally {
-    await rebuildFromZero(pool).catch(() => undefined);
-    await pool.end();
+    try {
+      await rebuildFromZero(pool);
+    } finally {
+      await pool.end();
+    }
   }
 });

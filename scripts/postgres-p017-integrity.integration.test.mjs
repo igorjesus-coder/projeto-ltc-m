@@ -414,7 +414,7 @@ async function assertSecurityAndViews(pool, snapshot) {
     });
     assert.deepEqual(await businessState(pool), before);
   } finally {
-    await pool.query('revoke ltc_m_runtime from postgres');
+    await pool.query('revoke ltc_m_runtime from postgres granted by postgres restrict');
   }
 }
 
@@ -468,7 +468,7 @@ test(
       const secondPass = await executePass(pool, expectedSnapshot);
       assert.deepEqual(secondPass, firstPass);
     } finally {
-      await pool.query('revoke ltc_m_runtime from postgres').catch(() => undefined);
+      await pool.query('revoke ltc_m_runtime from postgres granted by postgres restrict');
       await rebuildFromZero(pool, expectedSnapshot.migrationCount);
       const cleanup = await pool.query(
         `select

@@ -301,9 +301,15 @@ async function withFixture(callback) {
       ...actors(),
     });
   } finally {
-    await databasePool?.close().catch(() => undefined);
-    await rebuildFromZero(adminPool).catch(() => undefined);
-    await adminPool.end();
+    try {
+      await databasePool?.close();
+    } finally {
+      try {
+        await rebuildFromZero(adminPool);
+      } finally {
+        await adminPool.end();
+      }
+    }
   }
 }
 

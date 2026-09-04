@@ -302,6 +302,18 @@ test('estado final preserva exatamente o baseline de auditoria do seed', () => {
   );
 });
 
+test('P017 limpa somente o grantor temporário e preserva D26', () => {
+  const p017 = fs.readFileSync(
+    path.join(process.cwd(), 'scripts', 'postgres-p017-integrity.integration.test.mjs'),
+    'utf8',
+  );
+  assert.equal(
+    (p017.match(/revoke ltc_m_runtime from postgres granted by postgres restrict/giu) ?? []).length,
+    2,
+  );
+  assert.doesNotMatch(p017, /revoke ltc_m_runtime from postgres\s*['`]/iu);
+});
+
 test('runner só avança da Fase A P009 com evidência limpa', () => {
   const runner = fs.readFileSync(
     path.join(process.cwd(), 'scripts', 'run-postgres-ci-validation.mjs'),
