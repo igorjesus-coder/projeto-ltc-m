@@ -162,6 +162,30 @@ function parseDockerPort(stdout) {
   return { host: match[1].replaceAll(/\[|\]/gu, ''), port: match[2] };
 }
 
+function waitForP013Port(containerName) {
+  const startedAt = Date.now();
+  let lastResult = { code: 1, stdout: '', stderr: '' };
+  while (Date.now() - startedAt < 60_000) {
+    lastResult = runProcess('docker', ['port', containerName, '5432/tcp'], { timeoutMs: 5_000 });
+    if (lastResult.code === 0 && lastResult.stdout.trim()) {
+      return {
+        code: 0,
+        stdout: lastResult.stdout,
+        stderr: lastResult.stderr,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
+  }
+  return {
+    code: lastResult.code || 1,
+    stdout: lastResult.stdout,
+    stderr: lastResult.stderr || 'P013 isolated PostgreSQL port was not published',
+    error: lastResult.error,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
 function waitForP013Postgres({ host, port }) {
   const startedAt = Date.now();
   let lastResult = { code: 1, stdout: '', stderr: '' };
@@ -324,9 +348,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       ),
     );
 
-    const portResult = runStage('p013_cluster_port', () =>
-      runProcess('docker', ['port', p013ContainerName, '5432/tcp'], { timeoutMs: 10_000 }),
-    );
+    const portResult = runStage('p013_cluster_port', () => waitForP013Port(p013ContainerName));
     const p013Endpoint = parseDockerPort(portResult.stdout);
     assertP013ClusterIsolation({
       mainHost: process.env.PGHOST,
