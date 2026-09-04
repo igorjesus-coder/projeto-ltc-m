@@ -41,7 +41,8 @@ export function migrationInventory(rootDirectory) {
 }
 
 export function sanitizeProcessFailure(result) {
-  const text = `${result.stderr ?? ''}\n${result.stdout ?? ''}`;
+  const spawnError = result.error ? `ERROR: ${result.error}` : '';
+  const text = `${spawnError}\n${result.stderr ?? ''}\n${result.stdout ?? ''}`;
   return (
     text.match(/(?:ERROR|FATAL|Falha|failed):?[^\r\n]{0,300}/iu)?.[0] ??
     `processo terminou com código ${result.code ?? 'desconhecido'}`
@@ -62,6 +63,7 @@ function runProcess(command, args, options = {}) {
     code: result.status ?? 1,
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? '',
+    error: result.error?.message ?? '',
     durationMs: Date.now() - startedAt,
   };
 }

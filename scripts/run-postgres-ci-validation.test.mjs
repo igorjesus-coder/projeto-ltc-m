@@ -55,6 +55,14 @@ test('falha sanitizada não preserva URL de banco', () => {
   assert.match(message, /redacted/u);
 });
 
+test('falha sanitizada preserva erro de spawn quando o processo nÃ£o inicia', () => {
+  const message = sanitizeProcessFailure({
+    code: 1,
+    error: 'spawn docker ENOENT',
+  });
+  assert.match(message, /spawn docker ENOENT/u);
+});
+
 test('bootstrap D51 usa supabase_admin real e isola ci_admin antes das migrations', () => {
   const bootstrap = fs.readFileSync(
     path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
