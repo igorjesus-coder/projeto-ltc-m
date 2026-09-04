@@ -148,7 +148,7 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   assert.match(runner, /runStage\('p013_cluster_start'/u);
   assert.match(runner, /docker'[\s\S]*'run'[\s\S]*'--detach'/u);
   assert.match(runner, /CI_POSTGRES_IMAGE/u);
-  assert.match(runner, /'--publish'[\s\S]*'127\.0\.0\.1::5432'/u);
+  assert.match(runner, /'--publish'[\s\S]*'127\.0\.0\.1:0:5432'/u);
   assert.match(runner, /runStage\('p013_cluster_port'/u);
   assert.match(runner, /runStage\('p013_cluster_ready'/u);
   assert.match(runner, /runStage\('p013_cluster_preflight'/u);

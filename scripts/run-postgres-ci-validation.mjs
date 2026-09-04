@@ -341,7 +341,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
           '--env',
           'POSTGRES_INITDB_ARGS=--encoding=UTF8',
           '--publish',
-          '127.0.0.1::5432',
+          '127.0.0.1:0:5432',
           CI_POSTGRES_IMAGE,
         ],
         { timeoutMs: 120_000 },
