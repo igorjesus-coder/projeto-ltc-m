@@ -222,9 +222,15 @@ test(
         /P029_VERSION_CONFLICT/u,
       );
     } finally {
-      await databasePool?.close().catch(() => undefined);
-      await rebuildFromZero(admin).catch(() => undefined);
-      await admin.end();
+      try {
+        await databasePool?.close();
+      } finally {
+        try {
+          await rebuildFromZero(admin);
+        } finally {
+          await admin.end();
+        }
+      }
     }
   },
 );

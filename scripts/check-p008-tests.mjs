@@ -69,7 +69,7 @@ const REQUIRED_SCENARIOS = [
   ['RLS e FORCE RLS', /inventário RLS\/FORCE divergente/i],
   ['policies exatas', /inventário de policies divergente/i],
   ['sem DELETE', /runtime recebeu privilégio de tabela proibido/i],
-  ['allowlist de funções', /allowlist executável contém/i],
+  ['allowlist de funções', /allowlist executável (?:contém|divergente)/i],
   ['current_actor_id na allowlist', /current_actor_id não está na allowlist/i],
   ['PUBLIC EXECUTE revogado', /PUBLIC ainda executa função/i],
   ['contexto ausente', /contexto ausente permitiu leitura/i],
@@ -82,9 +82,14 @@ const REQUIRED_SCENARIOS = [
     'Editor DML completo',
     /do\s+\$editor\$[\s\S]*?insert\s+into\s+ltc_m\.clients[\s\S]*?update\s+ltc_m\.clients/i,
   ],
+  [
+    'Editor submit canônico P031',
+    /do\s+\$editor\$[\s\S]*?select\s+plan_versions\.row_version\s+into\s+v_row_version[\s\S]*?perform\s+ltc_m\.submit_plan_version\s*\(\s*v_plan_id\s*,\s*v_row_version\s*\)/i,
+  ],
   ['viewer sem workflow', /viewer executou workflow/i],
   ['editor não inativa', /editor inativou cliente/i],
   ['editor não aprova', /editor aprovou versão/i],
+  ['editor nÃ£o arquiva', /editor arquivou versão/i],
   ['editor sem DELETE', /editor realizou DELETE/i],
   ['admin lê inativos', /admin não visualizou inativos/i],
   ['justificativa D23', /D23 aceitou operação sem justificativa/i],
@@ -235,7 +240,19 @@ export function scanP008TestText(sql) {
   if ((stripped.match(/\bwhere\s+not\s+exists\s*\(/giu) ?? []).length < 4) {
     issues.push('comparação bidirecional de inventários ausente');
   }
-  if (/\bv_count\s*(?:<>|=|>=|<=|>|<)\s*(?:41|49)\b/iu.test(stripped)) {
+  for (const [pattern, message] of [
+    [/\bv_expected_functions\b/iu, 'allowlist nominal esperada ausente'],
+    [/\bv_actual_functions\b/iu, 'inventário real de funções ausente'],
+    [/\bv_missing_functions\b/iu, 'proteção MISSING de funções ausente'],
+    [/\bv_unexpected_functions\b/iu, 'proteção UNEXPECTED de funções ausente'],
+    [/\bpg_proc\.oid::regprocedure::text\b/iu, 'identidade completa das funções ausente'],
+  ]) {
+    if (!pattern.test(stripped)) issues.push(message);
+  }
+  if (!/acl\.grantee\s*=\s*0[\s\S]*?acl\.privilege_type\s*=\s*'EXECUTE'/iu.test(sql)) {
+    issues.push('verificação de PUBLIC EXECUTE ausente');
+  }
+  if (/\bv_count\s*(?:<>|=|>=|<=|>|<)\s*(?:12|41|49)\b/iu.test(stripped)) {
     issues.push('contagem literal cega de policies proibida');
   }
 

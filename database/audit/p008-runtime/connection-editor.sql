@@ -14,12 +14,14 @@ values (
 
 set local role ltc_m_runtime;
 select ltc_m.set_actor_context(
-    '{{UUID_PREFIX}}021', 'p008-{{RUN_TOKEN}}|editor', 'p008-{{RUN_TOKEN}}-editor'
+    '{{UUID_PREFIX}}021', 'p008-{{RUN_TOKEN}}|editor', 'p008-{{RUN_TOKEN}}-editor',
+    'P008 isolated editor workflow'
 );
 
 do $editor$
 declare
     v_client_id uuid;
+    v_row_version bigint;
 begin
     insert into ltc_m.clients (legal_name, display_name)
     values ('P008 {{RUN_TOKEN}} editor client', 'P008 editor client')
@@ -29,11 +31,25 @@ begin
     set display_name = 'P008 editor updated'
     where clients.id = v_client_id;
 
-    perform ltc_m.submit_plan_version('{{UUID_PREFIX}}421');
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '{{UUID_PREFIX}}421';
+    perform ltc_m.submit_plan_version('{{UUID_PREFIX}}421', v_row_version);
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '{{UUID_PREFIX}}421';
 
     begin
         perform ltc_m.approve_plan_version('{{UUID_PREFIX}}421');
         raise exception 'P008 isolated: Editor aprovou versão.';
+    exception when sqlstate 'P0001' or insufficient_privilege then null;
+    end;
+
+    begin
+        perform ltc_m.archive_plan_version('{{UUID_PREFIX}}421', v_row_version);
+        raise exception 'P008 isolated: Editor arquivou versão.';
     exception when sqlstate 'P0001' or insufficient_privilege then null;
     end;
 

@@ -12,6 +12,7 @@ import { PlanningService } from '../src/planning/planning.service.js';
 import {
   parsePlanningBatchPayload,
   parsePlanningMonthQuery,
+  parsePlanningWorkflowPayload,
   P029_MAX_BATCH_ENTRIES,
 } from '../src/planning/planning.types.js';
 
@@ -119,6 +120,30 @@ test('P029 exige justificativa não vazia, limitada e normalizada', () => {
   }
 });
 
+test('P031 parser separa row_version de content_revision e exige justificativa terminal', () => {
+  assert.deepEqual(parsePlanningWorkflowPayload({ expectedRowVersion: 4 }, 'submit'), {
+    expectedRowVersion: 4,
+  });
+  assert.deepEqual(
+    parsePlanningWorkflowPayload(
+      { expectedRowVersion: 4, justification: '  Aprovação formal  ' },
+      'approve',
+    ),
+    { expectedRowVersion: 4, justification: 'Aprovação formal' },
+  );
+  assert.throws(
+    () => parsePlanningWorkflowPayload({ expectedRowVersion: 4 }, 'archive'),
+    (error: unknown) =>
+      error instanceof BadRequestException && error.message.includes('P031_JUSTIFICATION_REQUIRED'),
+  );
+  assert.throws(
+    () => parsePlanningWorkflowPayload({ expectedRowVersion: 0 }, 'submit'),
+    (error: unknown) =>
+      error instanceof BadRequestException &&
+      error.message.includes('P031_EXPECTED_ROW_VERSION_INVALID'),
+  );
+});
+
 function createDatabase(
   options: {
     readonly inactive?: boolean;
@@ -127,6 +152,8 @@ function createDatabase(
     readonly aggregateOverflow?: boolean;
     readonly existingAmount?: string;
     readonly justification?: string;
+    readonly workflowStatus?: string;
+    readonly workflowRowVersion?: number;
   } = {},
 ) {
   const calls: Array<{ readonly text: string; readonly values: readonly unknown[] }> = [];
@@ -143,8 +170,8 @@ function createDatabase(
   const plan = {
     version_id: versionId,
     version_name: 'Forecast 2026',
-    version_status: 'draft',
-    row_version: options.stale ? 3 : 4,
+    version_status: options.workflowStatus ?? 'draft',
+    row_version: options.workflowRowVersion ?? (options.stale ? 3 : 4),
     content_revision: options.stale ? 3 : 4,
     is_baseline: false,
   };
@@ -162,6 +189,19 @@ function createDatabase(
       return operation({
         query: async <Row>(text: string, values: readonly unknown[] = []) => {
           calls.push({ text, values });
+          if (text.includes('approve_plan_version')) {
+            plan.version_status = 'approved';
+            plan.row_version += 1;
+            return {
+              rows: [
+                {
+                  plan_version_id: versionId,
+                  status: 'approved',
+                  row_version: plan.row_version,
+                } as Row,
+              ],
+            };
+          }
           if (options.aggregateOverflow && text.includes('financial_actual_events'))
             throw Object.assign(new Error('numeric field overflow'), { code: '22003' });
           if (text.includes('for update')) return { rows: [plan as Row] };
@@ -377,4 +417,93 @@ test('P030 permite reduzir excesso até o contrato e bloqueia manter ou aumentar
     ),
     /P030_BALANCE_OVERRIDE_REQUIRED/u,
   );
+});
+
+test('P031 rejeita row_version stale antes de chamar a função SQL', async () => {
+  const calls: string[] = [];
+  const database = {
+    actorTransaction: async <Result>(
+      _receivedActor: typeof actor,
+      operation: (client: {
+        query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
+      }) => Promise<Result>,
+    ) =>
+      operation({
+        query: async <Row>(text: string) => {
+          calls.push(text);
+          if (text.includes('from ltc_m.projects'))
+            return {
+              rows: [
+                {
+                  project_id: projectId,
+                  project_code: 'P031',
+                  project_name: 'Projeto P031',
+                  currency_code: 'BRL',
+                  contract_value: '100.00',
+                  project_status: 'active',
+                  start_date: '2026-12-01',
+                  end_date: '2027-01-01',
+                } as Row,
+              ],
+            };
+          return {
+            rows: [
+              {
+                version_id: versionId,
+                version_name: 'P031',
+                version_status: 'draft',
+                row_version: 8,
+                content_revision: 3,
+                is_baseline: false,
+                approved_at: null,
+                source_plan_version_id: null,
+                baseline_plan_version_id: null,
+              } as Row,
+            ],
+          };
+        },
+      }),
+  };
+  await assert.rejects(
+    new PlanningService(database as never).workflow(
+      projectId,
+      versionId,
+      'submit',
+      { expectedRowVersion: 7 },
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ConflictException && error.message.includes('P031_VERSION_CONFLICT'),
+  );
+  assert.equal(calls.filter((text) => text.includes('submit_plan_version')).length, 0);
+});
+
+test('P031 rejeita stale approve depois de uma aprovação válida', async () => {
+  const { database, calls } = createDatabase({
+    workflowStatus: 'pending_approval',
+    workflowRowVersion: 4,
+    justification: 'Aprovação concorrente',
+  });
+  const service = new PlanningService(database as never);
+  const approved = await service.workflow(
+    projectId,
+    versionId,
+    'approve',
+    { expectedRowVersion: 4, justification: 'Aprovação concorrente' },
+    actor,
+  );
+  assert.equal(approved.version.status, 'approved');
+  assert.equal(approved.version.rowVersion, 5);
+  await assert.rejects(
+    service.workflow(
+      projectId,
+      versionId,
+      'approve',
+      { expectedRowVersion: 4, justification: 'Aprovação concorrente' },
+      actor,
+    ),
+    (error: unknown) =>
+      error instanceof ConflictException && error.message.includes('P031_VERSION_CONFLICT'),
+  );
+  assert.equal(calls.filter((call) => call.text.includes('approve_plan_version')).length, 1);
 });

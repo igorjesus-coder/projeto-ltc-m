@@ -55,6 +55,14 @@ test('falha sanitizada não preserva URL de banco', () => {
   assert.match(message, /redacted/u);
 });
 
+test('falha sanitizada preserva erro de spawn quando o processo nÃ£o inicia', () => {
+  const message = sanitizeProcessFailure({
+    code: 1,
+    error: 'spawn docker ENOENT',
+  });
+  assert.match(message, /spawn docker ENOENT/u);
+});
+
 test('bootstrap D51 usa supabase_admin real e isola ci_admin antes das migrations', () => {
   const bootstrap = fs.readFileSync(
     path.join(process.cwd(), 'database', 'audit', 'ltcm-ci-bootstrap.sql'),
@@ -140,7 +148,7 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   assert.match(runner, /runStage\('p013_cluster_start'/u);
   assert.match(runner, /docker'[\s\S]*'run'[\s\S]*'--detach'/u);
   assert.match(runner, /CI_POSTGRES_IMAGE/u);
-  assert.match(runner, /'--publish'[\s\S]*'127\.0\.0\.1::5432'/u);
+  assert.match(runner, /'--publish'[\s\S]*'127\.0\.0\.1:0:5432'/u);
   assert.match(runner, /runStage\('p013_cluster_port'/u);
   assert.match(runner, /runStage\('p013_cluster_ready'/u);
   assert.match(runner, /runStage\('p013_cluster_preflight'/u);
@@ -300,6 +308,18 @@ test('estado final preserva exatamente o baseline de auditoria do seed', () => {
     finalState,
     /operational_fixtures[\s\S]*select count\(\*\) from ltc_m\.audit_log\) - 3/u,
   );
+});
+
+test('P017 limpa somente o grantor temporário e preserva D26', () => {
+  const p017 = fs.readFileSync(
+    path.join(process.cwd(), 'scripts', 'postgres-p017-integrity.integration.test.mjs'),
+    'utf8',
+  );
+  assert.equal(
+    (p017.match(/revoke ltc_m_runtime from postgres granted by postgres restrict/giu) ?? []).length,
+    2,
+  );
+  assert.doesNotMatch(p017, /revoke ltc_m_runtime from postgres\s*['`]/iu);
 });
 
 test('runner só avança da Fase A P009 com evidência limpa', () => {

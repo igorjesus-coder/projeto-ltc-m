@@ -29,13 +29,13 @@ test('mapeia capabilities com least privilege e sem permissões proibidas', () =
   ]);
   assert.ok(capabilitiesForRole('admin').includes('roles:manage'));
   assert.ok(capabilitiesForRole('admin').includes('forecast:override_balance'));
+  assert.ok(capabilitiesForRole('admin').includes('workflow:archive'));
   for (const role of ['viewer', 'editor', 'approver'] as const) {
     assert.ok(!capabilitiesForRole(role).includes('forecast:override_balance'));
   }
   for (const role of ['viewer', 'editor', 'approver', 'admin'] as const) {
     const capabilities = capabilitiesForRole(role) as readonly string[];
     assert.ok(!capabilities.includes('physical_delete'));
-    assert.ok(!capabilities.includes('archive'));
     assert.ok(!capabilities.includes('unlock_direct'));
   }
   assert.equal(isRole('unknown'), false);

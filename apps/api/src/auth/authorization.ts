@@ -32,6 +32,7 @@ export const CAPABILITIES = [
   'workflow:return_to_draft',
   'workflow:lock',
   'workflow:reopen',
+  'workflow:archive',
   'soft_delete:execute',
   'soft_delete:restore',
   'catalog:manage',
@@ -40,7 +41,7 @@ export const CAPABILITIES = [
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 
-export const UNSUPPORTED_OPERATIONS = ['physical_delete', 'archive', 'unlock_direct'] as const;
+export const UNSUPPORTED_OPERATIONS = ['physical_delete', 'unlock_direct'] as const;
 
 export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = Object.freeze({
   viewer: ['data:read', 'financial:read'],
@@ -68,6 +69,7 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'workflow:return_to_draft',
     'workflow:lock',
     'workflow:reopen',
+    'workflow:archive',
     'soft_delete:execute',
     'soft_delete:restore',
     'catalog:manage',

@@ -28,6 +28,7 @@ export const CAPABILITIES = [
   'workflow:return_to_draft',
   'workflow:lock',
   'workflow:reopen',
+  'workflow:archive',
   'soft_delete:execute',
   'soft_delete:restore',
   'catalog:manage',

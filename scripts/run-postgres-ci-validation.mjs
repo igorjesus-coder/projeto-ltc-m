@@ -41,7 +41,8 @@ export function migrationInventory(rootDirectory) {
 }
 
 export function sanitizeProcessFailure(result) {
-  const text = `${result.stderr ?? ''}\n${result.stdout ?? ''}`;
+  const spawnError = result.error ? `ERROR: ${result.error}` : '';
+  const text = `${spawnError}\n${result.stderr ?? ''}\n${result.stdout ?? ''}`;
   return (
     text.match(/(?:ERROR|FATAL|Falha|failed):?[^\r\n]{0,300}/iu)?.[0] ??
     `processo terminou com código ${result.code ?? 'desconhecido'}`
@@ -62,6 +63,7 @@ function runProcess(command, args, options = {}) {
     code: result.status ?? 1,
     stdout: result.stdout ?? '',
     stderr: result.stderr ?? '',
+    error: result.error?.message ?? '',
     durationMs: Date.now() - startedAt,
   };
 }
@@ -158,6 +160,61 @@ function parseDockerPort(stdout) {
   const match = value?.match(/^(127\.0\.0\.1|localhost|\[::1\]|::1):(\d+)$/u);
   if (!match) throw new Error('P013_CLUSTER_PORT_UNSAFE');
   return { host: match[1].replaceAll(/\[|\]/gu, ''), port: match[2] };
+}
+
+function waitForP013Port(containerName) {
+  const startedAt = Date.now();
+  let lastResult = { code: 1, stdout: '', stderr: '' };
+  while (Date.now() - startedAt < 60_000) {
+    lastResult = runProcess('docker', ['port', containerName, '5432/tcp'], { timeoutMs: 5_000 });
+    if (lastResult.code === 0 && lastResult.stdout.trim()) {
+      return {
+        code: 0,
+        stdout: lastResult.stdout,
+        stderr: lastResult.stderr,
+        durationMs: Date.now() - startedAt,
+      };
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
+  }
+  return {
+    code: lastResult.code || 1,
+    stdout: lastResult.stdout,
+    stderr: lastResult.stderr || 'P013 isolated PostgreSQL port was not published',
+    error: lastResult.error,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+function startP013Container(containerName) {
+  const args = [
+    'run',
+    '--detach',
+    '--rm',
+    '--name',
+    containerName,
+    '--env',
+    `POSTGRES_DB=${P013_DATABASE}`,
+    '--env',
+    `POSTGRES_USER=${P013_USER}`,
+    '--env',
+    `POSTGRES_PASSWORD=${P013_PASSWORD}`,
+    '--env',
+    'POSTGRES_INITDB_ARGS=--encoding=UTF8',
+    '--publish',
+    '127.0.0.1:0:5432',
+    CI_POSTGRES_IMAGE,
+  ];
+  let result = { code: 1, stdout: '', stderr: '', error: '' };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    result = runProcess('docker', args, { timeoutMs: 120_000 });
+    if (result.code === 0) return result;
+    if (attempt < 2) {
+      runProcess('docker', ['rm', '--force', containerName], { timeoutMs: 30_000 });
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
+    }
+  }
+  return result;
 }
 
 function waitForP013Postgres({ host, port }) {
@@ -297,34 +354,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
 
   const runP013PostgresStage = () => {
     p013ContainerName = `ltcm-p013-${commit.slice(0, 12).toLowerCase()}-${process.pid}`;
-    runStage('p013_cluster_start', () =>
-      runProcess(
-        'docker',
-        [
-          'run',
-          '--detach',
-          '--rm',
-          '--name',
-          p013ContainerName,
-          '--env',
-          `POSTGRES_DB=${P013_DATABASE}`,
-          '--env',
-          `POSTGRES_USER=${P013_USER}`,
-          '--env',
-          `POSTGRES_PASSWORD=${P013_PASSWORD}`,
-          '--env',
-          'POSTGRES_INITDB_ARGS=--encoding=UTF8',
-          '--publish',
-          '127.0.0.1::5432',
-          CI_POSTGRES_IMAGE,
-        ],
-        { timeoutMs: 120_000 },
-      ),
-    );
+    runStage('p013_cluster_start', () => startP013Container(p013ContainerName));
 
-    const portResult = runStage('p013_cluster_port', () =>
-      runProcess('docker', ['port', p013ContainerName, '5432/tcp'], { timeoutMs: 10_000 }),
-    );
+    const portResult = runStage('p013_cluster_port', () => waitForP013Port(p013ContainerName));
     const p013Endpoint = parseDockerPort(portResult.stdout);
     assertP013ClusterIsolation({
       mainHost: process.env.PGHOST,

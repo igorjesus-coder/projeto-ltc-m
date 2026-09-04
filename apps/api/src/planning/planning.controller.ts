@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 
 import { AuthorizationGuard, hasCapabilities, RequireCapabilities } from '../auth/authorization.js';
 import type { AuthenticatedRequest } from '../auth/auth.guard.js';
@@ -7,6 +7,7 @@ import {
   parsePlanningMonthQuery,
   parsePlanningProjectId,
   parsePlanningVersionId,
+  parsePlanningWorkflowPayload,
 } from './planning.types.js';
 import { PlanningService } from './planning.service.js';
 
@@ -75,6 +76,89 @@ export class PlanningController {
       parsePlanningProjectId(projectId),
       parsePlanningVersionId(versionId),
       parsePlanningBatchPayload(body),
+      actorFromRequest(request),
+      canOverrideBalance(request),
+    );
+  }
+
+  @Post('projects/:projectId/versions/:versionId/submit')
+  @RequireCapabilities('workflow:submit')
+  async submit(
+    @Req() request: PlanningRequest,
+    @Param('projectId') projectId: string,
+    @Param('versionId') versionId: string,
+    @Body() body: unknown,
+  ) {
+    return this.workflow(request, projectId, versionId, 'submit', body);
+  }
+
+  @Post('projects/:projectId/versions/:versionId/return')
+  @RequireCapabilities('workflow:return_to_draft')
+  async returnToDraft(
+    @Req() request: PlanningRequest,
+    @Param('projectId') projectId: string,
+    @Param('versionId') versionId: string,
+    @Body() body: unknown,
+  ) {
+    return this.workflow(request, projectId, versionId, 'return', body);
+  }
+
+  @Post('projects/:projectId/versions/:versionId/approve')
+  @RequireCapabilities('workflow:approve')
+  async approve(
+    @Req() request: PlanningRequest,
+    @Param('projectId') projectId: string,
+    @Param('versionId') versionId: string,
+    @Body() body: unknown,
+  ) {
+    return this.workflow(request, projectId, versionId, 'approve', body);
+  }
+
+  @Post('projects/:projectId/versions/:versionId/lock')
+  @RequireCapabilities('workflow:lock')
+  async lock(
+    @Req() request: PlanningRequest,
+    @Param('projectId') projectId: string,
+    @Param('versionId') versionId: string,
+    @Body() body: unknown,
+  ) {
+    return this.workflow(request, projectId, versionId, 'lock', body);
+  }
+
+  @Post('projects/:projectId/versions/:versionId/archive')
+  @RequireCapabilities('workflow:archive')
+  async archive(
+    @Req() request: PlanningRequest,
+    @Param('projectId') projectId: string,
+    @Param('versionId') versionId: string,
+    @Body() body: unknown,
+  ) {
+    return this.workflow(request, projectId, versionId, 'archive', body);
+  }
+
+  @Post('projects/:projectId/versions/:versionId/reopen')
+  @RequireCapabilities('workflow:reopen')
+  async reopen(
+    @Req() request: PlanningRequest,
+    @Param('projectId') projectId: string,
+    @Param('versionId') versionId: string,
+    @Body() body: unknown,
+  ) {
+    return this.workflow(request, projectId, versionId, 'reopen', body);
+  }
+
+  private workflow(
+    request: PlanningRequest,
+    projectId: string,
+    versionId: string,
+    action: 'submit' | 'return' | 'approve' | 'lock' | 'archive' | 'reopen',
+    body: unknown,
+  ) {
+    return this.planning.workflow(
+      parsePlanningProjectId(projectId),
+      parsePlanningVersionId(versionId),
+      action,
+      parsePlanningWorkflowPayload(body, action),
       actorFromRequest(request),
       canOverrideBalance(request),
     );

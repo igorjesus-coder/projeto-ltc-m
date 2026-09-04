@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
+import { assertP026MigrationInventory, P026_MIGRATION_COUNT } from './p026-migration-inventory.mjs';
+
 const migration = fs.readFileSync(
   new URL(
     '../supabase/migrations/20260901100000_add_p026_master_data_management.sql',
@@ -52,4 +54,14 @@ test('P026 backend tem guard administrativo, domínio fechado e concorrência', 
   assert.match(service, /row_version = \$[0-9]+::bigint/u);
   assert.doesNotMatch(controller, /POST\('currencies'\)/u);
   assert.doesNotMatch(service, /delete\s+from/iu);
+});
+
+test('P026 from-zero rejeita inventário stale e aceita o inventário atual', () => {
+  assert.doesNotThrow(() =>
+    assertP026MigrationInventory(Array(P026_MIGRATION_COUNT).fill('migration')),
+  );
+  assert.throws(
+    () => assertP026MigrationInventory(Array(P026_MIGRATION_COUNT - 1).fill('migration')),
+    /P026_MIGRATION_INVENTORY_UNEXPECTED/u,
+  );
 });

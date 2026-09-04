@@ -23,27 +23,10 @@ const P021_POLICY_NAMES = new Set([
   'monthly_executions_select_p013',
   'monthly_plan_cells_select_p013',
 ]);
-const P021_FUNCTION_NAMES = new Set([
-  'resolve_authorization',
-  'return_plan_version_to_draft_as_approver',
-  'approve_plan_version_as_approver',
-]);
-
 function projectP017Baseline(model, baseline) {
-  const baselineFunctions = new Map(
-    baseline.functions.map((routine) => [
-      `${routine.schema}.${routine.name}.${routine.identityArguments}`,
-      routine,
-    ]),
-  );
   return {
     ...model,
-    functions: model.functions
-      .filter((routine) => !(routine.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(routine.name)))
-      .map((routine) => {
-        const key = `${routine.schema}.${routine.name}.${routine.identityArguments}`;
-        return baselineFunctions.get(key) ?? routine;
-      }),
+    functions: model.functions,
     policies: model.policies.map((policy) =>
       policy.schema === 'ltc_m' && P021_POLICY_NAMES.has(policy.name)
         ? (baseline.policies.find(
@@ -51,9 +34,7 @@ function projectP017Baseline(model, baseline) {
           ) ?? policy)
         : policy,
     ),
-    grants: model.grants.filter(
-      (grant) => !(grant.schema === 'ltc_m' && P021_FUNCTION_NAMES.has(grant.object)),
-    ),
+    grants: model.grants,
     types: model.types,
   };
 }
@@ -169,6 +150,22 @@ async function rebuildFromZero(pool, expectedMigrationCount) {
   } finally {
     client.release();
   }
+}
+
+async function runtimeMemberships(pool) {
+  const result = await pool.query(
+    `select pg_catalog.pg_get_userbyid(grantor) as grantor,
+            roleid::text as role_id,
+            member::text as member_id,
+            admin_option,
+            inherit_option,
+            set_option
+       from pg_catalog.pg_auth_members
+      where roleid = pg_catalog.to_regrole('ltc_m_runtime')
+         or member = pg_catalog.to_regrole('ltc_m_runtime')
+      order by grantor, roleid, member`,
+  );
+  return result.rows;
 }
 
 async function applySeed(pool) {
@@ -433,7 +430,7 @@ async function assertSecurityAndViews(pool, snapshot) {
     });
     assert.deepEqual(await businessState(pool), before);
   } finally {
-    await pool.query('revoke ltc_m_runtime from postgres');
+    await pool.query('revoke ltc_m_runtime from postgres granted by postgres restrict');
   }
 }
 
@@ -482,13 +479,17 @@ test(
   async () => {
     const pool = new Pool({ connectionString: isolatedDatabaseUrl(), max: 4 });
     const expectedSnapshot = JSON.parse(await readFile(SNAPSHOT_PATH, 'utf8'));
+    const baselineMemberships = await runtimeMemberships(pool);
     try {
       const firstPass = await executePass(pool, expectedSnapshot);
+      assert.deepEqual(await runtimeMemberships(pool), baselineMemberships);
       const secondPass = await executePass(pool, expectedSnapshot);
+      assert.deepEqual(await runtimeMemberships(pool), baselineMemberships);
       assert.deepEqual(secondPass, firstPass);
     } finally {
-      await pool.query('revoke ltc_m_runtime from postgres').catch(() => undefined);
+      await pool.query('revoke ltc_m_runtime from postgres granted by postgres restrict');
       await rebuildFromZero(pool, expectedSnapshot.migrationCount);
+      assert.deepEqual(await runtimeMemberships(pool), baselineMemberships);
       const cleanup = await pool.query(
         `select
            (select count(*) from ltc_m.projects)::integer as projects,

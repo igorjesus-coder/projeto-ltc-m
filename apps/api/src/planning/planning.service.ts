@@ -25,6 +25,8 @@ import {
   type PlanningProjectsResponse,
   type PlanningVersionOption,
   type PlanningVersionsResponse,
+  type PlanningWorkflowAction,
+  type PlanningWorkflowPayload,
   P029_MAX_RANGE_MONTHS,
 } from './planning.types.js';
 
@@ -46,6 +48,9 @@ interface VersionRow extends QueryResultRow {
   readonly row_version: string | number;
   readonly content_revision: string | number;
   readonly is_baseline: boolean;
+  readonly approved_at: string | null;
+  readonly source_plan_version_id: string | null;
+  readonly baseline_plan_version_id: string | null;
 }
 
 interface ItemRow extends QueryResultRow {
@@ -126,6 +131,9 @@ function versionOption(row: VersionRow): PlanningVersionOption {
     contentRevision: version(row.content_revision),
     editable: row.version_status === 'draft',
     isBaseline: row.is_baseline,
+    approvedAt: row.approved_at,
+    sourcePlanVersionId: row.source_plan_version_id,
+    baselinePlanVersionId: row.baseline_plan_version_id,
   };
 }
 
@@ -206,7 +214,10 @@ export class PlanningService {
            versions.status::text as version_status,
            versions.row_version,
            versions.content_revision,
-           versions.is_baseline
+           versions.is_baseline,
+           versions.approved_at::text as approved_at,
+           versions.source_plan_version_id,
+           versions.baseline_plan_version_id
          from ltc_m.plan_versions as versions
          join ltc_m.financial_plan_scopes as scopes
            on scopes.plan_version_id = versions.id
@@ -235,6 +246,85 @@ export class PlanningService {
     );
   }
 
+  async workflow(
+    projectId: string,
+    versionId: string,
+    action: PlanningWorkflowAction,
+    payload: PlanningWorkflowPayload,
+    actor: ActorContext,
+    canOverrideBalance = false,
+  ): Promise<PlanningEditorResponse> {
+    return this.database.actorTransaction(
+      { ...actor, justification: payload.justification ?? null },
+      async (client) => {
+        const project = await this.findProject(client, projectId);
+        if (!project) throw new NotFoundException('P029_PROJECT_NOT_FOUND');
+        const versionResult = await client.query<VersionRow>(
+          `select
+             versions.id as version_id,
+             versions.name as version_name,
+             versions.status::text as version_status,
+             versions.row_version,
+             versions.content_revision,
+             versions.is_baseline,
+             versions.approved_at::text as approved_at,
+             versions.source_plan_version_id,
+             versions.baseline_plan_version_id
+           from ltc_m.plan_versions as versions
+           join ltc_m.financial_plan_scopes as scopes
+             on scopes.plan_version_id = versions.id
+           where versions.id = $1::uuid
+             and scopes.project_id = $2::uuid
+             and scopes.metric_type = $3::ltc_m.planned_financial_metric
+             and scopes.planning_level = 'item'::ltc_m.planning_level
+           `,
+          [versionId, projectId, P029_PLANNED_METRIC],
+        );
+        const plan = versionResult.rows[0];
+        if (!plan) throw new NotFoundException('P029_VERSION_NOT_FOUND');
+        if (version(plan.row_version) !== payload.expectedRowVersion) {
+          throw new ConflictException('P031_VERSION_CONFLICT');
+        }
+
+        const calls: Record<
+          PlanningWorkflowAction,
+          { readonly sql: string; readonly values: readonly unknown[] }
+        > = {
+          submit: {
+            sql: `select * from ltc_m.submit_plan_version($1::uuid, $2::bigint)`,
+            values: [versionId, payload.expectedRowVersion],
+          },
+          return: {
+            sql: `select * from ltc_m.return_plan_version_to_draft_as_approver($1::uuid, $2::bigint)`,
+            values: [versionId, payload.expectedRowVersion],
+          },
+          approve: {
+            sql: `select * from ltc_m.approve_plan_version_as_approver($1::uuid, $2::bigint)`,
+            values: [versionId, payload.expectedRowVersion],
+          },
+          lock: {
+            sql: `select * from ltc_m.lock_plan_version($1::uuid, $2::bigint)`,
+            values: [versionId, payload.expectedRowVersion],
+          },
+          archive: {
+            sql: `select * from ltc_m.archive_plan_version($1::uuid, $2::bigint)`,
+            values: [versionId, payload.expectedRowVersion],
+          },
+          reopen: {
+            sql: `select ltc_m.reopen_plan_version($1::uuid, $2::text, $3::bigint) as plan_version_id`,
+            values: [versionId, payload.newName, payload.expectedRowVersion],
+          },
+        };
+        const result = await client.query<{ readonly plan_version_id: string }>(calls[action].sql, [
+          ...calls[action].values,
+        ]);
+        const nextVersionId = action === 'reopen' ? result.rows[0]?.plan_version_id : versionId;
+        if (!nextVersionId) throw new Error('P031_WORKFLOW_RESULT_INVALID');
+        return this.readEditor(client, projectId, { versionId: nextVersionId }, canOverrideBalance);
+      },
+    );
+  }
+
   async save(
     projectId: string,
     versionId: string,
@@ -254,7 +344,10 @@ export class PlanningService {
              versions.status::text as version_status,
              versions.row_version,
              versions.content_revision,
-             versions.is_baseline
+             versions.is_baseline,
+             versions.approved_at::text as approved_at,
+             versions.source_plan_version_id,
+             versions.baseline_plan_version_id
            from ltc_m.plan_versions as versions
            join ltc_m.financial_plan_scopes as scopes
              on scopes.plan_version_id = versions.id
@@ -518,7 +611,10 @@ export class PlanningService {
          versions.status::text as version_status,
            versions.row_version,
            versions.content_revision,
-         versions.is_baseline
+         versions.is_baseline,
+         versions.approved_at::text as approved_at,
+         versions.source_plan_version_id,
+         versions.baseline_plan_version_id
        from ltc_m.plan_versions as versions
        join ltc_m.financial_plan_scopes as scopes
          on scopes.plan_version_id = versions.id

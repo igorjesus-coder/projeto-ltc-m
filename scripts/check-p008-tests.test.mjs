@@ -9,6 +9,11 @@ import {
   extractP008RlsInventory,
   scanP008TestText,
 } from './check-p008-tests.mjs';
+import {
+  P008_EXECUTABLE_FUNCTION_ALLOWLIST,
+  compareP008ExecutableFunctionAllowlist,
+  findP008PublicExecutableFunctions,
+} from './p008-executable-function-allowlist.mjs';
 
 const p008Sql = fs.readFileSync(
   new URL('../database/audit/ltcm-p008-rls-tests.sql', import.meta.url),
@@ -17,6 +22,60 @@ const p008Sql = fs.readFileSync(
 
 test('aceita a suíte oficial P008 com rollback integral', () => {
   assert.deepEqual(scanP008TestText(p008Sql), []);
+});
+
+test('amarra o caminho positivo do Editor à assinatura canônica P031', () => {
+  assert.match(
+    p008Sql,
+    /do\s+\$editor\$[\s\S]*?select\s+plan_versions\.row_version\s+into\s+v_row_version[\s\S]*?perform\s+ltc_m\.submit_plan_version\s*\(\s*v_plan_id\s*,\s*v_row_version\s*\)/i,
+  );
+  const legacyPath = p008Sql.replace(
+    'perform ltc_m.submit_plan_version(v_plan_id, v_row_version);',
+    'perform ltc_m.submit_plan_version(v_plan_id);',
+  );
+  assert.ok(scanP008TestText(legacyPath).some((issue) => issue.includes('submit canônico P031')));
+});
+
+test('allowlist nominal aceita exatamente as 14 assinaturas atuais', () => {
+  assert.deepEqual(
+    compareP008ExecutableFunctionAllowlist([...P008_EXECUTABLE_FUNCTION_ALLOWLIST]),
+    { missing: [], unexpected: [], duplicate: false },
+  );
+});
+
+test('allowlist nominal rejeita missing, extra, overload e argumentos de identidade divergentes', () => {
+  const nominal = [...P008_EXECUTABLE_FUNCTION_ALLOWLIST];
+  assert.deepEqual(compareP008ExecutableFunctionAllowlist(nominal.slice(1)).missing, [nominal[0]]);
+  assert.deepEqual(
+    compareP008ExecutableFunctionAllowlist([...nominal, 'ltc_m.submit_plan_version(uuid,text)'])
+      .unexpected,
+    ['ltc_m.submit_plan_version(uuid,text)'],
+  );
+  assert.deepEqual(
+    compareP008ExecutableFunctionAllowlist(
+      nominal.map((signature) =>
+        signature === 'ltc_m.lock_plan_version(uuid,bigint)'
+          ? 'ltc_m.lock_plan_version(uuid,integer)'
+          : signature,
+      ),
+    ),
+    {
+      missing: ['ltc_m.lock_plan_version(uuid,bigint)'],
+      unexpected: ['ltc_m.lock_plan_version(uuid,integer)'],
+      duplicate: false,
+    },
+  );
+});
+
+test('allowlist nominal rejeita PUBLIC EXECUTE independentemente da cardinalidade', () => {
+  assert.deepEqual(
+    findP008PublicExecutableFunctions([
+      { signature: P008_EXECUTABLE_FUNCTION_ALLOWLIST[0], public_execute: false },
+      { signature: P008_EXECUTABLE_FUNCTION_ALLOWLIST[1], public_execute: true },
+    ]),
+    [P008_EXECUTABLE_FUNCTION_ALLOWLIST[1]],
+  );
+  assert.match(p008Sql, /acl\.grantee\s*=\s*0[\s\S]*?acl\.privilege_type\s*=\s*'EXECUTE'/iu);
 });
 
 test('rejeita COMMIT, ausência de rollback e cenário obrigatório ausente', () => {

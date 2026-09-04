@@ -62,7 +62,7 @@ test('o inventário atual real é aceito sem teto global de cardinalidade', asyn
     path.join(REPOSITORY_ROOT, 'supabase', 'migrations'),
     P016_MIGRATION_BASELINE,
   );
-  assert.equal(inventory.length, 17);
+  assert.equal(inventory.length, 18);
   assert.ok(inventory.length > P016_MIGRATION_BASELINE.length);
   assert.ok(inventory.some((migration) => migration.name === P026_MIGRATION));
   assert.ok(inventory.some((migration) => migration.name === P026_AUDIT_FIX_MIGRATION));

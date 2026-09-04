@@ -5,6 +5,7 @@ export const P029_PLANNED_METRIC = 'billing_planned' as const;
 export const P029_MAX_BATCH_ENTRIES = 5_000 as const;
 export const P029_MAX_RANGE_MONTHS = 240 as const;
 export const P030_FINANCIAL_CONTRACT = 'ltcm.p030.balance-distribution-validations.v1' as const;
+export const P031_WORKFLOW_CONTRACT = 'ltcm.p031.version-approval-locking.v1' as const;
 
 export interface PlanningProjectOption {
   readonly projectId: string;
@@ -27,6 +28,9 @@ export interface PlanningVersionOption {
   readonly contentRevision: number;
   readonly editable: boolean;
   readonly isBaseline: boolean;
+  readonly approvedAt: string | null;
+  readonly sourcePlanVersionId: string | null;
+  readonly baselinePlanVersionId: string | null;
 }
 
 export interface PlanningVersionsResponse {
@@ -97,6 +101,15 @@ export interface PlanningBatchPayload {
   readonly entries: readonly PlanningMonthEntryPayload[];
 }
 
+export type PlanningWorkflowAction =
+  'submit' | 'return' | 'approve' | 'lock' | 'archive' | 'reopen';
+
+export interface PlanningWorkflowPayload {
+  readonly expectedRowVersion: number;
+  readonly justification?: string;
+  readonly newName?: string;
+}
+
 export type PlanningMonthQuery = Readonly<{
   readonly versionId: string;
   readonly from?: string;
@@ -134,6 +147,13 @@ function positiveVersion(value: unknown): number {
   return value;
 }
 
+function expectedRowVersion(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+    invalid('P031_EXPECTED_ROW_VERSION_INVALID');
+  }
+  return value;
+}
+
 function month(value: unknown, code: string): string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-01$/u.test(value)) invalid(code);
   const parsed = new Date(`${value}T00:00:00Z`);
@@ -163,6 +183,11 @@ function justification(value: unknown): string {
     invalid('P029_JUSTIFICATION_REQUIRED');
   }
   return value.trim();
+}
+
+function optionalJustification(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  return justification(value);
 }
 
 export function parsePlanningProjectId(value: string): string {
@@ -213,4 +238,40 @@ export function parsePlanningBatchPayload(value: unknown): PlanningBatchPayload 
     justification: justification(body['justification']),
     entries,
   };
+}
+
+export function parsePlanningWorkflowPayload(
+  value: unknown,
+  action: PlanningWorkflowAction,
+): PlanningWorkflowPayload {
+  const body = object(value);
+  const required =
+    action === 'return' || action === 'lock' || action === 'archive' || action === 'reopen';
+  const allowsJustification = required || action === 'approve';
+  const allowed = new Set([
+    'expectedRowVersion',
+    ...(allowsJustification ? ['justification'] : []),
+    ...(action === 'reopen' ? ['newName'] : []),
+  ]);
+  keys(body, allowed);
+  const parsed: PlanningWorkflowPayload = {
+    expectedRowVersion: expectedRowVersion(body['expectedRowVersion']),
+  };
+  if (action === 'reopen') {
+    const name = body['newName'];
+    if (typeof name !== 'string' || !name.trim() || name.length > 200)
+      invalid('P031_NEW_NAME_INVALID');
+    if (body['justification'] === undefined) invalid('P031_JUSTIFICATION_REQUIRED');
+    return {
+      ...parsed,
+      justification: justification(body['justification']),
+      newName: name.trim(),
+    };
+  }
+  if (allowsJustification && body['justification'] !== undefined) {
+    const parsedJustification = optionalJustification(body['justification']);
+    if (parsedJustification !== undefined) return { ...parsed, justification: parsedJustification };
+  }
+  if (required) invalid('P031_JUSTIFICATION_REQUIRED');
+  return parsed;
 }

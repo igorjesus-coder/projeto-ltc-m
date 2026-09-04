@@ -12,6 +12,7 @@ const P021_MIGRATION_NAME = '20260828100000_add_p021_authorization_approver.sql'
 const P026_MIGRATION_NAME = '20260901100000_add_p026_master_data_management.sql';
 const P026_AUDIT_FIX_MIGRATION_NAME = '20260902100000_fix_p026_catalog_audit_identity.sql';
 const P029_MIGRATION_NAME = '20260903100000_add_p029_plan_content_revision.sql';
+const P031_MIGRATION_NAME = '20260903120000_add_p031_version_approval_locking.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -106,6 +107,7 @@ const P026_COLUMNS = new Map([
   ['units', new Set(['updated_at', 'row_version'])],
 ]);
 const P029_COLUMNS = new Map([['plan_versions', new Set(['content_revision'])]]);
+const P031_COLUMNS = new Map([['plan_versions', new Set(['baseline_plan_version_id'])]]);
 
 const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.audit_row_change',
@@ -122,6 +124,13 @@ const P007_SECURITY_DEFINER_FUNCTIONS = new Set([
   'ltc_m.approve_plan_version_as_approver',
   'ltc_m.enforce_admin_inactivation',
   'ltc_m.read_audit_log',
+]);
+
+const P031_SECURITY_DEFINER_FUNCTIONS = new Set([
+  'ltc_m.protect_plan_version',
+  'ltc_m.audit_row_change',
+  'ltc_m.archive_plan_version',
+  'ltc_m.reopen_plan_version',
 ]);
 
 const D40_SECURITY_DEFINER_FUNCTIONS = new Set([
@@ -354,7 +363,9 @@ function requireAdditiveAlterTables(sql, issues, scope) {
             ? P026_COLUMNS.get(tableName)
             : scope === 'p029'
               ? P029_COLUMNS.get(tableName)
-              : P007_COLUMNS.get(tableName);
+              : scope === 'p031'
+                ? P031_COLUMNS.get(tableName)
+                : P007_COLUMNS.get(tableName);
 
     if (scope === 'd40') {
       const normalized = statement.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -492,7 +503,8 @@ function requireSafeFunctions(sql, issues, scope) {
     } else if (
       securityMatch[1].toLowerCase() === 'definer' &&
       !P007_SECURITY_DEFINER_FUNCTIONS.has(functionName) &&
-      !(scope === 'd40' && D40_SECURITY_DEFINER_FUNCTIONS.has(functionName))
+      !(scope === 'd40' && D40_SECURITY_DEFINER_FUNCTIONS.has(functionName)) &&
+      !(scope === 'p031' && P031_SECURITY_DEFINER_FUNCTIONS.has(functionName))
     ) {
       issues.push(`${functionName}: SECURITY DEFINER fora da whitelist P007`);
     }
@@ -755,15 +767,17 @@ export function scanMigrationText(sql, options = {}) {
         ? 'p026'
         : options.migrationName === P029_MIGRATION_NAME
           ? 'p029'
-          : options.migrationName === P021_MIGRATION_NAME
-            ? 'p021'
-            : options.migrationName === D40_MIGRATION_NAME
-              ? 'd40'
-              : options.migrationName === P013_MIGRATION_NAME
-                ? 'p013'
-                : options.migrationName === P009_MIGRATION_NAME
-                  ? 'p009'
-                  : 'p007';
+          : options.migrationName === P031_MIGRATION_NAME
+            ? 'p031'
+            : options.migrationName === P021_MIGRATION_NAME
+              ? 'p021'
+              : options.migrationName === D40_MIGRATION_NAME
+                ? 'd40'
+                : options.migrationName === P013_MIGRATION_NAME
+                  ? 'p013'
+                  : options.migrationName === P009_MIGRATION_NAME
+                    ? 'p009'
+                    : 'p007';
   const stripped = stripSqlNoise(sql);
   const sqlForForbiddenPatterns =
     scope === 'p026-audit-fix'
@@ -778,7 +792,7 @@ export function scanMigrationText(sql, options = {}) {
 
   for (const [pattern, message] of FORBIDDEN_PATTERNS) {
     if (
-      (scope === 'p021' || scope === 'p026') &&
+      (scope === 'p021' || scope === 'p026' || scope === 'p031') &&
       message === 'policy proibida' &&
       /(?:alter|drop)\s+policy/i.test(stripped)
     ) {

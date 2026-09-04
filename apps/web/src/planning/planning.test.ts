@@ -8,10 +8,22 @@ import {
   formatCents,
   parsePercentage,
   parsePlanningEditorResponse,
+  planningWorkflowActions,
   planningCellKey,
 } from './planning';
 
 describe('contrato P029 de planejamento', () => {
+  it('deriva ações P031 por status e capability sem escalar o perfil', () => {
+    const editor = (capability: string) => capability === 'workflow:submit';
+    expect(planningWorkflowActions('draft', editor)).toEqual(['submit']);
+    expect(planningWorkflowActions('approved', () => false)).toEqual([]);
+    expect(
+      planningWorkflowActions('locked', (capability) =>
+        ['workflow:archive', 'workflow:reopen'].includes(capability),
+      ),
+    ).toEqual(['archive', 'reopen']);
+  });
+
   it('calcula decimais sem erro binário', () => {
     const value = (decimalToCents('0.1') ?? 0n) + (decimalToCents('0.2') ?? 0n);
     expect(formatCents(value)).toBe('0.30');

@@ -1,7 +1,7 @@
 # ERD do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `63866804fe6f5247d9193bad2448253641bee6a45daccacec3c7986d22090b8e`
+Fingerprint: `0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91`
 
 Arquivo gerado deterministicamente a partir do modelo canônico capturado em PostgreSQL 17.
 Não editar manualmente; use `npm run docs:schema:generate` e valide com
@@ -276,6 +276,7 @@ erDiagram
     uuid updated_by_user_id FK
     uuid source_plan_version_id FK
     bigint content_revision
+    uuid baseline_plan_version_id FK
     text name
     date reference_date
     ltc_m_plan_status status
@@ -380,6 +381,7 @@ erDiagram
   app_users ||--o{ monthly_plan_import_executions : "monthly_plan_import_executions_created_by_user_id_fkey"
   app_users ||--o{ monthly_source_artifacts : "monthly_source_artifacts_created_by_user_id_fkey"
   app_users ||--o{ plan_versions : "plan_versions_approved_by_user_id_fkey"
+  plan_versions ||--o{ plan_versions : "plan_versions_baseline_plan_version_id_fkey"
   app_users ||--o{ plan_versions : "plan_versions_created_by_user_id_fkey"
   plan_versions ||--o{ plan_versions : "plan_versions_source_plan_version_id_fkey"
   app_users ||--o{ plan_versions : "plan_versions_updated_by_user_id_fkey"
