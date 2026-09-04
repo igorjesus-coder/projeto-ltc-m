@@ -540,6 +540,12 @@ revoke execute on function ltc_m.approve_plan_version_as_approver(uuid) from ltc
 revoke execute on function ltc_m.lock_plan_version(uuid) from ltc_m_runtime;
 revoke execute on function ltc_m.archive_plan_version(uuid) from public;
 revoke execute on function ltc_m.archive_plan_version(uuid) from ltc_m_runtime;
+revoke execute on function ltc_m.submit_plan_version(uuid, bigint) from public;
+revoke execute on function ltc_m.return_plan_version_to_draft_as_approver(uuid, bigint)
+from public;
+revoke execute on function ltc_m.approve_plan_version_as_approver(uuid, bigint) from public;
+revoke execute on function ltc_m.lock_plan_version(uuid, bigint) from public;
+revoke execute on function ltc_m.archive_plan_version(uuid, bigint) from public;
 grant execute on function ltc_m.submit_plan_version(uuid, bigint) to ltc_m_runtime;
 grant execute on function ltc_m.return_plan_version_to_draft_as_approver(uuid, bigint) to ltc_m_runtime;
 grant execute on function ltc_m.approve_plan_version_as_approver(uuid, bigint) to ltc_m_runtime;
