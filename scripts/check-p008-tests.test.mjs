@@ -24,6 +24,18 @@ test('aceita a suíte oficial P008 com rollback integral', () => {
   assert.deepEqual(scanP008TestText(p008Sql), []);
 });
 
+test('amarra o caminho positivo do Editor à assinatura canônica P031', () => {
+  assert.match(
+    p008Sql,
+    /do\s+\$editor\$[\s\S]*?select\s+plan_versions\.row_version\s+into\s+v_row_version[\s\S]*?perform\s+ltc_m\.submit_plan_version\s*\(\s*v_plan_id\s*,\s*v_row_version\s*\)/i,
+  );
+  const legacyPath = p008Sql.replace(
+    'perform ltc_m.submit_plan_version(v_plan_id, v_row_version);',
+    'perform ltc_m.submit_plan_version(v_plan_id);',
+  );
+  assert.ok(scanP008TestText(legacyPath).some((issue) => issue.includes('submit canônico P031')));
+});
+
 test('allowlist nominal aceita exatamente as 14 assinaturas atuais', () => {
   assert.deepEqual(
     compareP008ExecutableFunctionAllowlist([...P008_EXECUTABLE_FUNCTION_ALLOWLIST]),

@@ -17,7 +17,17 @@ select ltc_m.set_actor_context(
     '{{UUID_PREFIX}}025', 'p008-{{RUN_TOKEN}}|editor-flow', 'p008-{{RUN_TOKEN}}-editor-flow'
 );
 
-select ltc_m.submit_plan_version('{{UUID_PREFIX}}425');
+do $submit_workflow$
+declare
+    v_row_version bigint;
+begin
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '{{UUID_PREFIX}}425';
+    perform ltc_m.submit_plan_version('{{UUID_PREFIX}}425', v_row_version);
+end;
+$submit_workflow$;
 
 do $editor_workflow$
 begin

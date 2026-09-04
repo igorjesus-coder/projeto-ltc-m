@@ -680,28 +680,59 @@ select ltc_m.set_actor_context(
     '00000000-0000-4000-8000-000000008002',
     'p008|editor', 'p008-setup-workflow'
 );
-select ltc_m.submit_plan_version(
-    '00000000-0000-4000-8000-000000008402'
-);
-select ltc_m.submit_plan_version(
-    '00000000-0000-4000-8000-000000008403'
-);
-select ltc_m.submit_plan_version(
-    '00000000-0000-4000-8000-000000008404'
-);
+do $setup_submit$
+declare
+    v_row_version bigint;
+begin
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '00000000-0000-4000-8000-000000008402';
+    perform ltc_m.submit_plan_version(
+        '00000000-0000-4000-8000-000000008402', v_row_version
+    );
+
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '00000000-0000-4000-8000-000000008403';
+    perform ltc_m.submit_plan_version(
+        '00000000-0000-4000-8000-000000008403', v_row_version
+    );
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '00000000-0000-4000-8000-000000008404';
+    perform ltc_m.submit_plan_version(
+        '00000000-0000-4000-8000-000000008404', v_row_version
+    );
+end;
+$setup_submit$;
+
 select ltc_m.set_actor_context(
     '00000000-0000-4000-8000-000000008003',
     'p008|admin-one', 'p008-setup-workflow', 'P008 synthetic workflow setup'
 );
-select ltc_m.approve_plan_version(
-    '00000000-0000-4000-8000-000000008403'
-);
-select ltc_m.approve_plan_version(
-    '00000000-0000-4000-8000-000000008404'
-);
-select ltc_m.lock_plan_version(
-    '00000000-0000-4000-8000-000000008404'
-);
+do $setup_workflow$
+declare
+    v_row_version bigint;
+begin
+    perform ltc_m.approve_plan_version(
+        '00000000-0000-4000-8000-000000008403'
+    );
+
+    perform ltc_m.approve_plan_version(
+        '00000000-0000-4000-8000-000000008404'
+    );
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '00000000-0000-4000-8000-000000008404';
+    perform ltc_m.lock_plan_version(
+        '00000000-0000-4000-8000-000000008404', v_row_version
+    );
+end;
+$setup_workflow$;
 
 set local role ltc_m_runtime;
 
@@ -769,6 +800,7 @@ do $viewer$
 declare
     v_count integer;
     v_rows integer;
+    v_row_version bigint;
 begin
     perform pg_catalog.set_config('ltc_m.role', 'admin', true);
 
@@ -823,8 +855,12 @@ begin
         raise exception 'P008 falhou: viewer alterou cadastro.';
     end if;
     begin
+        select plan_versions.row_version
+        into v_row_version
+        from ltc_m.plan_versions
+        where plan_versions.id = '00000000-0000-4000-8000-000000008401';
         perform ltc_m.submit_plan_version(
-            '00000000-0000-4000-8000-000000008401'
+            '00000000-0000-4000-8000-000000008401', v_row_version
         );
         raise exception 'P008 falhou: viewer executou workflow.';
     exception
@@ -847,7 +883,7 @@ $viewer$;
 
 select ltc_m.set_actor_context(
     '00000000-0000-4000-8000-000000008002',
-    'p008|editor', 'p008-editor'
+    'p008|editor', 'p008-editor', 'P008 editor workflow'
 );
 
 do $editor$
@@ -859,6 +895,8 @@ declare
     v_plan_id uuid := '00000000-0000-4000-8000-000000008405';
     v_count integer;
     v_rows integer;
+    v_row_version bigint;
+    v_return_row_version bigint;
 begin
     select count(*) into v_count from ltc_m.plan_versions;
     if v_count <> 4 then
@@ -936,7 +974,11 @@ begin
         v_plan_id, 'P008 Editor Workflow', date '2026-07-31',
         '00000000-0000-4000-8000-000000008002'
     );
-    perform ltc_m.submit_plan_version(v_plan_id);
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = v_plan_id;
+    perform ltc_m.submit_plan_version(v_plan_id, v_row_version);
 
     insert into ltc_m.plan_versions (
         id, name, reference_date, created_by_user_id
@@ -944,7 +986,18 @@ begin
         '00000000-0000-4000-8000-000000008406', 'P008 Approver Return', date '2026-07-31',
         '00000000-0000-4000-8000-000000008002'
     );
-    perform ltc_m.submit_plan_version('00000000-0000-4000-8000-000000008406');
+    select plan_versions.row_version
+    into v_return_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '00000000-0000-4000-8000-000000008406';
+    perform ltc_m.submit_plan_version(
+        '00000000-0000-4000-8000-000000008406', v_return_row_version
+    );
+
+    select plan_versions.row_version
+    into v_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = v_plan_id;
 
     begin
         perform ltc_m.approve_plan_version(v_plan_id);
@@ -959,14 +1012,22 @@ begin
         when sqlstate 'P0001' or insufficient_privilege then null;
     end;
     begin
-        perform ltc_m.lock_plan_version(v_plan_id);
+        perform ltc_m.lock_plan_version(v_plan_id, v_row_version);
         raise exception 'P008 falhou: editor bloqueou versão.';
     exception
         when sqlstate 'P0001' or insufficient_privilege then null;
     end;
     begin
-        perform ltc_m.reopen_plan_version(v_plan_id, 'P008 forbidden reopen');
+        perform ltc_m.reopen_plan_version(
+            v_plan_id, 'P008 forbidden reopen', v_row_version
+        );
         raise exception 'P008 falhou: editor reabriu versão.';
+    exception
+        when sqlstate 'P0001' or insufficient_privilege then null;
+    end;
+    begin
+        perform ltc_m.archive_plan_version(v_plan_id, v_row_version);
+        raise exception 'P008 falhou: editor arquivou versão.';
     exception
         when sqlstate 'P0001' or insufficient_privilege then null;
     end;
@@ -1030,17 +1091,27 @@ select ltc_m.set_actor_context(
 do $approver$
 declare
     v_count integer;
+    v_approve_row_version bigint;
+    v_return_row_version bigint;
 begin
     select count(*) into v_count from ltc_m.plan_versions;
     if v_count <> 6 then
         raise exception 'P021 falhou: approver nÃ£o leu versÃµes em revisÃ£o.';
     end if;
 
+    select plan_versions.row_version
+    into v_approve_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '00000000-0000-4000-8000-000000008405';
     perform ltc_m.approve_plan_version_as_approver(
-        '00000000-0000-4000-8000-000000008405'
+        '00000000-0000-4000-8000-000000008405', v_approve_row_version
     );
+    select plan_versions.row_version
+    into v_return_row_version
+    from ltc_m.plan_versions
+    where plan_versions.id = '00000000-0000-4000-8000-000000008406';
     perform ltc_m.return_plan_version_to_draft_as_approver(
-        '00000000-0000-4000-8000-000000008406'
+        '00000000-0000-4000-8000-000000008406', v_return_row_version
     );
 
     begin
@@ -1055,8 +1126,12 @@ begin
     end;
 
     begin
+        select plan_versions.row_version
+        into v_approve_row_version
+        from ltc_m.plan_versions
+        where plan_versions.id = '00000000-0000-4000-8000-000000008405';
         perform ltc_m.lock_plan_version(
-            '00000000-0000-4000-8000-000000008405'
+            '00000000-0000-4000-8000-000000008405', v_approve_row_version
         );
         raise exception 'P021 falhou: approver executou lock.';
     exception
