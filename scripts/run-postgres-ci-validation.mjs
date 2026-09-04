@@ -186,6 +186,37 @@ function waitForP013Port(containerName) {
   };
 }
 
+function startP013Container(containerName) {
+  const args = [
+    'run',
+    '--detach',
+    '--rm',
+    '--name',
+    containerName,
+    '--env',
+    `POSTGRES_DB=${P013_DATABASE}`,
+    '--env',
+    `POSTGRES_USER=${P013_USER}`,
+    '--env',
+    `POSTGRES_PASSWORD=${P013_PASSWORD}`,
+    '--env',
+    'POSTGRES_INITDB_ARGS=--encoding=UTF8',
+    '--publish',
+    '127.0.0.1:0:5432',
+    CI_POSTGRES_IMAGE,
+  ];
+  let result = { code: 1, stdout: '', stderr: '', error: '' };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    result = runProcess('docker', args, { timeoutMs: 120_000 });
+    if (result.code === 0) return result;
+    if (attempt < 2) {
+      runProcess('docker', ['rm', '--force', containerName], { timeoutMs: 30_000 });
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000);
+    }
+  }
+  return result;
+}
+
 function waitForP013Postgres({ host, port }) {
   const startedAt = Date.now();
   let lastResult = { code: 1, stdout: '', stderr: '' };
@@ -323,30 +354,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
 
   const runP013PostgresStage = () => {
     p013ContainerName = `ltcm-p013-${commit.slice(0, 12).toLowerCase()}-${process.pid}`;
-    runStage('p013_cluster_start', () =>
-      runProcess(
-        'docker',
-        [
-          'run',
-          '--detach',
-          '--rm',
-          '--name',
-          p013ContainerName,
-          '--env',
-          `POSTGRES_DB=${P013_DATABASE}`,
-          '--env',
-          `POSTGRES_USER=${P013_USER}`,
-          '--env',
-          `POSTGRES_PASSWORD=${P013_PASSWORD}`,
-          '--env',
-          'POSTGRES_INITDB_ARGS=--encoding=UTF8',
-          '--publish',
-          '127.0.0.1:0:5432',
-          CI_POSTGRES_IMAGE,
-        ],
-        { timeoutMs: 120_000 },
-      ),
-    );
+    runStage('p013_cluster_start', () => startP013Container(p013ContainerName));
 
     const portResult = runStage('p013_cluster_port', () => waitForP013Port(p013ContainerName));
     const p013Endpoint = parseDockerPort(portResult.stdout);
