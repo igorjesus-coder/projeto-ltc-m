@@ -9,6 +9,25 @@ declare
     v_missing_count integer;
     v_unexpected_count integer;
     v_changed_count integer;
+    v_expected_functions text[] := array[
+        'ltc_m.approve_plan_version_as_approver(uuid,bigint)',
+        'ltc_m.approve_plan_version(uuid)',
+        'ltc_m.archive_plan_version(uuid)',
+        'ltc_m.archive_plan_version(uuid,bigint)',
+        'ltc_m.authorization_context()',
+        'ltc_m.current_actor_id(boolean)',
+        'ltc_m.lock_plan_version(uuid,bigint)',
+        'ltc_m.read_audit_log(integer,timestamp with time zone,bigint,timestamp with time zone,timestamp with time zone,text,ltc_m.audit_operation,uuid,text)',
+        'ltc_m.reopen_plan_version(uuid,text,bigint)',
+        'ltc_m.resolve_authorization(text)',
+        'ltc_m.return_plan_version_to_draft_as_approver(uuid,bigint)',
+        'ltc_m.return_plan_version_to_draft(uuid)',
+        'ltc_m.set_actor_context(uuid,text,text,text,text,boolean)',
+        'ltc_m.submit_plan_version(uuid,bigint)'
+    ];
+    v_actual_functions text[];
+    v_missing_functions text[];
+    v_unexpected_functions text[];
 begin
     if not exists (
         select 1
@@ -433,20 +452,55 @@ begin
         raise exception 'P008 falhou: projeção sanitizada de app_users divergente.';
     end if;
 
-    select count(*)
-    into v_count
-    from pg_catalog.pg_proc
-    join pg_catalog.pg_namespace
-        on pg_namespace.oid = pg_proc.pronamespace
-    where
-        pg_namespace.nspname = 'ltc_m'
-        and pg_catalog.has_function_privilege(
-            'ltc_m_runtime',
-            pg_proc.oid,
-            'EXECUTE'
-        );
-    if v_count <> 12 then
-        raise exception 'P008 falhou: allowlist executável contém % funções.', v_count;
+    select coalesce(
+        pg_catalog.array_agg(actual.signature order by actual.signature),
+        array[]::text[]
+    )
+    into v_actual_functions
+    from (
+        select pg_proc.oid::regprocedure::text as signature
+        from pg_catalog.pg_proc
+        join pg_catalog.pg_namespace
+            on pg_namespace.oid = pg_proc.pronamespace
+        where
+            pg_namespace.nspname = 'ltc_m'
+            and pg_catalog.has_function_privilege(
+                'ltc_m_runtime',
+                pg_proc.oid,
+                'EXECUTE'
+            )
+    ) as actual;
+
+    select coalesce(
+        pg_catalog.array_agg(expected.signature order by expected.signature),
+        array[]::text[]
+    )
+    into v_missing_functions
+    from pg_catalog.unnest(v_expected_functions) as expected(signature)
+    where not exists (
+        select 1
+        from pg_catalog.unnest(v_actual_functions) as actual(signature)
+        where actual.signature = expected.signature
+    );
+
+    select coalesce(
+        pg_catalog.array_agg(actual.signature order by actual.signature),
+        array[]::text[]
+    )
+    into v_unexpected_functions
+    from pg_catalog.unnest(v_actual_functions) as actual(signature)
+    where not exists (
+        select 1
+        from pg_catalog.unnest(v_expected_functions) as expected(signature)
+        where expected.signature = actual.signature
+    );
+
+    if cardinality(v_missing_functions) > 0
+        or cardinality(v_unexpected_functions) > 0 then
+        raise exception
+            'P008 falhou: allowlist executável divergente. missing=%, unexpected=%',
+            v_missing_functions,
+            v_unexpected_functions;
     end if;
 
     if not pg_catalog.has_function_privilege(
