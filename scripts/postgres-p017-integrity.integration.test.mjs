@@ -152,6 +152,16 @@ async function rebuildFromZero(pool, expectedMigrationCount) {
   }
 }
 
+async function assertNoRuntimeMembership(pool) {
+  const result = await pool.query(
+    `select count(*)::integer as membership_count
+       from pg_catalog.pg_auth_members
+      where roleid = 'ltc_m_runtime'::regrole
+         or member = 'ltc_m_runtime'::regrole`,
+  );
+  assert.equal(result.rows[0]?.membership_count, 0);
+}
+
 async function applySeed(pool) {
   await pool.query(await readFile(path.join(ROOT, 'supabase', 'seed.sql'), 'utf8'));
 }
@@ -470,6 +480,7 @@ test(
     } finally {
       await pool.query('revoke ltc_m_runtime from postgres granted by postgres restrict');
       await rebuildFromZero(pool, expectedSnapshot.migrationCount);
+      await assertNoRuntimeMembership(pool);
       const cleanup = await pool.query(
         `select
            (select count(*) from ltc_m.projects)::integer as projects,

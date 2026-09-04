@@ -161,6 +161,16 @@ async function rebuildFromZero(pool: Pool): Promise<void> {
   }
 }
 
+async function assertNoRuntimeMembership(pool: Pool): Promise<void> {
+  const result = await pool.query(
+    `select count(*)::integer as membership_count
+       from pg_catalog.pg_auth_members
+      where roleid = 'ltc_m_runtime'::regrole
+         or member = 'ltc_m_runtime'::regrole`,
+  );
+  assert.equal(result.rows[0]?.['membership_count'], 0);
+}
+
 async function actor(client: PoolClient, id: string, subject: string): Promise<void> {
   await client.query(
     `select ltc_m.set_actor_context($1::uuid, $2::text, $3::text, null, 'import', false)`,
@@ -661,9 +671,10 @@ test(
       if (rejected?.status === 'rejected') assert.equal(errorCode(rejected.reason), '23505');
     } finally {
       if (membershipGranted) {
-        await pool.query('revoke ltc_m_runtime from postgres');
+        await pool.query('revoke ltc_m_runtime from postgres granted by postgres restrict');
       }
       await rebuildFromZero(pool);
+      await assertNoRuntimeMembership(pool);
       const cleanup = await pool.query(
         `select
            (select count(*) from ltc_m.monthly_source_artifacts)::integer as artifacts,

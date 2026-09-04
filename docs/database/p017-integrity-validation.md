@@ -2,7 +2,7 @@
 
 Contrato do schema: `ltcm.p017.schema-integrity.v1`
 Contrato do fingerprint: `ltcm.p017.schema-fingerprint.v1`
-Fingerprint nominal: `0b066f70d99842f1a97345c196750b839dd4ee8595ce71ddd7d87e1e41f8f836`
+Fingerprint nominal: `0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91`
 
 ## Inventário nominal
 
@@ -24,7 +24,7 @@ Fingerprint nominal: `0b066f70d99842f1a97345c196750b839dd4ee8595ce71ddd7d87e1e41
 | `protectedRlsTableCount` | 19 |
 | `forceRlsTableCount` | 19 |
 | `policyCount` | 49 |
-| `grantCount` | 76 |
+| `grantCount` | 71 |
 | `typeCount` | 10 |
 
 O inventário exclui OIDs, timestamps de criação, owners e identificadores físicos incidentais.

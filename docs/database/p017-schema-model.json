@@ -2,7 +2,7 @@
   "schemaContract": "ltcm.p017.schema-integrity.v1",
   "fingerprintContract": "ltcm.p017.schema-fingerprint.v1",
   "migrationCount": 18,
-  "fingerprint": "0b066f70d99842f1a97345c196750b839dd4ee8595ce71ddd7d87e1e41f8f836",
+  "fingerprint": "0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91",
   "summary": {
     "relationCount": 28,
     "tableCount": 19,
@@ -19,7 +19,7 @@
     "protectedRlsTableCount": 19,
     "forceRlsTableCount": 19,
     "policyCount": 49,
-    "grantCount": 76,
+    "grantCount": 71,
     "typeCount": 10
   },
   "model": {
@@ -9743,14 +9743,6 @@
       },
       {
         "schema": "ltc_m",
-        "object": "approve_plan_version_as_approver",
-        "objectType": "routine",
-        "grantee": "PUBLIC",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
         "object": "archive_plan_version",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
@@ -9762,14 +9754,6 @@
         "object": "archive_plan_version",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
-        "object": "archive_plan_version",
-        "objectType": "routine",
-        "grantee": "PUBLIC",
         "privilege": "EXECUTE",
         "grantable": false
       },
@@ -10007,14 +9991,6 @@
       },
       {
         "schema": "ltc_m",
-        "object": "lock_plan_version",
-        "objectType": "routine",
-        "grantee": "PUBLIC",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
         "object": "monthly_plan_baselines",
         "objectType": "relation",
         "grantee": "ltc_m_runtime",
@@ -10191,14 +10167,6 @@
       },
       {
         "schema": "ltc_m",
-        "object": "return_plan_version_to_draft_as_approver",
-        "objectType": "routine",
-        "grantee": "PUBLIC",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
         "object": "set_actor_context",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
@@ -10210,14 +10178,6 @@
         "object": "submit_plan_version",
         "objectType": "routine",
         "grantee": "ltc_m_runtime",
-        "privilege": "EXECUTE",
-        "grantable": false
-      },
-      {
-        "schema": "ltc_m",
-        "object": "submit_plan_version",
-        "objectType": "routine",
-        "grantee": "PUBLIC",
         "privilege": "EXECUTE",
         "grantable": false
       },
