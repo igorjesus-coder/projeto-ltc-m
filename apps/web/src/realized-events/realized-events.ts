@@ -1,6 +1,7 @@
 export const P032_REALIZED_EVENTS_CONTRACT = 'ltcm.p032.realized-events-crud.v1' as const;
 
 export type RealizedEventStatus = 'draft' | 'posted' | 'cancelled';
+export type RealizedEventAction = 'edit' | 'publish' | 'cancel';
 
 export interface RealizedEvent {
   readonly id: string;
@@ -137,4 +138,12 @@ export function formatRealizedMoney(value: string, currencyCode: string): string
 
 export function realizedStatusLabel(statusValue: RealizedEventStatus): string {
   return { draft: 'Rascunho', posted: 'Publicado', cancelled: 'Cancelado' }[statusValue];
+}
+
+export function realizedEventActions(
+  statusValue: RealizedEventStatus,
+): readonly RealizedEventAction[] {
+  if (statusValue === 'draft') return ['edit', 'publish', 'cancel'];
+  if (statusValue === 'posted') return ['edit', 'cancel'];
+  return [];
 }

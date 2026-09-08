@@ -40,6 +40,7 @@ const event = {
   amount: '10.00',
   currency_code: 'BRL',
   status: 'draft' as const,
+  metric_type: 'billing_actual' as const,
   notes: null,
   row_version: '1',
   created_at: '2026-09-01T12:00:00.000Z',
@@ -179,6 +180,62 @@ test('P032 service não sobrescreve versão concorrente nem oferece exclusão f�
     (error: unknown) => error instanceof ConflictException,
   );
   assert.doesNotMatch(database.statements.join('\n'), /delete\s+from/iu);
+});
+
+test('P032 consulta somente billing_actual e preserva cancelados no histórico', async () => {
+  const database = databaseFor((text) => {
+    if (text.includes('from ltc_m.projects')) return { rows: [project] };
+    if (text.includes('from ltc_m.financial_actual_events'))
+      return { rows: [{ ...event, status: 'cancelled' }] };
+    if (text.includes('select id, item_code, description'))
+      return { rows: [{ id: itemId, item_code: 'ITEM-1', description: 'Item' }] };
+    return { rows: [] };
+  });
+  const response = await new RealizedEventsService(database as never).list(projectId, actor);
+  assert.equal(response.events[0]?.status, 'cancelled');
+  assert.match(
+    database.statements.find((statement) => statement.includes('financial_actual_events')) ?? '',
+    /metric_type = 'billing_actual'/u,
+  );
+});
+
+test('P032 mantém posted corrigível e torna cancelled terminal em todas as ações', async () => {
+  const postedDatabase = databaseFor((text) => {
+    if (text.includes('from ltc_m.projects')) return { rows: [project] };
+    if (text.includes('from ltc_m.financial_actual_events'))
+      return { rows: [{ ...event, status: 'posted' }] };
+    if (text.includes('update ltc_m.financial_actual_events')) return { rows: [{ id: eventId }] };
+    return { rows: [] };
+  });
+  const posted = await new RealizedEventsService(postedDatabase as never).update(
+    projectId,
+    eventId,
+    parseRealizedEventPatchPayload({ amount: '12', expectedVersion: 1 }),
+    actor,
+  );
+  assert.equal(posted.status, 'posted');
+
+  const cancelledDatabase = databaseFor((text) => {
+    if (text.includes('from ltc_m.projects')) return { rows: [project] };
+    if (text.includes('from ltc_m.financial_actual_events'))
+      return { rows: [{ ...event, status: 'cancelled' }] };
+    return { rows: [] };
+  });
+  const cancelledService = new RealizedEventsService(cancelledDatabase as never);
+  await assert.rejects(
+    cancelledService.update(projectId, eventId, { amount: '12', expectedVersion: 1 }, actor),
+    ConflictException,
+  );
+  await assert.rejects(cancelledService.publish(projectId, eventId, 1, actor), ConflictException);
+  await assert.rejects(
+    cancelledService.cancel(
+      projectId,
+      eventId,
+      { expectedVersion: 1, justification: 'repetição' },
+      actor,
+    ),
+    ConflictException,
+  );
 });
 
 assert.equal(P032_REALIZED_EVENTS_CONTRACT, 'ltcm.p032.realized-events-crud.v1');

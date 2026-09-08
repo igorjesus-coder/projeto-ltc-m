@@ -22,6 +22,7 @@ import {
 import {
   formatRealizedMoney,
   parseRealizedEventsResponse,
+  realizedEventActions,
   realizedStatusLabel,
   type RealizedEvent,
   type RealizedEventsResponse,
@@ -398,20 +399,22 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
                       </td>
                       <td>
                         <div className="realized-events-actions">
-                          {item.status !== 'cancelled' ? (
+                          {realizedEventActions(item.status).length > 0 ? (
                             <PermissionGate capability="record:edit_draft">
                               <>
-                                <Button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingId(item.id);
-                                    setEditingForm(formFromEvent(item));
-                                    setCancelingId(null);
-                                  }}
-                                >
-                                  Editar
-                                </Button>
-                                {item.status === 'draft' ? (
+                                {realizedEventActions(item.status).includes('edit') ? (
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingId(item.id);
+                                      setEditingForm(formFromEvent(item));
+                                      setCancelingId(null);
+                                    }}
+                                  >
+                                    Editar
+                                  </Button>
+                                ) : null}
+                                {realizedEventActions(item.status).includes('publish') ? (
                                   <Button
                                     type="button"
                                     disabled={pending}
@@ -431,18 +434,20 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
                                     Publicar
                                   </Button>
                                 ) : null}
-                                <Button
-                                  type="button"
-                                  variant="danger"
-                                  disabled={pending}
-                                  onClick={() => {
-                                    setCancelingId(cancelingId === item.id ? null : item.id);
-                                    setJustification('');
-                                    setEditingId(null);
-                                  }}
-                                >
-                                  Cancelar
-                                </Button>
+                                {realizedEventActions(item.status).includes('cancel') ? (
+                                  <Button
+                                    type="button"
+                                    variant="danger"
+                                    disabled={pending}
+                                    onClick={() => {
+                                      setCancelingId(cancelingId === item.id ? null : item.id);
+                                      setJustification('');
+                                      setEditingId(null);
+                                    }}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                ) : null}
                               </>
                             </PermissionGate>
                           ) : null}

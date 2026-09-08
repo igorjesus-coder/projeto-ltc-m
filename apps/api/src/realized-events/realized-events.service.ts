@@ -33,6 +33,7 @@ interface EventRow extends QueryResultRow {
   readonly project_item_id: string | null;
   readonly item_code: string | null;
   readonly item_description: string | null;
+  readonly metric_type: 'billing_actual';
   readonly competence_date: string;
   readonly source_key: string;
   readonly document_number: string | null;
@@ -80,7 +81,7 @@ function toEvent(row: EventRow): RealizedEventRecord {
     projectItemId: row.project_item_id,
     itemCode: row.item_code,
     itemDescription: row.item_description,
-    metricType: 'billing_actual',
+    metricType: row.metric_type,
     competenceDate: row.competence_date,
     sourceKey: row.source_key,
     documentNumber: row.document_number,
@@ -339,6 +340,7 @@ export class RealizedEventsService {
     return `select
               events.id, events.project_id, events.project_item_id,
               project_items.item_code, project_items.description as item_description,
+              events.metric_type::text as metric_type,
               events.competence_date::text, events.source_key, events.document_number,
               events.installment_key, events.amount::text, events.currency_code,
               events.status::text as status, events.notes, events.row_version,
@@ -347,7 +349,8 @@ export class RealizedEventsService {
             left join ltc_m.project_items as project_items
               on project_items.id = events.project_item_id
              and project_items.project_id = events.project_id
-           where events.project_id = $1::uuid`;
+           where events.project_id = $1::uuid
+             and events.metric_type = 'billing_actual'::ltc_m.actual_financial_metric`;
   }
 
   private async ensureItem(
