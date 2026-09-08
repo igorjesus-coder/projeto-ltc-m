@@ -7,6 +7,7 @@ import { ProjectsPage } from '../routes/ProjectsPage';
 import { ProjectFormPage } from '../routes/ProjectFormPage';
 import { AdminMasterDataPage } from '../routes/AdminMasterDataPage';
 import { MonthlyPlanningPage } from '../routes/MonthlyPlanningPage';
+import { RealizedEventsPage } from '../routes/RealizedEventsPage';
 
 export type AppRoute =
   | 'home'
@@ -16,10 +17,11 @@ export type AppRoute =
   | 'project-edit'
   | 'admin-master-data'
   | 'monthly-planning'
+  | 'realized-events'
   | 'not-found';
 
 export interface NavigationItem {
-  readonly route: Exclude<AppRoute, 'not-found' | 'project-detail'>;
+  readonly route: Exclude<AppRoute, 'not-found' | 'project-detail' | 'realized-events'>;
   readonly label: string;
   readonly href: string;
   readonly capability?: 'catalog:manage';
@@ -71,6 +73,14 @@ export function resolveRoute(pathname: string, search = ''): ResolvedRoute {
     return {
       id: 'project-new',
       content: <ProjectFormPage mode="create" search={routeSearch} />,
+      protected: true,
+    };
+  }
+  const realizedEventsMatch = /^\/projects\/([^/]+)\/realized-events$/u.exec(normalized);
+  if (realizedEventsMatch?.[1]) {
+    return {
+      id: 'realized-events',
+      content: <RealizedEventsPage projectId={realizedEventsMatch[1]} />,
       protected: true,
     };
   }

@@ -182,6 +182,9 @@ export function ProjectDetailPage({
               Editar projeto
             </ActionLink>
           </PermissionGate>
+          <ActionLink href={`/projects/${encodeURIComponent(projectId)}/realized-events`}>
+            Lançamentos realizados
+          </ActionLink>
         </section>
       ) : null}
       {visibleState.kind === 'success' ? <ProjectItemsGrid projectId={projectId} /> : null}

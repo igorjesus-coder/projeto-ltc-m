@@ -861,6 +861,123 @@ textarea.form-control {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.realized-events-panel {
+  margin-top: var(--space-7);
+}
+
+.realized-events-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-5);
+  justify-content: space-between;
+}
+
+.realized-events-heading h2,
+.realized-events-create-form h3 {
+  margin: 0 0 var(--space-2);
+}
+
+.realized-events-notice {
+  color: var(--color-success);
+  font-weight: var(--font-weight-semibold);
+  margin: var(--space-2) 0 0;
+}
+
+.realized-events-create-form,
+.realized-events-edit-form {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  margin-top: var(--space-5);
+  padding: 18px 22px;
+}
+
+.realized-events-form-grid {
+  display: grid;
+  gap: 0 var(--space-4);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.realized-events-form-grid .field {
+  max-width: none;
+}
+
+.realized-events-form-grid .field:nth-child(1),
+.realized-events-form-grid .field:nth-child(2),
+.realized-events-form-grid .field:nth-child(3),
+.realized-events-form-grid .field:nth-child(4) {
+  grid-column: span 3;
+}
+
+.realized-events-notes {
+  grid-column: 1 / -1;
+}
+
+.realized-events-table-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  margin-top: var(--space-6);
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.realized-events-table {
+  border-collapse: collapse;
+  min-width: 940px;
+  width: 100%;
+}
+
+.realized-events-table th,
+.realized-events-table td {
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.realized-events-table th {
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.realized-events-table small {
+  color: var(--color-text-muted);
+  display: block;
+  margin-top: var(--space-1);
+}
+
+.realized-events-table .realized-event-cancelled {
+  background: #f7f4f1;
+  color: var(--color-text-muted);
+}
+
+.realized-events-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 240px;
+}
+
+.realized-events-actions .button,
+.realized-events-cancel-form .button {
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.realized-events-cancel-form {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  min-width: 240px;
+}
+
+.realized-events-cancel-form textarea {
+  min-height: 72px;
+}
+
 .planning-controls {
   align-items: end;
   background: var(--color-surface);
@@ -1172,12 +1289,17 @@ textarea.form-control {
 @media (max-width: 760px) {
   .project-form-grid,
   .project-items-form-grid,
-  .project-items-edit-form .project-items-form-grid {
+  .project-items-edit-form .project-items-form-grid,
+  .realized-events-form-grid {
     grid-template-columns: 1fr;
   }
 
   .project-items-form-grid .field:nth-child(1),
-  .project-items-form-grid .field:nth-child(2) {
+  .project-items-form-grid .field:nth-child(2),
+  .realized-events-form-grid .field:nth-child(1),
+  .realized-events-form-grid .field:nth-child(2),
+  .realized-events-form-grid .field:nth-child(3),
+  .realized-events-form-grid .field:nth-child(4) {
     grid-column: auto;
   }
 
