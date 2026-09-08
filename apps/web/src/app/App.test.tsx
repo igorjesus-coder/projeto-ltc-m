@@ -107,6 +107,15 @@ describe('scaffold da aplicação', () => {
     expect(resolveRoute('/projects/new', '').protected).toBe(true);
   });
 
+  it('resolve a tela contextual de lançamentos realizados P032', () => {
+    expect(
+      resolveRoute('/projects/00000000-0000-4000-8000-000000032101/realized-events', '').id,
+    ).toBe('realized-events');
+    expect(
+      resolveRoute('/projects/00000000-0000-4000-8000-000000032101/realized-events', '').protected,
+    ).toBe(true);
+  });
+
   it('exibe navegação administrativa somente para catalog:manage', () => {
     const adminHtml = renderToStaticMarkup(
       <AuthorizationContext.Provider value={adminAuthorization}>
