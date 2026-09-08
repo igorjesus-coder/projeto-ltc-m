@@ -4,6 +4,7 @@ import {
   P032_REALIZED_EVENTS_CONTRACT,
   formatRealizedMoney,
   parseRealizedEventsResponse,
+  realizedEventActions,
   realizedStatusLabel,
 } from './realized-events';
 
@@ -40,6 +41,9 @@ describe('P032 realized events contract', () => {
     expect(response.events[0]?.status).toBe('cancelled');
     expect(response.events[0]?.metricType).toBe('billing_actual');
     expect(realizedStatusLabel('posted')).toBe('Publicado');
+    expect(realizedEventActions('draft')).toEqual(['edit', 'publish', 'cancel']);
+    expect(realizedEventActions('posted')).toEqual(['edit', 'cancel']);
+    expect(realizedEventActions('cancelled')).toEqual([]);
     expect(formatRealizedMoney('1234.50', 'BRL')).toContain('1.234,50');
   });
 
