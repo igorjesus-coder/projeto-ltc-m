@@ -8,6 +8,7 @@ import { ProjectFormPage } from '../routes/ProjectFormPage';
 import { AdminMasterDataPage } from '../routes/AdminMasterDataPage';
 import { MonthlyPlanningPage } from '../routes/MonthlyPlanningPage';
 import { RealizedEventsPage } from '../routes/RealizedEventsPage';
+import { QualityPage } from '../routes/QualityPage';
 
 export type AppRoute =
   | 'home'
@@ -18,6 +19,7 @@ export type AppRoute =
   | 'admin-master-data'
   | 'monthly-planning'
   | 'realized-events'
+  | 'quality'
   | 'not-found';
 
 export interface NavigationItem {
@@ -37,6 +39,7 @@ export const APP_NAVIGATION: readonly NavigationItem[] = Object.freeze([
     capability: 'catalog:manage',
   },
   { route: 'monthly-planning', label: 'Planejamento mensal', href: '/planning' },
+  { route: 'quality', label: 'Qualidade de dados', href: '/quality' },
 ]);
 
 export interface ResolvedRoute {
@@ -68,6 +71,25 @@ export function resolveRoute(pathname: string, search = ''): ResolvedRoute {
   }
   if (normalized === '/planning') {
     return { id: 'monthly-planning', content: <MonthlyPlanningPage />, protected: true };
+  }
+  if (normalized === '/quality') {
+    return { id: 'quality', content: <QualityPage search={routeSearch} />, protected: true };
+  }
+  const projectPlanningMatch = /^\/projects\/([^/]+)\/planning$/u.exec(normalized);
+  if (projectPlanningMatch?.[1]) {
+    return {
+      id: 'monthly-planning',
+      content: <MonthlyPlanningPage initialProjectId={projectPlanningMatch[1]} />,
+      protected: true,
+    };
+  }
+  const projectItemsMatch = /^\/projects\/([^/]+)\/items$/u.exec(normalized);
+  if (projectItemsMatch?.[1]) {
+    return {
+      id: 'project-detail',
+      content: <ProjectDetailPage projectId={projectItemsMatch[1]} search={routeSearch} />,
+      protected: true,
+    };
   }
   if (normalized === '/projects/new') {
     return {

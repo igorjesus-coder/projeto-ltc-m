@@ -664,6 +664,48 @@ textarea.form-control {
   width: 100%;
 }
 
+.quality-table {
+  min-width: 1180px;
+}
+
+.quality-table th,
+.quality-table td {
+  vertical-align: top;
+}
+
+.quality-project-name,
+.quality-rule-code {
+  color: var(--color-text-muted);
+  display: block;
+  font-size: var(--font-size-xs);
+  margin-top: 4px;
+}
+
+.quality-severity {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  padding: 4px 9px;
+  white-space: nowrap;
+}
+
+.quality-severity-info {
+  background: #e4edf2;
+  color: #28536b;
+}
+
+.quality-severity-warning {
+  background: #f3ead3;
+  color: #6c5117;
+}
+
+.quality-severity-error,
+.quality-severity-blocking {
+  background: #f4e5e1;
+  color: var(--color-danger);
+}
+
 .project-table th,
 .project-table td {
   border-bottom: 1px solid var(--color-border);

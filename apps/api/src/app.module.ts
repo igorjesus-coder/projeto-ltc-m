@@ -7,6 +7,7 @@ import { MasterDataModule } from './master-data/master-data.module.js';
 import { ProjectItemsModule } from './project-items/project-items.module.js';
 import { PlanningModule } from './planning/planning.module.js';
 import { RealizedEventsModule } from './realized-events/realized-events.module.js';
+import { QualityModule } from './quality/quality.module.js';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { RealizedEventsModule } from './realized-events/realized-events.module.j
     ProjectItemsModule,
     PlanningModule,
     RealizedEventsModule,
+    QualityModule,
   ],
 })
 export class AppModule {}
