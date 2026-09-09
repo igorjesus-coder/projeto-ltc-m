@@ -35,6 +35,18 @@ interface QualityRow {
   readonly total_items: string;
 }
 
+const MATERIAL_ACTUAL_FILTER = `events.metric_type = 'billing_actual'
+    and events.status = 'posted'`;
+
+export interface ActualEventQualityInput {
+  readonly metricType: string;
+  readonly status: string;
+}
+
+export function isMaterialBillingActual(event: ActualEventQualityInput): boolean {
+  return event.metricType === 'billing_actual' && event.status === 'posted';
+}
+
 export interface QualityClock {
   readonly now: () => Date;
 }
@@ -89,7 +101,8 @@ with p016_findings as (
     quality.remediation_class as remediation
   from ltc_m.v_tableau_data_quality as quality
   join ltc_m.projects as projects on projects.id = quality.project_id
-  where quality.finding_id is not null and quality.finding_code is not null
+  where quality.finding_id is not null
+    and quality.finding_code = any(array['PROJECT_VALUE_MISMATCH', 'ACTUAL_STATUS_UNRESOLVED']::text[])
 ), incomplete_findings as (
   select
     concat('p034:missing-required-field:', items.id::text, ':', missing.field_name) as id,
@@ -169,15 +182,15 @@ with p016_findings as (
   select events.project_id, sum(events.amount) as actual_amount
   from ltc_m.financial_actual_events as events
   join ltc_m.projects as projects on projects.id = events.project_id
-  where events.metric_type = 'billing_actual'
-    and events.status = 'posted'
+  where ${MATERIAL_ACTUAL_FILTER}
     and events.currency_code = projects.base_currency
   group by events.project_id
 ), actual_currency_issues as (
   select distinct events.project_id
   from ltc_m.financial_actual_events as events
   join ltc_m.projects as projects on projects.id = events.project_id
-  where events.currency_code is distinct from projects.base_currency
+  where ${MATERIAL_ACTUAL_FILTER}
+    and events.currency_code is distinct from projects.base_currency
 ), balance_findings as (
   select
     concat('p034:unplanned-balance:', projects.id::text) as id,
@@ -250,14 +263,26 @@ function reference(kind: QualityReference['kind'], locator: string): QualityRefe
 }
 
 function asSeverity(value: string): QualitySeverity {
+  if (!['INFO', 'WARNING', 'ERROR', 'BLOCKING'].includes(value)) {
+    throw new Error('P034_SOURCE_SEVERITY_INVALID');
+  }
   return value as QualitySeverity;
 }
 
 function asOrigin(value: string): QualityOriginEntity {
+  if (!['project', 'project_item', 'plan_version', 'actual_event', 'import'].includes(value)) {
+    throw new Error('P034_SOURCE_ORIGIN_INVALID');
+  }
   return value as QualityOriginEntity;
 }
 
 function toFinding(row: QualityRow): QualityFinding {
+  if (!row.id || !row.project_id || !row.project_code || !row.project_name || !row.rule_code) {
+    throw new Error('P034_SOURCE_FINDING_INVALID');
+  }
+  if (!Object.prototype.hasOwnProperty.call(RULE_LABELS, row.rule_code)) {
+    throw new Error('P034_SOURCE_RULE_INVALID');
+  }
   const rule = row.rule_code as QualityRuleCode;
   const origin = asOrigin(row.origin_entity);
   const sourceReferences = row.source_reference ? [reference('source', row.source_reference)] : [];

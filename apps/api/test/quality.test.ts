@@ -3,7 +3,11 @@ import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
 
-import { QualityService, type QualityClock } from '../src/quality/quality.service.js';
+import {
+  isMaterialBillingActual,
+  QualityService,
+  type QualityClock,
+} from '../src/quality/quality.service.js';
 import { parseQualityQuery } from '../src/quality/quality.types.js';
 
 const actor = Object.freeze({
@@ -71,6 +75,20 @@ test('P034 valida allowlists, defaults e paginação sem aceitar parâmetros des
   assert.throws(() => parseQualityQuery({ pageSize: '101' }), BadRequestException);
 });
 
+test('P034 restringe moeda relevante ao universo billing_actual posted', () => {
+  assert.equal(isMaterialBillingActual({ metricType: 'billing_actual', status: 'posted' }), true);
+  assert.equal(isMaterialBillingActual({ metricType: 'billing_actual', status: 'draft' }), false);
+  assert.equal(
+    isMaterialBillingActual({ metricType: 'billing_actual', status: 'cancelled' }),
+    false,
+  );
+  assert.equal(isMaterialBillingActual({ metricType: 'receipt_actual', status: 'posted' }), false);
+  assert.equal(
+    isMaterialBillingActual({ metricType: 'receipt_forecast', status: 'posted' }),
+    false,
+  );
+});
+
 test('P034 compõe resposta no contexto do ator, preserva findings P016 e pagina no SQL', async () => {
   let sql = '';
   let values: readonly unknown[] = [];
@@ -112,8 +130,16 @@ test('P034 compõe resposta no contexto do ator, preserva findings P016 e pagina
   assert.equal(response.totalItems, 1);
   assert.equal(response.totalPages, 1);
   assert.match(sql, /v_tableau_data_quality/u);
+  assert.match(
+    sql,
+    /finding_code = any\(array\['PROJECT_VALUE_MISMATCH', 'ACTUAL_STATUS_UNRESOLVED'\]/u,
+  );
   assert.match(sql, /incomplete_findings/u);
   assert.match(sql, /greatest\(/u);
+  assert.match(
+    sql,
+    /actual_currency_issues[\s\S]*events\.metric_type = 'billing_actual'[\s\S]*events\.status = 'posted'/u,
+  );
   assert.match(sql, /rule_label ilike \$3/u);
   assert.match(sql, /limit \$4::integer offset \$5::bigint/u);
   assert.deepEqual(values.slice(1), ['ERROR', '%50\\%\\_\\\\%', 25, 25]);
