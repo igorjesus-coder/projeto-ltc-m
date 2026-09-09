@@ -86,4 +86,40 @@ describe('cliente autenticado da API', () => {
     const requestInit = (fetchImpl.mock.calls[0] as unknown[] | undefined)?.[1] as RequestInit;
     expect(requestInit.method).toBe('PUT');
   });
+
+  it('preserva código e detalhes seguros do conflito P033', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            code: 'P033_SOURCE_KEY_CONFLICT',
+            message: 'Já existe um lançamento com esta chave neste projeto.',
+            details: {
+              existingEventId: '00000000-0000-4000-8000-000000032201',
+              existingStatus: 'cancelled',
+              canOpen: true,
+            },
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        ),
+    );
+    const client = createAuthenticatedApiClient({
+      baseUrl: 'https://api.example.invalid',
+      audience: 'https://api.example.invalid',
+      getAccessToken: vi.fn(async () => 'synthetic-token'),
+      fetchImpl,
+    });
+
+    await expect(client.sendJson('/projects/project-1', 'POST', {})).rejects.toEqual(
+      expect.objectContaining({
+        status: 409,
+        code: 'P033_SOURCE_KEY_CONFLICT',
+        details: {
+          existingEventId: '00000000-0000-4000-8000-000000032201',
+          existingStatus: 'cancelled',
+          canOpen: true,
+        },
+      }),
+    );
+  });
 });

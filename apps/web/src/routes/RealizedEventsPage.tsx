@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 
 import { publicEnvironment } from '../app/environment';
@@ -22,8 +22,12 @@ import {
 import {
   formatRealizedMoney,
   parseRealizedEventsResponse,
+  parseSourceKeyConflictDetails,
+  P033_SOURCE_KEY_CONFLICT,
+  P033_SOURCE_KEY_CONFLICT_MESSAGE,
   realizedEventActions,
   realizedStatusLabel,
+  type SourceKeyConflictDetails,
   type RealizedEvent,
   type RealizedEventsResponse,
 } from '../realized-events/realized-events';
@@ -78,6 +82,8 @@ function errorLabel(error: unknown): string {
     return 'Sessão expirada. Autentique-se novamente.';
   if (error instanceof AuthorizationDeniedError) return 'Seu perfil não possui esta permissão.';
   if (error instanceof ApiRequestError) {
+    if (error.status === 409 && error.code === P033_SOURCE_KEY_CONFLICT)
+      return P033_SOURCE_KEY_CONFLICT_MESSAGE;
     if (error.status === 409)
       return 'O lançamento foi alterado ou está em um estado incompatível. Recarregue a lista.';
     if (error.status === 422) return 'Os dados referenciam um cadastro ou estado indisponível.';
@@ -90,6 +96,25 @@ function itemLabel(item: {
   readonly description: string | null;
 }): string {
   return [item.itemCode, item.description].filter(Boolean).join(' — ') || 'Item sem identificação';
+}
+
+export function SourceKeyConflictNotice({
+  details,
+  onOpen,
+}: {
+  readonly details: SourceKeyConflictDetails | null;
+  readonly onOpen: () => void;
+}) {
+  return (
+    <>
+      <p>{P033_SOURCE_KEY_CONFLICT_MESSAGE}</p>
+      {details?.canOpen && details.existingEventId ? (
+        <Button type="button" onClick={onOpen}>
+          Abrir lançamento existente
+        </Button>
+      ) : null}
+    </>
+  );
 }
 
 export function RealizedEventsPage({ projectId }: { readonly projectId: string }) {
@@ -108,6 +133,14 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
   const [justification, setJustification] = useState('');
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [conflictDetails, setConflictDetails] =
+    useState<ReturnType<typeof parseSourceKeyConflictDetails>>(null);
+  const [focusRequest, setFocusRequest] = useState<{
+    readonly eventId: string;
+    readonly token: number;
+  } | null>(null);
+  const focusToken = useRef(0);
+  const [highlightedEventId, setHighlightedEventId] = useState<string | null>(null);
   const auth0Audience = publicEnvironment.auth0?.audience;
   const apiClient = useMemo(() => {
     if (!auth0Audience) return null;
@@ -146,6 +179,15 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
   }, [apiClient, projectId, retry]);
 
   const response = state.kind === 'success' ? state.response : null;
+
+  useEffect(() => {
+    if (!focusRequest || !response) return;
+    const element = document.getElementById(`realized-event-${focusRequest.eventId}`);
+    if (!element) return;
+    element.scrollIntoView?.({ block: 'center' });
+    element.focus();
+  }, [focusRequest, response]);
+
   const updateForm = (key: keyof EventForm, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
   const updateEditingForm = (key: keyof EventForm, value: string) =>
@@ -154,6 +196,7 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
   async function reloadAfter(action: () => Promise<unknown>, success: string) {
     setPending(true);
     setNotice(null);
+    setConflictDetails(null);
     try {
       await action();
       setNotice(success);
@@ -163,8 +206,28 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
       setRetry((value) => value + 1);
     } catch (error: unknown) {
       setNotice(errorLabel(error));
+      setConflictDetails(
+        error instanceof ApiRequestError &&
+          error.status === 409 &&
+          error.code === P033_SOURCE_KEY_CONFLICT
+          ? parseSourceKeyConflictDetails(error.details)
+          : null,
+      );
     } finally {
       setPending(false);
+    }
+  }
+
+  function openConflictingEvent() {
+    const eventId = conflictDetails?.canOpen ? conflictDetails.existingEventId : undefined;
+    if (!eventId) return;
+    setEditingId(null);
+    setCancelingId(null);
+    setHighlightedEventId(eventId);
+    focusToken.current += 1;
+    setFocusRequest({ eventId, token: focusToken.current });
+    if (!response?.events.some((event) => event.id === eventId)) {
+      setRetry((value) => value + 1);
     }
   }
 
@@ -289,9 +352,13 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
             </p>
           </div>
           {notice ? (
-            <p className="realized-events-notice" role="status">
-              {notice}
-            </p>
+            <div className="realized-events-notice" role="status">
+              {conflictDetails ? (
+                <SourceKeyConflictNotice details={conflictDetails} onOpen={openConflictingEvent} />
+              ) : (
+                <p>{notice}</p>
+              )}
+            </div>
           ) : null}
         </div>
         <PermissionGate capability="record:create">
@@ -374,8 +441,15 @@ export function RealizedEventsPage({ projectId }: { readonly projectId: string }
                   ) : (
                     <tr
                       key={item.id}
+                      id={`realized-event-${item.id}`}
+                      tabIndex={-1}
                       className={
-                        item.status === 'cancelled' ? 'realized-event-cancelled' : undefined
+                        [
+                          item.status === 'cancelled' ? 'realized-event-cancelled' : undefined,
+                          highlightedEventId === item.id ? 'realized-event-highlighted' : undefined,
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || undefined
                       }
                     >
                       <td>{item.competenceDate}</td>

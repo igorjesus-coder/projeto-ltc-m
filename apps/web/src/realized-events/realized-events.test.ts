@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
+import { SourceKeyConflictNotice } from '../routes/RealizedEventsPage';
 import {
+  P033_SOURCE_KEY_CONFLICT,
+  P033_SOURCE_KEY_CONFLICT_MESSAGE,
   P032_REALIZED_EVENTS_CONTRACT,
   formatRealizedMoney,
+  parseSourceKeyConflictDetails,
   parseRealizedEventsResponse,
   realizedEventActions,
   realizedStatusLabel,
@@ -60,5 +66,53 @@ describe('P032 realized events contract', () => {
         events: [{ ...event, metricType: 'receipt_actual' }],
       }),
     ).toThrow('P032_RESPONSE_INVALID');
+  });
+
+  it('normalizes the P033 details fail-closed', () => {
+    expect(
+      parseSourceKeyConflictDetails({
+        existingEventId: event.id,
+        existingStatus: 'cancelled',
+        canOpen: true,
+      }),
+    ).toEqual({ existingEventId: event.id, existingStatus: 'cancelled', canOpen: true });
+    expect(parseSourceKeyConflictDetails({ canOpen: false, existingEventId: event.id })).toEqual({
+      canOpen: false,
+    });
+    expect(parseSourceKeyConflictDetails({ canOpen: true, existingEventId: 'not-an-id' })).toEqual({
+      canOpen: false,
+    });
+    expect(parseSourceKeyConflictDetails({ canOpen: true, existingEventId: event.id })).toEqual({
+      existingEventId: event.id,
+      canOpen: true,
+    });
+    expect(
+      parseSourceKeyConflictDetails({
+        canOpen: true,
+        existingEventId: event.id,
+        existingStatus: 'unexpected',
+      }),
+    ).toEqual({ canOpen: false });
+  });
+
+  it('renders the friendly P033 action only when canOpen is safe', () => {
+    const onOpen = () => undefined;
+    const openMarkup = renderToStaticMarkup(
+      createElement(SourceKeyConflictNotice, {
+        details: { existingEventId: event.id, existingStatus: 'cancelled', canOpen: true },
+        onOpen,
+      }),
+    );
+    expect(openMarkup).toContain(P033_SOURCE_KEY_CONFLICT_MESSAGE);
+    expect(openMarkup).toContain('Abrir lançamento existente');
+    expect(openMarkup).toContain('button');
+
+    const closedMarkup = renderToStaticMarkup(
+      createElement(SourceKeyConflictNotice, { details: { canOpen: false }, onOpen }),
+    );
+    expect(closedMarkup).toContain(P033_SOURCE_KEY_CONFLICT_MESSAGE);
+    expect(closedMarkup).not.toContain('Abrir lançamento existente');
+    expect(closedMarkup).not.toContain('receipt_actual');
+    expect(P033_SOURCE_KEY_CONFLICT).toBe('P033_SOURCE_KEY_CONFLICT');
   });
 });

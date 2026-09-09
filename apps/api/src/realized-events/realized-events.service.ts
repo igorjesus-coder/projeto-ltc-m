@@ -17,6 +17,9 @@ import {
   type RealizedEventRecord,
   type RealizedEventStatus,
   type RealizedEventsResponse,
+  P033_SOURCE_KEY_CONFLICT,
+  P033_SOURCE_KEY_CONFLICT_MESSAGE,
+  type SourceKeyConflictDetails,
 } from './realized-events.types.js';
 
 interface ProjectRow extends QueryResultRow {
@@ -53,16 +56,49 @@ interface ItemRow extends QueryResultRow {
   readonly description: string | null;
 }
 
+interface ConflictEventRow extends QueryResultRow {
+  readonly id: string;
+  readonly metric_type: 'billing_actual' | 'receipt_actual';
+  readonly status: RealizedEventStatus;
+}
+
+interface DatabaseError extends Error {
+  readonly code?: string;
+  readonly constraint?: string;
+}
+
 function databaseErrorCode(error: unknown): string | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const code = (error as { readonly code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
 }
 
+function databaseErrorConstraint(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const constraint = (error as DatabaseError).constraint;
+  return typeof constraint === 'string' ? constraint : undefined;
+}
+
+function isSourceKeyConflict(error: unknown): boolean {
+  return (
+    databaseErrorCode(error) === '23505' &&
+    databaseErrorConstraint(error) === 'uq_financial_actual_source'
+  );
+}
+
+function sourceKeyConflict(details: SourceKeyConflictDetails): ConflictException {
+  return new ConflictException({
+    statusCode: 409,
+    code: P033_SOURCE_KEY_CONFLICT,
+    message: P033_SOURCE_KEY_CONFLICT_MESSAGE,
+    details,
+  });
+}
+
 function mapMutationError(error: unknown): never {
   switch (databaseErrorCode(error)) {
     case '23505':
-      throw new ConflictException('P032_SOURCE_KEY_CONFLICT');
+      throw new ConflictException('P032_UNIQUE_CONFLICT');
     case '23503':
       throw new UnprocessableEntityException('P032_REFERENCE_UNAVAILABLE');
     case '23514':
@@ -144,9 +180,13 @@ export class RealizedEventsService {
       if (!project) throw new NotFoundException('P032_PROJECT_NOT_FOUND');
       this.ensureCurrency(payload.currencyCode, project);
       await this.ensureItem(client, projectId, payload.projectItemId);
-      try {
-        const result = await client.query<{ readonly id: string }>(
-          `insert into ltc_m.financial_actual_events (
+      const result = await this.withSourceKeyConflictHandling(
+        client,
+        projectId,
+        payload.sourceKey,
+        () =>
+          client.query<{ readonly id: string }>(
+            `insert into ltc_m.financial_actual_events (
              project_id, project_item_id, metric_type, competence_date, source_key,
              document_number, installment_key, amount, currency_code,
              created_by_user_id, updated_by_user_id, notes
@@ -155,23 +195,21 @@ export class RealizedEventsService {
              $3::date, $4::text, $5::text, $6::text, $7::numeric, $8::text,
              $9::uuid, $9::uuid, $10::text
            ) returning id`,
-          [
-            projectId,
-            payload.projectItemId,
-            payload.competenceDate,
-            payload.sourceKey,
-            payload.documentNumber,
-            payload.installmentKey,
-            payload.amount,
-            project.base_currency,
-            actor.appUserId,
-            payload.notes,
-          ],
-        );
-        return this.result(client, projectId, result.rows[0]?.id);
-      } catch (error) {
-        mapMutationError(error);
-      }
+            [
+              projectId,
+              payload.projectItemId,
+              payload.competenceDate,
+              payload.sourceKey,
+              payload.documentNumber,
+              payload.installmentKey,
+              payload.amount,
+              project.base_currency,
+              actor.appUserId,
+              payload.notes,
+            ],
+          ),
+      );
+      return this.result(client, projectId, result.rows[0]?.id);
     });
   }
 
@@ -210,23 +248,24 @@ export class RealizedEventsService {
       if (payload.currencyCode !== undefined) add('currency_code', payload.currencyCode, 'text');
       if (payload.notes !== undefined) add('notes', payload.notes, 'text');
       values.push(actor.appUserId, eventId, projectId, payload.expectedVersion);
-      try {
-        const result = await client.query<{ readonly id: string }>(
-          `update ltc_m.financial_actual_events
+      const result = await this.withSourceKeyConflictHandling(
+        client,
+        projectId,
+        payload.sourceKey ?? current.source_key,
+        () =>
+          client.query<{ readonly id: string }>(
+            `update ltc_m.financial_actual_events
               set ${assignments.join(', ')}, updated_by_user_id = $${values.length - 3}::uuid
             where id = $${values.length - 2}::uuid
               and project_id = $${values.length - 1}::uuid
               and row_version = $${values.length}::bigint
               and status in ('draft', 'posted')
             returning id`,
-          values,
-        );
-        if (!result.rows[0]) throw new ConflictException('P032_EVENT_VERSION_CONFLICT');
-        return this.result(client, projectId, eventId);
-      } catch (error) {
-        if (error instanceof ConflictException || error instanceof NotFoundException) throw error;
-        mapMutationError(error);
-      }
+            values,
+          ),
+      );
+      if (!result.rows[0]) throw new ConflictException('P032_EVENT_VERSION_CONFLICT');
+      return this.result(client, projectId, eventId);
     });
   }
 
@@ -381,5 +420,70 @@ export class RealizedEventsService {
     const row = await this.findEvent(client, projectId, eventId);
     if (!row) throw new Error('P032_RESULT_MISSING');
     return toEvent(row);
+  }
+
+  private async withSourceKeyConflictHandling<Row extends QueryResultRow>(
+    client: PoolClient,
+    projectId: string,
+    sourceKey: string,
+    operation: () => Promise<{ readonly rows: Row[] }>,
+  ): Promise<{ readonly rows: Row[] }> {
+    const savepoint = 'p033_source_key_conflict';
+    await client.query(`savepoint ${savepoint}`);
+    try {
+      const result = await operation();
+      await client.query(`release savepoint ${savepoint}`);
+      return result;
+    } catch (error) {
+      const canResolve = await this.restoreSavepoint(client, savepoint);
+      if (isSourceKeyConflict(error)) {
+        throw await this.buildSourceKeyConflict(client, projectId, sourceKey, canResolve);
+      }
+      mapMutationError(error);
+    }
+  }
+
+  private async restoreSavepoint(client: PoolClient, savepoint: string): Promise<boolean> {
+    try {
+      await client.query(`rollback to savepoint ${savepoint}`);
+    } catch {
+      return false;
+    }
+    try {
+      await client.query(`release savepoint ${savepoint}`);
+    } catch {
+      // The transaction can still be rolled back by actorTransaction.
+    }
+    return true;
+  }
+
+  private async buildSourceKeyConflict(
+    client: PoolClient,
+    projectId: string,
+    sourceKey: string,
+    canResolve: boolean,
+  ): Promise<ConflictException> {
+    if (!canResolve) return sourceKeyConflict({ canOpen: false });
+    try {
+      const result = await client.query<ConflictEventRow>(
+        `select id, metric_type::text as metric_type, status::text as status
+           from ltc_m.financial_actual_events
+          where project_id = $1::uuid
+            and source_key = $2::text
+          limit 1`,
+        [projectId, sourceKey],
+      );
+      const existing = result.rows[0];
+      if (existing?.metric_type === 'billing_actual') {
+        return sourceKeyConflict({
+          existingEventId: existing.id,
+          existingStatus: existing.status,
+          canOpen: true,
+        });
+      }
+    } catch {
+      // A proven duplicate must remain a safe 409 even when enrichment fails.
+    }
+    return sourceKeyConflict({ canOpen: false });
   }
 }
