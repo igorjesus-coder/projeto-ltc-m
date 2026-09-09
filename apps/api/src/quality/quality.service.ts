@@ -119,7 +119,10 @@ with p016_findings as (
       ('unit_code', nullif(btrim(items.unit_code), '') is null),
       ('currency_code', nullif(btrim(items.currency_code), '') is null)
   ) as missing(field_name, is_missing)
-  where items.active and items.deleted_at is null and missing.is_missing
+  where items.active
+    and items.deleted_at is null
+    and projects.deleted_at is null
+    and missing.is_missing
 ), stale_findings as (
   select
     concat('p034:project-data-stale:', projects.id::text) as id,
