@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
 
-import { QualityService } from '../src/quality/quality.service.js';
+import { QualityService, type QualityClock } from '../src/quality/quality.service.js';
 import { parseQualityQuery } from '../src/quality/quality.types.js';
 
 const actor = Object.freeze({
@@ -91,7 +91,8 @@ test('P034 compõe resposta no contexto do ator, preserva findings P016 e pagina
       });
     },
   };
-  const response = await new QualityService(database as never).list(
+  const clock: QualityClock = { now: () => new Date('2026-09-09T12:00:00.000Z') };
+  const response = await new QualityService(database as never, clock).list(
     {
       search: '50%_\\',
       severity: 'ERROR',
@@ -132,7 +133,10 @@ test('P034 propaga falha técnica da fonte e não responde como lista vazia', as
       }),
   };
   await assert.rejects(
-    () => new QualityService(database as never).list(parseQualityQuery({}), actor),
+    () =>
+      new QualityService(database as never, {
+        now: () => new Date('2026-09-09T12:00:00.000Z'),
+      }).list(parseQualityQuery({}), actor),
     /source unavailable/u,
   );
 });

@@ -35,6 +35,17 @@ interface QualityRow {
   readonly total_items: string;
 }
 
+export interface QualityClock {
+  readonly now: () => Date;
+}
+
+@Injectable()
+export class SystemQualityClock implements QualityClock {
+  now(): Date {
+    return new Date();
+  }
+}
+
 const RULE_LABELS: Readonly<Record<QualityRuleCode, string>> = {
   PROJECT_VALUE_MISMATCH: 'Contrato x item',
   ACTUAL_STATUS_UNRESOLVED: 'Status do realizado não resolvido',
@@ -263,7 +274,7 @@ function toFinding(row: QualityRow): QualityFinding {
             projectId: row.project_id,
             ...(row.origin_entity_id ? { entityId: row.origin_entity_id } : {}),
           }
-        : rule === 'UNPLANNED_BALANCE'
+        : origin === 'plan_version' || rule === 'UNPLANNED_BALANCE'
           ? { target: 'planning' as const, projectId: row.project_id }
           : { target: 'project' as const, projectId: row.project_id };
   return {
@@ -290,11 +301,14 @@ function toFinding(row: QualityRow): QualityFinding {
 
 @Injectable()
 export class QualityService {
-  constructor(private readonly database: DatabaseService) {}
+  constructor(
+    private readonly database: DatabaseService,
+    private readonly clock: QualityClock = new SystemQualityClock(),
+  ) {}
 
   async list(query: QualityQuery, actor: ActorContext): Promise<QualityResponse> {
     return this.database.actorTransaction(actor, async (client) => {
-      const values: unknown[] = [new Date().toISOString()];
+      const values: unknown[] = [this.clock.now().toISOString()];
       const filters: string[] = [];
       if (query.projectId) {
         values.push(query.projectId);
