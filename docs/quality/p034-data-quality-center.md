@@ -75,6 +75,11 @@ aplicável.
 
 O campo value do Master Control é representado pela combinação desses campos existentes.
 
+Os labels dos códigos do MVP são estáveis e pertencem ao contrato: `PROJECT_VALUE_MISMATCH`
+(Contrato x item), `UNPLANNED_BALANCE` (Saldo não programado), `MISSING_REQUIRED_FIELD` (Item
+incompleto), `PROJECT_DATA_STALE` (Projeto desatualizado), os três códigos de duplicidade
+(Duplicidade) e `GRAIN_MISMATCH` (Divergência de moeda/unidade).
+
 ## Identidade e lifecycle
 
 P034 é DERIVED_READ_ONLY. Não existe tabela P034 nem registro persistido de alerta.
@@ -169,7 +174,8 @@ Código: PROJECT_DATA_STALE.
 O finding é emitido somente quando o intervalo é estritamente superior a 30 dias completos.
 Exatamente 30 dias não gera finding. Timestamps são comparados como instantes absolutos,
 independentemente do fuso de apresentação. updated_at nulo não é convertido em idade ou zero;
-resulta em ausência de finding ou falha estrutural da fonte conforme o contrato vigente.
+o schema atual o torna impossível; se uma projeção defensiva encontrar null, a consulta falha
+explicitamente em modo fail-closed e não produz finding.
 
 Não há threshold por item, planejamento, realizado, importação ou projeto; não há calendário útil,
 SLA variável ou alteração de updated_at.
@@ -224,10 +230,10 @@ O backend retorna semântica e identificadores, nunca URL arbitrária:
 O frontend resolve somente rotas existentes:
 
 - project: /projects/:projectId;
-- project_item: contexto de itens do projeto;
-- planning: contexto de planejamento do projeto;
+- project_item: /projects/:projectId/items;
+- planning: /projects/:projectId/planning;
 - realized_event: /projects/:projectId/realized-events;
-- master_data: rota administrativa vigente, somente quando autorizada.
+- master_data: /admin/clients, somente quando autorizada.
 
 O retorno do detalhe reutiliza returnTo validado de P023, preservando query string e contexto.
 Não são aceitos URL externa, javascript:, caminho arbitrário vindo da origem ou destino sem
@@ -256,16 +262,18 @@ Parâmetros:
 - projectId: UUID do projeto;
 - rule: código allowlisted;
 - severity: INFO, WARNING, ERROR ou BLOCKING;
-- origin: origem allowlisted;
-- search: busca parcial case-insensitive, com escaping P023, em campos textuais allowlisted;
-- sort: campo allowlisted;
+- origin: entidade allowlisted: project, project_item, plan_version, actual_event ou import;
+- search: busca parcial case-insensitive, com escaping P023, somente em project.code,
+  project.name, rule.code, rule.label, origin.findingOrigin e origin.entity;
+- sort: severity, project, rule, origin ou id;
 - order: asc ou desc;
 - page: inteiro positivo, default 1;
 - pageSize: inteiro de 1 a 100, default 25.
 
 Filtros e paginação são server-side. A ordenação padrão é determinística por project.code ASC,
-rule.code ASC e id ASC; ordenações alternativas terminam em id ASC. Não há saved filters, saved
-views, export ou bulk action.
+rule.code ASC e id ASC. `severity` usa a ordem P015 BLOCKING, ERROR, WARNING, INFO; `project`,
+`rule` e `origin` usam seus códigos textuais canônicos. Todas as ordenações terminam em id ASC.
+Não há saved filters, saved views, export ou bulk action.
 
 Resposta vazia é sucesso com items=[], totalItems=0 e totalPages=0. Query inválida falha com
 erro 400 estruturado. Falha técnica em origem autorizada encerra explicitamente a consulta; não
