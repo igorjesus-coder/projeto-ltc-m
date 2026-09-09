@@ -154,6 +154,9 @@ export function parseSourceKeyConflictDetails(value: unknown): SourceKeyConflict
   if (details['canOpen'] !== true) return { canOpen: false };
   const existingEventId = uuid(details['existingEventId']);
   if (!existingEventId) return { canOpen: false };
+  if (details['existingStatus'] !== undefined && !optionalStatus(details['existingStatus'])) {
+    return { canOpen: false };
+  }
   const existingStatus = optionalStatus(details['existingStatus']);
   return {
     existingEventId,

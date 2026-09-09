@@ -92,7 +92,7 @@ describe('P032 realized events contract', () => {
         existingEventId: event.id,
         existingStatus: 'unexpected',
       }),
-    ).toEqual({ existingEventId: event.id, canOpen: true });
+    ).toEqual({ canOpen: false });
   });
 
   it('renders the friendly P033 action only when canOpen is safe', () => {
