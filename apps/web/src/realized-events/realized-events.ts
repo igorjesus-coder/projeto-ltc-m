@@ -87,6 +87,11 @@ function status(value: unknown): RealizedEventStatus {
   invalid();
 }
 
+function optionalStatus(value: unknown): RealizedEventStatus | undefined {
+  if (value === undefined) return undefined;
+  return value === 'draft' || value === 'posted' || value === 'cancelled' ? value : undefined;
+}
+
 function itemOption(value: unknown): RealizedEventItemOption {
   const item = record(value);
   return {
@@ -149,7 +154,7 @@ export function parseSourceKeyConflictDetails(value: unknown): SourceKeyConflict
   if (details['canOpen'] !== true) return { canOpen: false };
   const existingEventId = uuid(details['existingEventId']);
   if (!existingEventId) return { canOpen: false };
-  const existingStatus = status(details['existingStatus']);
+  const existingStatus = optionalStatus(details['existingStatus']);
   return {
     existingEventId,
     ...(existingStatus ? { existingStatus } : {}),

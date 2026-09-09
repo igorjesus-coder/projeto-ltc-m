@@ -82,6 +82,17 @@ describe('P032 realized events contract', () => {
     expect(parseSourceKeyConflictDetails({ canOpen: true, existingEventId: 'not-an-id' })).toEqual({
       canOpen: false,
     });
+    expect(parseSourceKeyConflictDetails({ canOpen: true, existingEventId: event.id })).toEqual({
+      existingEventId: event.id,
+      canOpen: true,
+    });
+    expect(
+      parseSourceKeyConflictDetails({
+        canOpen: true,
+        existingEventId: event.id,
+        existingStatus: 'unexpected',
+      }),
+    ).toEqual({ existingEventId: event.id, canOpen: true });
   });
 
   it('renders the friendly P033 action only when canOpen is safe', () => {
