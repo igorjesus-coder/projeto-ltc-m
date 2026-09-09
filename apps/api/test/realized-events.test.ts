@@ -5,6 +5,8 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 
 import { RealizedEventsService } from '../src/realized-events/realized-events.service.js';
 import {
+  P033_SOURCE_KEY_CONFLICT,
+  P033_SOURCE_KEY_CONFLICT_MESSAGE,
   P032_REALIZED_EVENTS_CONTRACT,
   parseRealizedEventCancelPayload,
   parseRealizedEventCreatePayload,
@@ -239,3 +241,262 @@ test('P032 mantém posted corrigível e torna cancelled terminal em todas as aç
 });
 
 assert.equal(P032_REALIZED_EVENTS_CONTRACT, 'ltcm.p032.realized-events-crud.v1');
+
+function p033Database(
+  query: (
+    text: string,
+    values: readonly unknown[],
+  ) => { readonly rows: readonly unknown[] } | Promise<{ readonly rows: readonly unknown[] }>,
+) {
+  const statements: string[] = [];
+  return {
+    statements,
+    actorTransaction: async <T>(
+      _context: typeof actor,
+      operation: (client: {
+        query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
+      }) => Promise<T>,
+    ) =>
+      operation({
+        query: async <Row>(text: string, values: readonly unknown[] = []) => {
+          statements.push(text);
+          const result = await query(text, values);
+          return { rows: result.rows as Row[] };
+        },
+      }),
+  };
+}
+
+function databaseError(
+  code: string,
+  constraint?: string,
+): Error & {
+  readonly code: string;
+  readonly constraint?: string;
+} {
+  const error = new Error('database detail must not escape') as Error & {
+    readonly code: string;
+    readonly constraint?: string;
+  };
+  Object.defineProperty(error, 'code', { value: code });
+  if (constraint) Object.defineProperty(error, 'constraint', { value: constraint });
+  return error;
+}
+
+function duplicatePayload() {
+  return parseRealizedEventCreatePayload({
+    projectItemId: null,
+    competenceDate: '2026-09-01',
+    sourceKey: 'source-1',
+    amount: '10',
+    currencyCode: 'BRL',
+  });
+}
+
+test('P033 cria conflito seguro para billing_actual em todos os estados', async () => {
+  for (const existingStatus of ['draft', 'posted', 'cancelled'] as const) {
+    const database = p033Database(async (text) => {
+      if (text.includes('from ltc_m.projects')) return { rows: [project] };
+      if (text.includes('insert into ltc_m.financial_actual_events'))
+        throw databaseError('23505', 'uq_financial_actual_source');
+      if (text.includes('select id, metric_type::text as metric_type')) {
+        return { rows: [{ id: eventId, metric_type: 'billing_actual', status: existingStatus }] };
+      }
+      return { rows: [] };
+    });
+
+    await assert.rejects(
+      new RealizedEventsService(database as never).create(projectId, duplicatePayload(), actor),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException);
+        assert.deepEqual(error.getResponse(), {
+          statusCode: 409,
+          code: P033_SOURCE_KEY_CONFLICT,
+          message: P033_SOURCE_KEY_CONFLICT_MESSAGE,
+          details: { existingEventId: eventId, existingStatus, canOpen: true },
+        });
+        return true;
+      },
+    );
+    assert.deepEqual(
+      database.statements.filter((statement) =>
+        /savepoint|financial_actual_events/u.test(statement),
+      ),
+      [
+        'savepoint p033_source_key_conflict',
+        expectInsertStatement(database.statements),
+        'rollback to savepoint p033_source_key_conflict',
+        'release savepoint p033_source_key_conflict',
+        expectConflictStatement(database.statements),
+      ],
+    );
+  }
+});
+
+function expectInsertStatement(statements: readonly string[]): string {
+  return (
+    statements.find((statement) =>
+      statement.includes('insert into ltc_m.financial_actual_events'),
+    ) ?? ''
+  );
+}
+
+function expectConflictStatement(statements: readonly string[]): string {
+  return (
+    statements.find((statement) =>
+      statement.includes('select id, metric_type::text as metric_type'),
+    ) ?? ''
+  );
+}
+
+test('P033 oculta receipt_actual e permanece fail-closed quando o enriquecimento falha', async () => {
+  const cases = [
+    { metric_type: 'receipt_actual', status: 'posted' as const },
+    { error: databaseError('XX000') },
+  ];
+  for (const conflict of cases) {
+    const database = p033Database(async (text) => {
+      if (text.includes('from ltc_m.projects')) return { rows: [project] };
+      if (text.includes('insert into ltc_m.financial_actual_events'))
+        throw databaseError('23505', 'uq_financial_actual_source');
+      if (text.includes('select id, metric_type::text as metric_type')) {
+        if ('error' in conflict) throw conflict.error;
+        return {
+          rows: [{ id: eventId, metric_type: conflict.metric_type, status: conflict.status }],
+        };
+      }
+      return { rows: [] };
+    });
+    await assert.rejects(
+      new RealizedEventsService(database as never).create(projectId, duplicatePayload(), actor),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException);
+        assert.deepEqual(error.getResponse(), {
+          statusCode: 409,
+          code: P033_SOURCE_KEY_CONFLICT,
+          message: P033_SOURCE_KEY_CONFLICT_MESSAGE,
+          details: { canOpen: false },
+        });
+        return true;
+      },
+    );
+  }
+});
+
+test('P033 não classifica outra violação 23505 como conflito de source_key', async () => {
+  const database = p033Database(async (text) => {
+    if (text.includes('from ltc_m.projects')) return { rows: [project] };
+    if (text.includes('insert into ltc_m.financial_actual_events'))
+      throw databaseError('23505', 'uq_financial_actual_other');
+    return { rows: [] };
+  });
+  await assert.rejects(
+    new RealizedEventsService(database as never).create(projectId, duplicatePayload(), actor),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.deepEqual(error.getResponse(), {
+        statusCode: 409,
+        message: 'P032_UNIQUE_CONFLICT',
+        error: 'Conflict',
+      });
+      return true;
+    },
+  );
+  assert.equal(
+    database.statements.some((statement) => statement.includes('select id, metric_type::text')),
+    false,
+  );
+});
+
+test('P033 aplica o mesmo conflito seguro no update de source_key', async () => {
+  const database = p033Database(async (text) => {
+    if (text.includes('from ltc_m.projects')) return { rows: [project] };
+    if (
+      text.includes('from ltc_m.financial_actual_events') &&
+      !text.includes('select id, metric_type::text')
+    ) {
+      return { rows: [event] };
+    }
+    if (text.includes('update ltc_m.financial_actual_events'))
+      throw databaseError('23505', 'uq_financial_actual_source');
+    if (text.includes('select id, metric_type::text as metric_type')) {
+      return {
+        rows: [
+          {
+            id: '00000000-0000-4000-8000-000000032202',
+            metric_type: 'billing_actual',
+            status: 'posted',
+          },
+        ],
+      };
+    }
+    return { rows: [] };
+  });
+  await assert.rejects(
+    new RealizedEventsService(database as never).update(
+      projectId,
+      eventId,
+      parseRealizedEventPatchPayload({ sourceKey: 'other-source', expectedVersion: 1 }),
+      actor,
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.deepEqual(error.getResponse(), {
+        statusCode: 409,
+        code: P033_SOURCE_KEY_CONFLICT,
+        message: P033_SOURCE_KEY_CONFLICT_MESSAGE,
+        details: {
+          existingEventId: '00000000-0000-4000-8000-000000032202',
+          existingStatus: 'posted',
+          canOpen: true,
+        },
+      });
+      return true;
+    },
+  );
+});
+
+test('P033 sob concorrência mantém exatamente uma linha e converte a perdedora em 409', async () => {
+  let attempts = 0;
+  let inserted = false;
+  let releaseSecond!: () => void;
+  const secondInsert = new Promise<void>((resolve) => {
+    releaseSecond = resolve;
+  });
+  const database = p033Database(async (text) => {
+    if (text.includes('from ltc_m.projects')) return { rows: [project] };
+    if (text.includes('insert into ltc_m.financial_actual_events')) {
+      attempts += 1;
+      if (attempts === 2) releaseSecond();
+      await secondInsert;
+      if (!inserted) {
+        inserted = true;
+        return { rows: [{ id: eventId }] };
+      }
+      throw databaseError('23505', 'uq_financial_actual_source');
+    }
+    if (text.includes('select id, metric_type::text as metric_type')) {
+      return { rows: [{ id: eventId, metric_type: 'billing_actual', status: 'draft' }] };
+    }
+    if (text.includes('from ltc_m.financial_actual_events')) return { rows: [event] };
+    return { rows: [] };
+  });
+
+  const results = await Promise.allSettled([
+    new RealizedEventsService(database as never).create(projectId, duplicatePayload(), actor),
+    new RealizedEventsService(database as never).create(projectId, duplicatePayload(), actor),
+  ]);
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+  assert.equal(results.filter((result) => result.status === 'rejected').length, 1);
+  const rejected = results.find((result) => result.status === 'rejected');
+  assert.ok(rejected && rejected.status === 'rejected');
+  assert.ok(rejected.reason instanceof ConflictException);
+  assert.deepEqual(rejected.reason.getResponse(), {
+    statusCode: 409,
+    code: P033_SOURCE_KEY_CONFLICT,
+    message: P033_SOURCE_KEY_CONFLICT_MESSAGE,
+    details: { existingEventId: eventId, existingStatus: 'draft', canOpen: true },
+  });
+  assert.equal(inserted, true);
+  assert.equal(attempts, 2);
+});

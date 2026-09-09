@@ -1,7 +1,16 @@
 export const P032_REALIZED_EVENTS_CONTRACT = 'ltcm.p032.realized-events-crud.v1' as const;
+export const P033_SOURCE_KEY_CONFLICT = 'P033_SOURCE_KEY_CONFLICT' as const;
+export const P033_SOURCE_KEY_CONFLICT_MESSAGE =
+  'Já existe um lançamento com esta chave neste projeto.' as const;
 
 export type RealizedEventStatus = 'draft' | 'posted' | 'cancelled';
 export type RealizedEventAction = 'edit' | 'publish' | 'cancel';
+
+export interface SourceKeyConflictDetails {
+  readonly existingEventId?: string;
+  readonly existingStatus?: RealizedEventStatus;
+  readonly canOpen: boolean;
+}
 
 export interface RealizedEvent {
   readonly id: string;
@@ -54,6 +63,13 @@ function requiredString(value: unknown): string {
 function nullableString(value: unknown): string | null {
   if (value === null) return null;
   return typeof value === 'string' ? value : invalid();
+}
+
+function uuid(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
+    ? value
+    : undefined;
 }
 
 function decimal(value: unknown): string {
@@ -124,6 +140,20 @@ export function parseRealizedEventsResponse(value: unknown): RealizedEventsRespo
     },
     projectItems: response['projectItems'].map(itemOption),
     events: response['events'].map(event),
+  };
+}
+
+export function parseSourceKeyConflictDetails(value: unknown): SourceKeyConflictDetails | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const details = value as Record<string, unknown>;
+  if (details['canOpen'] !== true) return { canOpen: false };
+  const existingEventId = uuid(details['existingEventId']);
+  if (!existingEventId) return { canOpen: false };
+  const existingStatus = status(details['existingStatus']);
+  return {
+    existingEventId,
+    ...(existingStatus ? { existingStatus } : {}),
+    canOpen: true,
   };
 }
 

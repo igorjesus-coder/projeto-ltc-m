@@ -15,12 +15,14 @@ export class AuthorizationDeniedError extends Error {
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly code: string | null;
+  readonly details: unknown;
 
-  constructor(status: number, code: string | null = null) {
+  constructor(status: number, code: string | null = null, details: unknown = null) {
     super('P021_API_REQUEST_FAILED');
     this.name = 'ApiRequestError';
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -75,11 +77,18 @@ export function createAuthenticatedApiClient({
 
 async function requestError(response: Response): Promise<ApiRequestError> {
   let code: string | null = null;
+  let details: unknown = null;
   try {
-    const body = (await response.clone().json()) as { message?: unknown };
-    if (typeof body.message === 'string') code = body.message;
+    const body = (await response.clone().json()) as {
+      code?: unknown;
+      message?: unknown;
+      details?: unknown;
+    };
+    if (typeof body.code === 'string') code = body.code;
+    else if (typeof body.message === 'string') code = body.message;
+    details = body.details;
   } catch {
     // Error bodies are optional and must never prevent a sanitized status error.
   }
-  return new ApiRequestError(response.status, code);
+  return new ApiRequestError(response.status, code, details);
 }

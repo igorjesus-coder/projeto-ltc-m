@@ -954,6 +954,11 @@ textarea.form-control {
   color: var(--color-text-muted);
 }
 
+.realized-events-table .realized-event-highlighted {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .realized-events-actions {
   display: flex;
   flex-wrap: wrap;

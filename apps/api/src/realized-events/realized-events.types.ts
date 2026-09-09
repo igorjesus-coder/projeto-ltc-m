@@ -1,6 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 
 export const P032_REALIZED_EVENTS_CONTRACT = 'ltcm.p032.realized-events-crud.v1' as const;
+export const P033_SOURCE_KEY_CONFLICT = 'P033_SOURCE_KEY_CONFLICT' as const;
+export const P033_SOURCE_KEY_CONFLICT_MESSAGE =
+  'Já existe um lançamento com esta chave neste projeto.' as const;
 
 export interface RealizedEventCreatePayload {
   readonly projectItemId: string | null;
@@ -35,6 +38,12 @@ export interface RealizedEventCancelPayload {
 }
 
 export type RealizedEventStatus = 'draft' | 'posted' | 'cancelled';
+
+export interface SourceKeyConflictDetails {
+  readonly existingEventId?: string;
+  readonly existingStatus?: RealizedEventStatus;
+  readonly canOpen: boolean;
+}
 
 export interface RealizedEventRecord {
   readonly id: string;
