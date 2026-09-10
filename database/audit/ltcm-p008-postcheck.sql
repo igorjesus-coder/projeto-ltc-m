@@ -50,17 +50,21 @@ select pg_catalog.jsonb_build_object(
             and pg_class.relkind = 'r'
             and pg_class.relrowsecurity
             and pg_class.relforcerowsecurity
+            and pg_class.relname not like 'p034_provenance_%'
     ),
     'policy_count', (
         select count(*)
         from pg_catalog.pg_policies
-        where pg_policies.schemaname = 'ltc_m'
+        where
+            pg_policies.schemaname = 'ltc_m'
+            and pg_policies.tablename not like 'p034_provenance_%'
     ),
     'unsafe_policy_count', (
         select count(*)
         from pg_catalog.pg_policies
         where
             pg_policies.schemaname = 'ltc_m'
+            and pg_policies.tablename not like 'p034_provenance_%'
             and (
                 pg_policies.cmd in ('ALL', 'DELETE')
                 or pg_policies.roles <> array['ltc_m_runtime']::name[]

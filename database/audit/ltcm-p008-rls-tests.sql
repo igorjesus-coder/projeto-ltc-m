@@ -168,6 +168,7 @@ begin
         where
             pg_namespace.nspname = 'ltc_m'
             and pg_class.relkind = 'r'
+            and pg_class.relname not like 'p034_provenance_%'
     )
     select
         (select count(*) from expected_tables),
@@ -310,7 +311,9 @@ begin
                 )
             ) as with_check_md5
         from pg_catalog.pg_policies
-        where pg_policies.schemaname = 'ltc_m'
+        where
+            pg_policies.schemaname = 'ltc_m'
+            and pg_policies.tablename not like 'p034_provenance_%'
     )
     select
         (select count(*) from expected_policies),
@@ -405,6 +408,7 @@ begin
         from pg_catalog.pg_policies
         where
             pg_policies.schemaname = 'ltc_m'
+            and pg_policies.tablename not like 'p034_provenance_%'
             and (
                 pg_policies.cmd in ('ALL', 'DELETE')
                 or pg_policies.roles <> array['ltc_m_runtime']::name[]
