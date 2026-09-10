@@ -5,7 +5,7 @@
  */
 export const P017_SCHEMA_CONTRACT = 'ltcm.p017.schema-integrity.v1' as const;
 export const P017_SCHEMA_FINGERPRINT =
-  '0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91' as const;
+  '3a793592eab7e236c64c364a14db306ad70884caeb677e4376aa02586cbc8438' as const;
 export const P019_DATABASE_TYPES_CONTRACT = 'ltcm.p019.database-types.v1' as const;
 
 /** Exact decimal text returned by the P019 pg parser; never an authoritative number. */
@@ -320,6 +320,56 @@ export interface LtcMMonthlySourceArtifactsRow {
   readonly source_semantic_fingerprint: string;
   readonly created_by_user_id: PgUuid;
   readonly created_at: PgTimestampTz;
+}
+
+export interface LtcMP034ProvenanceItemObservationsRow {
+  readonly id: PgUuid;
+  readonly snapshot_id: PgUuid;
+  readonly project_id: PgUuid;
+  readonly project_code: string;
+  readonly source_line_key: string;
+  readonly item_id: string | null;
+  readonly occurrence_ordinal: number;
+  readonly occurrence_fingerprint: string;
+}
+
+export interface LtcMP034ProvenanceProjectObservationsRow {
+  readonly id: PgUuid;
+  readonly snapshot_id: PgUuid;
+  readonly project_id: PgUuid;
+  readonly project_code: string;
+  readonly occurrence_ordinal: number;
+  readonly occurrence_fingerprint: string;
+}
+
+export interface LtcMP034ProvenanceSnapshotsRow {
+  readonly id: PgUuid;
+  readonly import_batch_id: PgUuid;
+  readonly project_id: PgUuid;
+  readonly scope_type: string;
+  readonly schema_version: number;
+  readonly source_artifact_hash: string;
+  readonly snapshot_fingerprint: string;
+  readonly fingerprint_algorithm: string;
+  readonly source_observation_contract: string;
+  readonly status: string;
+  readonly authority_revision: PgBigInt;
+  readonly captured_by_user_id: PgUuid;
+  readonly request_id: string | null;
+  readonly capture_source: string;
+  readonly captured_at: PgTimestampTz;
+  readonly completed_at: PgTimestampTz;
+}
+
+export interface LtcMP034ProvenanceSourceReferencesRow {
+  readonly id: PgUuid;
+  readonly project_id: PgUuid;
+  readonly project_observation_id: PgUuid | null;
+  readonly item_observation_id: PgUuid | null;
+  readonly reference_ordinal: number;
+  readonly kind: string;
+  readonly locator: string;
+  readonly fingerprint: string;
 }
 
 export interface LtcMPlanVersionsRow {
@@ -638,6 +688,10 @@ export interface LtcMTableRows {
   readonly monthly_plan_cells: LtcMMonthlyPlanCellsRow;
   readonly monthly_plan_import_executions: LtcMMonthlyPlanImportExecutionsRow;
   readonly monthly_source_artifacts: LtcMMonthlySourceArtifactsRow;
+  readonly p034_provenance_item_observations: LtcMP034ProvenanceItemObservationsRow;
+  readonly p034_provenance_project_observations: LtcMP034ProvenanceProjectObservationsRow;
+  readonly p034_provenance_snapshots: LtcMP034ProvenanceSnapshotsRow;
+  readonly p034_provenance_source_references: LtcMP034ProvenanceSourceReferencesRow;
   readonly plan_versions: LtcMPlanVersionsRow;
   readonly project_items: LtcMProjectItemsRow;
   readonly projects: LtcMProjectsRow;

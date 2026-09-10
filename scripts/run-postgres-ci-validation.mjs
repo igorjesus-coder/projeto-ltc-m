@@ -16,6 +16,7 @@ const EVIDENCE_PATH = path.join('.tmp', 'ci-evidence', 'ltcm-postgres-validation
 const P013_DATABASE = 'ltcm_test';
 const P013_PASSWORD = 'ltcm_ci_p013_only';
 const P013_USER = 'postgres';
+const P034_MIGRATION = '20260910100000_add_p034_provenance_foundation.sql';
 
 function sha256File(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toUpperCase();
@@ -318,12 +319,14 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       p017_postgres: false,
       p026_postgres: false,
       p019_postgres: false,
+      p034_postgres: false,
     },
     p013_postgres: null,
     p016_postgres: null,
     p017_postgres: null,
     p026_postgres: null,
     p019_postgres: null,
+    p034_postgres: null,
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
     postgres: null,
@@ -471,6 +474,45 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         'provenance_constraints',
         'idempotency',
         'rollback_cleanup',
+      ],
+      cleanup: 'pending',
+    };
+    runStage('p034_postgres', () =>
+      runProcess(
+        'node',
+        ['--test', path.join('scripts', 'p034-provenance-foundation.integration.test.mjs')],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P034_INTEGRATION: '1',
+            LTCM_P034_ISOLATED_CLUSTER: '1',
+            LTCM_P034_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p034_postgres = true;
+    evidence.p034_postgres = {
+      passed: true,
+      execution_marker: 'P034_POSTGRES_CI_EXECUTED_NOT_SKIPPED',
+      cluster_mode: 'isolated_docker',
+      database: P013_DATABASE,
+      host_class: 'loopback',
+      postgres_major: 17,
+      command: 'node --test scripts/p034-provenance-foundation.integration.test.mjs',
+      coverage: [
+        'nineteen_migrations_from_zero',
+        'four_provenance_tables',
+        'role_attributes_and_no_membership',
+        'writer_set_local_role_and_context',
+        'runtime_select_only',
+        'source_hash_and_actor_guards',
+        'deferred_reference_cardinality',
+        'cross_project_rls_and_composite_fks',
+        'immutability_and_acl_denials',
+        'synthetic_role_cleanup',
       ],
       cleanup: 'pending',
     };
@@ -631,6 +673,17 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       ],
       cleanup: 'pending',
     };
+    runStage('p013_cluster_provenance_cleanup', () =>
+      executePsql({
+        database: P013_DATABASE,
+        user: P013_USER,
+        password: P013_PASSWORD,
+        host: p013Endpoint.host,
+        port: p013Endpoint.port,
+        command:
+          'drop schema if exists ltc_m cascade; drop role if exists ltc_m_provenance_writer;',
+      }),
+    );
   };
 
   try {
@@ -671,12 +724,20 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         postgresFile(path.join('supabase', 'migrations', migration.name)),
       );
       runStage(`concurrency_migration_${migration.order}`, () =>
-        executePsql({
-          database: 'ltcm_ci_concurrency',
-          user: 'postgres',
-          password: postgresPassword,
-          file: path.join(rootDirectory, 'supabase', 'migrations', migration.name),
-        }),
+        migration.name === P034_MIGRATION
+          ? executePsql({
+              database: 'ltcm_ci_concurrency',
+              user: 'postgres',
+              password: postgresPassword,
+              command:
+                'select 1 as p034_concurrency_not_applicable /* capability validated in isolated P013 cluster */',
+            })
+          : executePsql({
+              database: 'ltcm_ci_concurrency',
+              user: 'postgres',
+              password: postgresPassword,
+              file: path.join(rootDirectory, 'supabase', 'migrations', migration.name),
+            }),
       );
     }
     runStage('seed', () => postgresFile(path.join('supabase', 'seed.sql')));
@@ -867,6 +928,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }
       if (evidence.p026_postgres) {
         evidence.p026_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
+      }
+      if (evidence.p034_postgres) {
+        evidence.p034_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
       }
       if (evidence.p019_postgres) {
         evidence.p019_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';

@@ -2,29 +2,29 @@
 
 Contrato do schema: `ltcm.p017.schema-integrity.v1`
 Contrato do fingerprint: `ltcm.p017.schema-fingerprint.v1`
-Fingerprint nominal: `0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91`
+Fingerprint nominal: `3a793592eab7e236c64c364a14db306ad70884caeb677e4376aa02586cbc8438`
 
 ## Inventário nominal
 
 | Medida | Quantidade |
 | --- | ---: |
-| `migrationCount` | 18 |
-| `relationCount` | 28 |
-| `tableCount` | 19 |
+| `migrationCount` | 19 |
+| `relationCount` | 32 |
+| `tableCount` | 23 |
 | `viewCount` | 9 |
 | `materializedViewCount` | 0 |
-| `columnCount` | 488 |
-| `functionCount` | 33 |
-| `triggerCount` | 66 |
-| `indexCount` | 79 |
-| `primaryKeyCount` | 19 |
-| `uniqueConstraintCount` | 20 |
-| `foreignKeyCount` | 55 |
-| `checkConstraintCount` | 101 |
-| `protectedRlsTableCount` | 19 |
-| `forceRlsTableCount` | 19 |
-| `policyCount` | 49 |
-| `grantCount` | 71 |
+| `columnCount` | 526 |
+| `functionCount` | 39 |
+| `triggerCount` | 78 |
+| `indexCount` | 100 |
+| `primaryKeyCount` | 23 |
+| `uniqueConstraintCount` | 28 |
+| `foreignKeyCount` | 65 |
+| `checkConstraintCount` | 125 |
+| `protectedRlsTableCount` | 23 |
+| `forceRlsTableCount` | 23 |
+| `policyCount` | 63 |
+| `grantCount` | 75 |
 | `typeCount` | 10 |
 
 O inventário exclui OIDs, timestamps de criação, owners e identificadores físicos incidentais.

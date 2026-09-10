@@ -1,7 +1,7 @@
 # ERD do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91`
+Fingerprint: `3a793592eab7e236c64c364a14db306ad70884caeb677e4376aa02586cbc8438`
 
 Arquivo gerado deterministicamente a partir do modelo canônico capturado em PostgreSQL 17.
 Não editar manualmente; use `npm run docs:schema:generate` e valide com
@@ -268,6 +268,52 @@ erDiagram
     text worksheet_name
     text structural_range
   }
+  p034_provenance_item_observations {
+    uuid id PK
+    uuid snapshot_id FK
+    uuid project_id FK
+    text project_code
+    text source_line_key
+    text item_id
+    integer occurrence_ordinal
+    text occurrence_fingerprint
+  }
+  p034_provenance_project_observations {
+    uuid id PK
+    uuid snapshot_id FK
+    uuid project_id FK
+    text project_code
+    integer occurrence_ordinal
+    text occurrence_fingerprint
+  }
+  p034_provenance_snapshots {
+    uuid id PK
+    text status
+    bigint authority_revision
+    uuid captured_by_user_id FK
+    text request_id
+    text capture_source
+    timestamp_with_time_zone captured_at
+    timestamp_with_time_zone completed_at
+    uuid import_batch_id FK
+    uuid project_id FK
+    text scope_type
+    smallint schema_version
+    text source_artifact_hash
+    text snapshot_fingerprint
+    text fingerprint_algorithm
+    text source_observation_contract
+  }
+  p034_provenance_source_references {
+    uuid id PK
+    uuid project_id FK
+    uuid project_observation_id FK
+    uuid item_observation_id FK
+    integer reference_ordinal
+    text kind
+    text locator
+    text fingerprint
+  }
   plan_versions {
     uuid id PK
     timestamp_with_time_zone created_at
@@ -380,6 +426,16 @@ erDiagram
   import_batches ||--o{ monthly_plan_import_executions : "fk_monthly_executions_batch_hash_p013"
   app_users ||--o{ monthly_plan_import_executions : "monthly_plan_import_executions_created_by_user_id_fkey"
   app_users ||--o{ monthly_source_artifacts : "monthly_source_artifacts_created_by_user_id_fkey"
+  projects ||--o{ p034_provenance_item_observations : "fk_p034_item_observation_project"
+  p034_provenance_snapshots ||--o{ p034_provenance_item_observations : "fk_p034_item_observation_snapshot"
+  projects ||--o{ p034_provenance_project_observations : "fk_p034_project_observation_project"
+  p034_provenance_snapshots ||--o{ p034_provenance_project_observations : "fk_p034_project_observation_snapshot"
+  app_users ||--o{ p034_provenance_snapshots : "fk_p034_snapshot_actor"
+  import_batches ||--o{ p034_provenance_snapshots : "fk_p034_snapshot_batch"
+  projects ||--o{ p034_provenance_snapshots : "fk_p034_snapshot_project"
+  p034_provenance_item_observations ||--o{ p034_provenance_source_references : "fk_p034_source_reference_item_observation"
+  projects ||--o{ p034_provenance_source_references : "fk_p034_source_reference_project"
+  p034_provenance_project_observations ||--o{ p034_provenance_source_references : "fk_p034_source_reference_project_observation"
   app_users ||--o{ plan_versions : "plan_versions_approved_by_user_id_fkey"
   plan_versions ||--o{ plan_versions : "plan_versions_baseline_plan_version_id_fkey"
   app_users ||--o{ plan_versions : "plan_versions_created_by_user_id_fkey"
