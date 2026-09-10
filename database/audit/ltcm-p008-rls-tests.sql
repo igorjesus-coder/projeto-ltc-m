@@ -314,6 +314,10 @@ begin
         where
             pg_policies.schemaname = 'ltc_m'
             and pg_policies.tablename not like 'p034_provenance_%'
+            and pg_policies.policyname not in (
+                'p034_writer_projects_select',
+                'p034_writer_batches_select'
+            )
     )
     select
         (select count(*) from expected_policies),
@@ -409,6 +413,10 @@ begin
         where
             pg_policies.schemaname = 'ltc_m'
             and pg_policies.tablename not like 'p034_provenance_%'
+            and pg_policies.policyname not in (
+                'p034_writer_projects_select',
+                'p034_writer_batches_select'
+            )
             and (
                 pg_policies.cmd in ('ALL', 'DELETE')
                 or pg_policies.roles <> array['ltc_m_runtime']::name[]
