@@ -4,7 +4,8 @@ Contract ID: ltcm.p034.data-quality-center.v3
 
 Emenda documental de `ltcm.p034.data-quality-center.v1`. O fingerprint SHA-256 histórico da v1
 é `10ac760c17f64234222979690228be239540233401dc0a6cce4dbb5de3936098`. O fingerprint SHA-256
-histórico da v2 é `42c3b6b73e8c9c0e05d19f11d0c4ea26a90ed21787048343faff2c9bebf01d44`.
+histórico da v2 (`ltcm.p034.data-quality-center.v2`) é
+`42c3b6b73e8c9c0e05d19f11d0c4ea26a90ed21787048343faff2c9bebf01d44`.
 
 Status do Master Control: Não iniciada / 0%.
 
@@ -91,8 +92,8 @@ P015-only e não integra o catálogo operacional P034.
 
 P034 continua `DERIVED_READ_ONLY`: findings são sempre derivados e não são fatos persistidos de
 negócio. A emenda autoriza somente a persistência futura de fatos mínimos, imutáveis e append-only
-de provenance/snapshot necessários para reconstruir a entrada P015 das duas duplicidades elegíveis
-ao P034. Isso
+de provenance/snapshot necessários para reconstruir os fatos/observações P015 relevantes para as duas
+duplicidades elegíveis ao P034. Isso
 nunca cria uma tabela de findings, registro de alerta ou estado operacional de QualityFinding.
 
 Para findings existentes, id, código e referências determinísticas de P015/P016 são preservados.
@@ -227,7 +228,7 @@ finding operacional. Como `import_identities: string[]` não possui autoridade q
 ocorrência a exatamente um projeto, o adapter/reader P034 não agrega esse código no MVP. Não pode
 atribuir o primeiro projeto do batch, um projeto arbitrário, todos os projetos, `projectId` fabricado,
 posição, source path ou import batch. `project` continua obrigatório no `QualityFinding`; não há
-exceção `project: null` para essa regra.
+exceção de projeto ausente para essa regra.
 
 `P034-D25 = HUMAN_DECISION_APPROVED`. A família funcional `Duplicidade` do P034 é satisfeita
 exatamente por:
@@ -498,34 +499,34 @@ P034_STRUCTURAL_DECISION_REQUIRED antes de qualquer alteração estrutural.
 
 ## Matriz de decisões
 
-| Decisão  | Estado                         | Formalização                                                                                                                |
-| -------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| P034-D01 | RESOLVED_BY_EXISTING_AUTHORITY | reutilizar expected/observed/delta, moeda, evidências, referências, explicação e remediação P015                            |
-| P034-D02 | HUMAN_DECISION_APPROVED        | findings existentes preservam severity; stale e saldo são WARNING; nenhuma regra nova é BLOCKING                            |
-| P034-D03 | RESOLVED_BY_EXISTING_AUTHORITY | consumir MISSING_REQUIRED_FIELD e seus quatro campos factuais                                                               |
-| P034-D04 | HUMAN_DECISION_APPROVED        | PROJECT_DATA_STALE, projeto, updated_at, UTC, superior a 30 dias corridos, WARNING                                          |
-| P034-D05 | RESOLVED_BY_EXISTING_AUTHORITY | agregar somente findings P015 elegíveis ao envelope por projeto; na duplicidade, somente project/item                       |
-| P034-D06 | HUMAN_DECISION_APPROVED        | moeda sem conversão; unidade somente com referência autoritativa e diferença literal                                        |
-| P034-D07 | RESOLVED_BY_EXISTING_AUTHORITY | findings `DERIVED_READ_ONLY`, sem tabela/UUID persistido de finding P034; facts de provenance seguem D16–D20                |
-| P034-D08 | NO_LONGER_APPLICABLE           | NO_P034_ALERT_LIFECYCLE; desaparecimento automático quando a fonte for corrigida                                            |
-| P034-D09 | RESOLVED_BY_EXISTING_AUTHORITY | herdar P023: server-side, página 1, 25/100, query string, contexto e ordenação determinística                               |
-| P034-D10 | RESOLVED_BY_EXISTING_AUTHORITY | não autorizado é ocultado; falha técnica autorizada encerra explicitamente a consulta                                       |
-| P034-D11 | HUMAN_DECISION_APPROVED        | action estruturada com target e IDs; frontend resolve rotas existentes e returnTo seguro                                    |
-| P034-D12 | RESOLVED_BY_EXISTING_AUTHORITY | composição read-only; estrutura de provenance somente no limite D16–D20; demais gaps exigem decisão                         |
-| P034-D13 | RESOLVED_BY_EXISTING_AUTHORITY | 1.15=P015, 1.16=P016, 2.06=P023; P026 é complementar                                                                        |
-| P034-D14 | HUMAN_DECISION_APPROVED        | UNPLANNED_BALANCE, saldo > 0, WARNING, fórmula P023/P030, sem duplicar warning textual                                      |
-| P034-D15 | RESOLVED_BY_EXISTING_AUTHORITY | P034_CONTRACT_ITEM_SCOPE_REUSE_P015_P016                                                                                    |
-| P034-D16 | HUMAN_DECISION_APPROVED        | Opção A: persistir somente facts mínimos imutáveis das duas duplicidades elegíveis; `PERSIST_SOURCE_FACTS_NOT_FINDINGS`     |
-| P034-D17 | HUMAN_DECISION_APPROVED        | somente `LATEST_SUCCESSFUL_AUTHORITATIVE_SNAPSHOT`, com seleção determinística e findings recomputados                      |
-| P034-D18 | HUMAN_DECISION_APPROVED        | `NO_AUTOMATIC_PROVENANCE_PURGE`; `PROVENANCE_RETENTION_POLICY_DEFERRED`                                                     |
-| P034-D19 | HUMAN_DECISION_APPROVED        | `NO_P034_HISTORY_UI`; snapshots anteriores não entram na API/UI operacional                                                 |
-| P034-D20 | HUMAN_DECISION_APPROVED        | `P034_PROVENANCE_STRUCTURE_AUTHORIZED`, somente envelope/observações/referências de project/item; DDL futuro não autorizado |
-| P034-D21 | HUMAN_DECISION_APPROVED        | isolamento por escopo, RLS/FORCE RLS, actor transaction, grants mínimos e referências sanitizadas                           |
-| P034-D22 | HUMAN_DECISION_APPROVED        | `P015_UNCHANGED`; adapter futuro e paridade somente das duplicidades project/item elegíveis                                 |
-| P034-D23 | HUMAN_DECISION_APPROVED        | PR #29 aberto/não mergeado; quatro correções locais preservadas fora da branch documental                                   |
-| P034-D24 | HUMAN_DECISION_APPROVED        | `IMPORT_DUPLICATION` permanece P015-only; P015 pode manter project nulo; P034 não altera sua semântica                      |
-| P034-D25 | HUMAN_DECISION_APPROVED        | `P034_DUPLICATE_RULE_SET` contém somente project e item; `IMPORT_DUPLICATION` é inelegível no MVP                           |
-| P034-D26 | HUMAN_DECISION_APPROVED        | provenance P034 reduzida a envelope, project/item observations e referências; sem storage de import identities              |
+| Decisão  | Estado                         | Formalização                                                                                                                                |
+| -------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| P034-D01 | RESOLVED_BY_EXISTING_AUTHORITY | reutilizar expected/observed/delta, moeda, evidências, referências, explicação e remediação P015                                            |
+| P034-D02 | HUMAN_DECISION_APPROVED        | findings existentes preservam severity; stale e saldo são WARNING; nenhuma regra nova é BLOCKING                                            |
+| P034-D03 | RESOLVED_BY_EXISTING_AUTHORITY | consumir MISSING_REQUIRED_FIELD e seus quatro campos factuais                                                                               |
+| P034-D04 | HUMAN_DECISION_APPROVED        | PROJECT_DATA_STALE, projeto, updated_at, UTC, superior a 30 dias corridos, WARNING                                                          |
+| P034-D05 | RESOLVED_BY_EXISTING_AUTHORITY | agregar somente findings P015 elegíveis ao envelope por projeto; na duplicidade, somente project/item                                       |
+| P034-D06 | HUMAN_DECISION_APPROVED        | moeda sem conversão; unidade somente com referência autoritativa e diferença literal                                                        |
+| P034-D07 | RESOLVED_BY_EXISTING_AUTHORITY | findings `DERIVED_READ_ONLY`, sem tabela/UUID persistido de finding P034; facts de provenance seguem D16–D20 conforme refinados por D24–D26 |
+| P034-D08 | NO_LONGER_APPLICABLE           | NO_P034_ALERT_LIFECYCLE; desaparecimento automático quando a fonte for corrigida                                                            |
+| P034-D09 | RESOLVED_BY_EXISTING_AUTHORITY | herdar P023: server-side, página 1, 25/100, query string, contexto e ordenação determinística                                               |
+| P034-D10 | RESOLVED_BY_EXISTING_AUTHORITY | não autorizado é ocultado; falha técnica autorizada encerra explicitamente a consulta                                                       |
+| P034-D11 | HUMAN_DECISION_APPROVED        | action estruturada com target e IDs; frontend resolve rotas existentes e returnTo seguro                                                    |
+| P034-D12 | RESOLVED_BY_EXISTING_AUTHORITY | composição read-only; estrutura de provenance somente no limite D16–D20 conforme refinado por D24–D26; demais gaps exigem decisão           |
+| P034-D13 | RESOLVED_BY_EXISTING_AUTHORITY | 1.15=P015, 1.16=P016, 2.06=P023; P026 é complementar                                                                                        |
+| P034-D14 | HUMAN_DECISION_APPROVED        | UNPLANNED_BALANCE, saldo > 0, WARNING, fórmula P023/P030, sem duplicar warning textual                                                      |
+| P034-D15 | RESOLVED_BY_EXISTING_AUTHORITY | P034_CONTRACT_ITEM_SCOPE_REUSE_P015_P016                                                                                                    |
+| P034-D16 | HUMAN_DECISION_APPROVED        | Opção A: persistir somente facts mínimos imutáveis das duas duplicidades elegíveis; `PERSIST_SOURCE_FACTS_NOT_FINDINGS`                     |
+| P034-D17 | HUMAN_DECISION_APPROVED        | somente `LATEST_SUCCESSFUL_AUTHORITATIVE_SNAPSHOT`, com seleção determinística e findings recomputados                                      |
+| P034-D18 | HUMAN_DECISION_APPROVED        | `NO_AUTOMATIC_PROVENANCE_PURGE`; `PROVENANCE_RETENTION_POLICY_DEFERRED`                                                                     |
+| P034-D19 | HUMAN_DECISION_APPROVED        | `NO_P034_HISTORY_UI`; snapshots anteriores não entram na API/UI operacional                                                                 |
+| P034-D20 | HUMAN_DECISION_APPROVED        | `P034_PROVENANCE_STRUCTURE_AUTHORIZED`, somente envelope/observações/referências de project/item; DDL futuro não autorizado                 |
+| P034-D21 | HUMAN_DECISION_APPROVED        | isolamento por escopo, RLS/FORCE RLS, actor transaction, grants mínimos e referências sanitizadas                                           |
+| P034-D22 | HUMAN_DECISION_APPROVED        | `P015_UNCHANGED`; adapter futuro e paridade somente das duplicidades project/item elegíveis                                                 |
+| P034-D23 | HUMAN_DECISION_APPROVED        | PR #29 aberto/não mergeado; quatro correções locais preservadas fora da branch documental                                                   |
+| P034-D24 | HUMAN_DECISION_APPROVED        | `IMPORT_DUPLICATION` permanece P015-only; P015 pode manter project nulo; P034 não altera sua semântica                                      |
+| P034-D25 | HUMAN_DECISION_APPROVED        | `P034_DUPLICATE_RULE_SET` contém somente project e item; `IMPORT_DUPLICATION` é inelegível no MVP                                           |
+| P034-D26 | HUMAN_DECISION_APPROVED        | provenance P034 reduzida a envelope, project/item observations e referências; sem storage de import identities                              |
 
 ## Testes contratuais futuros
 
@@ -539,7 +540,7 @@ P034_STRUCTURAL_DECISION_REQUIRED antes de qualquer alteração estrutural.
 - staleness: 29 dias, exatamente 30 dias, superior a 30 dias, UTC, boundary e relógio
   determinístico;
 - duplicidade: `DUPLICATE_PROJECT_SOURCE_IDENTITY` e `DUPLICATE_ITEM_SOURCE_IDENTITY` aparecem no P034; `IMPORT_DUPLICATION` permanece somente nos testes P015; P033 não é reimplementado;
-- provenance: fatos mínimos reconstroem exatamente as duas entradas P015 elegíveis, sem persistir findings;
+- provenance: fatos mínimos reconstroem exatamente as observações P015 relevantes das duas regras elegíveis, sem persistir findings;
 - snapshot: somente `SUCCESS` autoritativo mais recente participa da derivação e a ordenação é
   determinística;
 - retenção: nenhum purge automático e nenhuma UI histórica;
