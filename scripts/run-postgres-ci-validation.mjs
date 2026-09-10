@@ -318,12 +318,14 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       p017_postgres: false,
       p026_postgres: false,
       p019_postgres: false,
+      p034_postgres: false,
     },
     p013_postgres: null,
     p016_postgres: null,
     p017_postgres: null,
     p026_postgres: null,
     p019_postgres: null,
+    p034_postgres: null,
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
     postgres: null,
@@ -471,6 +473,44 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         'provenance_constraints',
         'idempotency',
         'rollback_cleanup',
+      ],
+      cleanup: 'pending',
+    };
+    runStage('p034_postgres', () =>
+      runProcess(
+        'node',
+        ['--test', path.join('scripts', 'p034-provenance-foundation.integration.test.mjs')],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P034_INTEGRATION: '1',
+            LTCM_P034_ISOLATED_CLUSTER: '1',
+            LTCM_P034_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p034_postgres = true;
+    evidence.p034_postgres = {
+      passed: true,
+      cluster_mode: 'isolated_docker',
+      database: P013_DATABASE,
+      host_class: 'loopback',
+      postgres_major: 17,
+      command: 'node --test scripts/p034-provenance-foundation.integration.test.mjs',
+      coverage: [
+        'nineteen_migrations_from_zero',
+        'four_provenance_tables',
+        'role_attributes_and_no_membership',
+        'writer_set_local_role_and_context',
+        'runtime_select_only',
+        'source_hash_and_actor_guards',
+        'deferred_reference_cardinality',
+        'cross_project_rls_and_composite_fks',
+        'immutability_and_acl_denials',
+        'synthetic_role_cleanup',
       ],
       cleanup: 'pending',
     };
@@ -867,6 +907,9 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }
       if (evidence.p026_postgres) {
         evidence.p026_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
+      }
+      if (evidence.p034_postgres) {
+        evidence.p034_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
       }
       if (evidence.p019_postgres) {
         evidence.p019_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';

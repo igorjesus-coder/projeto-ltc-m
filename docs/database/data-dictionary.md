@@ -1,9 +1,9 @@
 # Dicionário de dados do schema `ltc_m`
 
 Contrato: `ltcm.p017.schema-integrity.v1`
-Fingerprint: `0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91`
+Fingerprint: `cc9f29ac1a5a46a9bfba557d901699d0d241644d3fdd884e360eefdd081ff1ae`
 
-Inventário: 28 relações (19 tabelas, 9 views), 488 colunas, 55 FKs e 49 policies.
+Inventário: 32 relações (23 tabelas, 9 views), 526 colunas, 65 FKs e 63 policies.
 
 O conteúdo é gerado do modelo canônico PostgreSQL 17. Descrições ausentes são declaradas como
 ausentes, sem inferência de negócio. Valores financeiros `numeric` permanecem exatos; sua
@@ -226,7 +226,7 @@ aditividade depende do grão documentado.
 - Grão: uma linha por id.
 - Chave primária/lógica: id.
 - Identidades exclusivas adicionais: `uq_import_batches_id_source_hash_p013`: UNIQUE (id, source_hash); `uq_import_batches_id_source_hash_p013`: CREATE UNIQUE INDEX uq_import_batches_id_source_hash_p013 ON ltc_m.import_batches USING btree (id, source_hash); `uq_import_batches_idempotency_key_p009`: CREATE UNIQUE INDEX uq_import_batches_idempotency_key_p009 ON ltc_m.import_batches USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL).
-- Segurança: RLS=true; FORCE RLS=true; 3 policies.
+- Segurança: RLS=true; FORCE RLS=true; 4 policies.
 
 | Coluna | Tipo SQL | Nullable | Default/gerada | FK | Nota versionada |
 | --- | --- | --- | --- | --- | --- |
@@ -431,6 +431,96 @@ aditividade depende do grão documentado.
 | `worksheet_name` | `text` | não | — | — | — |
 | `structural_range` | `text` | não | — | — | — |
 
+## `ltc_m.p034_provenance_item_observations`
+
+- Tipo: `table`.
+- Contrato proprietário: Core.
+- Propósito versionado: COMMENT não definido no schema.
+- Grão: uma linha por id.
+- Chave primária/lógica: id.
+- Identidades exclusivas adicionais: `uq_p034_item_observation_id_project`: UNIQUE (id, project_id); `uq_p034_item_observation_ordinal`: UNIQUE (snapshot_id, occurrence_ordinal); `uq_p034_item_observation_id_project`: CREATE UNIQUE INDEX uq_p034_item_observation_id_project ON ltc_m.p034_provenance_item_observations USING btree (id, project_id); `uq_p034_item_observation_ordinal`: CREATE UNIQUE INDEX uq_p034_item_observation_ordinal ON ltc_m.p034_provenance_item_observations USING btree (snapshot_id, occurrence_ordinal).
+- Segurança: RLS=true; FORCE RLS=true; 3 policies.
+
+| Coluna | Tipo SQL | Nullable | Default/gerada | FK | Nota versionada |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | não | gen_random_uuid() | — | — |
+| `snapshot_id` | `uuid` | não | — | ltc_m.p034_provenance_snapshots.id | — |
+| `project_id` | `uuid` | não | — | ltc_m.p034_provenance_snapshots.project_id | — |
+| `project_code` | `text` | não | — | — | — |
+| `source_line_key` | `text` | não | — | — | — |
+| `item_id` | `text` | sim | — | — | — |
+| `occurrence_ordinal` | `integer` | não | — | — | — |
+| `occurrence_fingerprint` | `text` | não | — | — | — |
+
+## `ltc_m.p034_provenance_project_observations`
+
+- Tipo: `table`.
+- Contrato proprietário: Core.
+- Propósito versionado: COMMENT não definido no schema.
+- Grão: uma linha por id.
+- Chave primária/lógica: id.
+- Identidades exclusivas adicionais: `uq_p034_project_observation_id_project`: UNIQUE (id, project_id); `uq_p034_project_observation_ordinal`: UNIQUE (snapshot_id, occurrence_ordinal); `uq_p034_project_observation_id_project`: CREATE UNIQUE INDEX uq_p034_project_observation_id_project ON ltc_m.p034_provenance_project_observations USING btree (id, project_id); `uq_p034_project_observation_ordinal`: CREATE UNIQUE INDEX uq_p034_project_observation_ordinal ON ltc_m.p034_provenance_project_observations USING btree (snapshot_id, occurrence_ordinal).
+- Segurança: RLS=true; FORCE RLS=true; 3 policies.
+
+| Coluna | Tipo SQL | Nullable | Default/gerada | FK | Nota versionada |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | não | gen_random_uuid() | — | — |
+| `snapshot_id` | `uuid` | não | — | ltc_m.p034_provenance_snapshots.id | — |
+| `project_id` | `uuid` | não | — | ltc_m.p034_provenance_snapshots.project_id | — |
+| `project_code` | `text` | não | — | — | — |
+| `occurrence_ordinal` | `integer` | não | — | — | — |
+| `occurrence_fingerprint` | `text` | não | — | — | — |
+
+## `ltc_m.p034_provenance_snapshots`
+
+- Tipo: `table`.
+- Contrato proprietário: Core.
+- Propósito versionado: COMMENT não definido no schema.
+- Grão: uma linha por id.
+- Chave primária/lógica: id.
+- Identidades exclusivas adicionais: `uq_p034_snapshot_batch_project`: UNIQUE (import_batch_id, project_id); `uq_p034_snapshot_fingerprint`: UNIQUE (snapshot_fingerprint); `uq_p034_snapshot_id_project`: UNIQUE (id, project_id); `uq_p034_snapshot_project_revision`: UNIQUE (project_id, authority_revision); `uq_p034_snapshot_batch_project`: CREATE UNIQUE INDEX uq_p034_snapshot_batch_project ON ltc_m.p034_provenance_snapshots USING btree (import_batch_id, project_id); `uq_p034_snapshot_fingerprint`: CREATE UNIQUE INDEX uq_p034_snapshot_fingerprint ON ltc_m.p034_provenance_snapshots USING btree (snapshot_fingerprint); `uq_p034_snapshot_id_project`: CREATE UNIQUE INDEX uq_p034_snapshot_id_project ON ltc_m.p034_provenance_snapshots USING btree (id, project_id); `uq_p034_snapshot_project_revision`: CREATE UNIQUE INDEX uq_p034_snapshot_project_revision ON ltc_m.p034_provenance_snapshots USING btree (project_id, authority_revision).
+- Segurança: RLS=true; FORCE RLS=true; 3 policies.
+
+| Coluna | Tipo SQL | Nullable | Default/gerada | FK | Nota versionada |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | não | gen_random_uuid() | — | — |
+| `status` | `text` | não | 'success'::text | — | — |
+| `authority_revision` | `bigint` | não | — | — | — |
+| `captured_by_user_id` | `uuid` | não | — | ltc_m.app_users.id | — |
+| `request_id` | `text` | sim | — | — | — |
+| `capture_source` | `text` | não | 'api'::text | — | — |
+| `captured_at` | `timestamp with time zone` | não | now() | — | — |
+| `completed_at` | `timestamp with time zone` | não | — | — | — |
+| `import_batch_id` | `uuid` | não | — | ltc_m.import_batches.id | — |
+| `project_id` | `uuid` | não | — | ltc_m.projects.id | — |
+| `scope_type` | `text` | não | 'project'::text | — | — |
+| `schema_version` | `smallint` | não | 1 | — | — |
+| `source_artifact_hash` | `text` | não | — | — | — |
+| `snapshot_fingerprint` | `text` | não | — | — | — |
+| `fingerprint_algorithm` | `text` | não | 'sha256-canonical-v1'::text | — | — |
+| `source_observation_contract` | `text` | não | 'ltcm.p015.reconciliation.v1'::text | — | — |
+
+## `ltc_m.p034_provenance_source_references`
+
+- Tipo: `table`.
+- Contrato proprietário: Core.
+- Propósito versionado: COMMENT não definido no schema.
+- Grão: uma linha por id.
+- Chave primária/lógica: id.
+- Identidades exclusivas adicionais: `uq_p034_source_reference_item_ordinal`: CREATE UNIQUE INDEX uq_p034_source_reference_item_ordinal ON ltc_m.p034_provenance_source_references USING btree (item_observation_id, reference_ordinal) WHERE (item_observation_id IS NOT NULL); `uq_p034_source_reference_project_ordinal`: CREATE UNIQUE INDEX uq_p034_source_reference_project_ordinal ON ltc_m.p034_provenance_source_references USING btree (project_observation_id, reference_ordinal) WHERE (project_observation_id IS NOT NULL).
+- Segurança: RLS=true; FORCE RLS=true; 3 policies.
+
+| Coluna | Tipo SQL | Nullable | Default/gerada | FK | Nota versionada |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `uuid` | não | gen_random_uuid() | — | — |
+| `project_id` | `uuid` | não | — | ltc_m.p034_provenance_project_observations.project_id | — |
+| `project_observation_id` | `uuid` | sim | — | ltc_m.p034_provenance_project_observations.id | — |
+| `item_observation_id` | `uuid` | sim | — | ltc_m.p034_provenance_item_observations.id | — |
+| `reference_ordinal` | `integer` | não | — | — | — |
+| `kind` | `text` | não | — | — | — |
+| `locator` | `text` | não | — | — | — |
+| `fingerprint` | `text` | não | — | — | — |
+
 ## `ltc_m.plan_versions`
 
 - Tipo: `table`.
@@ -500,7 +590,7 @@ aditividade depende do grão documentado.
 - Grão: uma linha por id.
 - Chave primária/lógica: id.
 - Identidades exclusivas adicionais: `uq_projects_id_currency`: UNIQUE (id, base_currency); `uq_projects_code_active`: CREATE UNIQUE INDEX uq_projects_code_active ON ltc_m.projects USING btree (upper(project_code)) WHERE (deleted_at IS NULL); `uq_projects_id_currency`: CREATE UNIQUE INDEX uq_projects_id_currency ON ltc_m.projects USING btree (id, base_currency).
-- Segurança: RLS=true; FORCE RLS=true; 3 policies.
+- Segurança: RLS=true; FORCE RLS=true; 4 policies.
 
 | Coluna | Tipo SQL | Nullable | Default/gerada | FK | Nota versionada |
 | --- | --- | --- | --- | --- | --- |

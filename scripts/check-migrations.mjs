@@ -13,6 +13,7 @@ const P026_MIGRATION_NAME = '20260901100000_add_p026_master_data_management.sql'
 const P026_AUDIT_FIX_MIGRATION_NAME = '20260902100000_fix_p026_catalog_audit_identity.sql';
 const P029_MIGRATION_NAME = '20260903100000_add_p029_plan_content_revision.sql';
 const P031_MIGRATION_NAME = '20260903120000_add_p031_version_approval_locking.sql';
+const P034_MIGRATION_NAME = '20260910100000_add_p034_provenance_foundation.sql';
 
 const FORBIDDEN_PATTERNS = [
   [
@@ -199,6 +200,13 @@ const P008_RLS_TABLES = new Set([
 
 const P009_RLS_TABLES = new Set([...P008_RLS_TABLES, 'import_batch_sheets', 'import_staging_rows']);
 
+const P034_RLS_TABLES = new Set([
+  'p034_provenance_snapshots',
+  'p034_provenance_project_observations',
+  'p034_provenance_item_observations',
+  'p034_provenance_source_references',
+]);
+
 const P013_TABLES = new Set([
   'monthly_source_artifacts',
   'monthly_plan_baselines',
@@ -216,6 +224,7 @@ const P013_ALTER_TABLES = new Set([
 const P013_RLS_TABLES = new Set([...P009_RLS_TABLES, ...P013_TABLES]);
 
 function rlsTablesForScope(scope) {
+  if (scope === 'p034') return P034_RLS_TABLES;
   if (scope === 'p013') return P013_RLS_TABLES;
   if (scope === 'p009') return P009_RLS_TABLES;
   return P008_RLS_TABLES;
@@ -612,7 +621,9 @@ function requireP008Security(sql, stripped, issues, scope) {
     if (!/\bto\s+ltc_m_runtime\s*;/i.test(statement)) {
       issues.push('GRANT permitido somente para ltc_m_runtime');
     }
-    if (!/\b(?:schema\s+ltc_m|(?:table|sequence|function)\s+ltc_m\.)/i.test(statement)) {
+    if (
+      !/\b(?:schema\s+ltc_m|(?:table|sequence|function)\s+ltc_m\.|on\s+ltc_m\.)/i.test(statement)
+    ) {
       issues.push('GRANT permitido somente em objetos ltc_m');
     }
     if (/\b(?:delete|truncate|trigger|references|create)\b/i.test(statement)) {
@@ -745,7 +756,7 @@ function requireD40Contract(sql, stripped, issues) {
 
 export function extractNamedObjects(sql) {
   const stripped = stripSqlNoise(sql);
-  const constraints = [...stripped.matchAll(/\bconstraint\s+([a-z_][a-z0-9_]*)/gi)]
+  const constraints = [...stripped.matchAll(/\bconstraint\s+(?!trigger\b)([a-z_][a-z0-9_]*)/gi)]
     .filter((match) => !/\bvalidate\s+$/i.test(stripped.slice(0, match.index)))
     .map((match) => match[1].toLowerCase());
   return {
@@ -758,26 +769,110 @@ export function extractNamedObjects(sql) {
   };
 }
 
+function requireP034Security(sql, stripped, issues) {
+  const roleStatements = [...stripped.matchAll(/\bcreate\s+role\b[\s\S]*?;/gi)].map((match) =>
+    match[0].replace(/\s+/gu, ' ').trim().toLowerCase(),
+  );
+  const expectedRole =
+    'create role ltc_m_provenance_writer nologin noinherit nosuperuser nocreatedb nocreaterole noreplication nobypassrls;';
+  if (roleStatements.length !== 1 || roleStatements[0] !== expectedRole) {
+    issues.push(
+      'P034 deve criar exatamente a capability ltc_m_provenance_writer com atributos mínimos',
+    );
+  }
+  if (
+    /\bcreate\s+(?:user|login)\b|\bpassword\b|\bcreate\s+role\s+(?!ltc_m_provenance_writer\b)/i.test(
+      stripped,
+    )
+  ) {
+    issues.push('P034 não pode provisionar login, password ou outra role');
+  }
+
+  for (const match of stripped.matchAll(/\bgrant\b[\s\S]*?;/gi)) {
+    const statement = match[0];
+    if (!/\bto\s+(?:ltc_m_runtime|ltc_m_provenance_writer)(?:\s*;|\s*,)/i.test(statement)) {
+      issues.push('P034 GRANT deve ser dirigido somente a runtime ou capability writer');
+    }
+    if (
+      !/\b(?:schema\s+ltc_m|(?:table|sequence|function)\s+ltc_m\.|on\s+ltc_m\.)/i.test(statement)
+    ) {
+      issues.push('P034 GRANT deve qualificar objeto no schema ltc_m');
+    }
+    if (
+      /\b(?:delete|truncate|trigger|references|create|update)\b|with\s+grant\s+option/i.test(
+        statement,
+      )
+    ) {
+      issues.push('P034 GRANT contém privilégio ou delegação proibida');
+    }
+  }
+
+  for (const match of stripped.matchAll(/\brevoke\b[\s\S]*?;/gi)) {
+    const statement = match[0];
+    if (!/\bfrom\s+public\s*;/i.test(statement)) {
+      issues.push('P034 REVOKE deve ser somente deny-by-default de PUBLIC');
+    }
+    if (
+      !/\b(?:schema\s+ltc_m|(?:table|sequence|function)\s+ltc_m\.|on\s+ltc_m\.)/i.test(statement)
+    ) {
+      issues.push('P034 REVOKE deve qualificar objeto no schema ltc_m');
+    }
+  }
+
+  for (const match of stripped.matchAll(/\bcreate\s+policy\b[\s\S]*?;/gi)) {
+    const statement = match[0];
+    if (
+      !/\bon\s+ltc_m\.(?:p034_provenance_snapshots|p034_provenance_project_observations|p034_provenance_item_observations|p034_provenance_source_references|projects|import_batches)\b/i.test(
+        statement,
+      )
+    ) {
+      issues.push('P034 policy fora do escopo de provenance e validação');
+    }
+    if (!/\bto\s+(?:ltc_m_runtime|ltc_m_provenance_writer)\b/i.test(statement)) {
+      issues.push('P034 policy deve declarar runtime ou capability writer');
+    }
+    if (/\bfor\s+(?:update|delete|all)\b/i.test(statement)) {
+      issues.push('P034 não pode criar policy de mutação');
+    }
+  }
+
+  const p034Tables = [
+    'p034_provenance_snapshots',
+    'p034_provenance_project_observations',
+    'p034_provenance_item_observations',
+    'p034_provenance_source_references',
+  ];
+  for (const table of p034Tables) {
+    const tablePattern = new RegExp(
+      `alter\\s+table\\s+ltc_m\\.${table}\\s+(?:enable|force)\\s+row\\s+level\\s+security\\s*;`,
+      'i',
+    );
+    if (!tablePattern.test(stripped)) issues.push(`P034 RLS/FORCE ausente: ${table}`);
+  }
+}
+
 export function scanMigrationText(sql, options = {}) {
   const issues = [];
   const scope =
-    options.migrationName === P026_AUDIT_FIX_MIGRATION_NAME
-      ? 'p026-audit-fix'
-      : options.migrationName === P026_MIGRATION_NAME
-        ? 'p026'
-        : options.migrationName === P029_MIGRATION_NAME
-          ? 'p029'
-          : options.migrationName === P031_MIGRATION_NAME
-            ? 'p031'
-            : options.migrationName === P021_MIGRATION_NAME
-              ? 'p021'
-              : options.migrationName === D40_MIGRATION_NAME
-                ? 'd40'
-                : options.migrationName === P013_MIGRATION_NAME
-                  ? 'p013'
-                  : options.migrationName === P009_MIGRATION_NAME
-                    ? 'p009'
-                    : 'p007';
+    options.migrationName === P034_MIGRATION_NAME
+      ? 'p034'
+      : options.migrationName === P026_AUDIT_FIX_MIGRATION_NAME
+        ? 'p026-audit-fix'
+        : options.migrationName === P026_MIGRATION_NAME
+          ? 'p026'
+          : options.migrationName === P029_MIGRATION_NAME
+            ? 'p029'
+            : options.migrationName === P031_MIGRATION_NAME
+              ? 'p031'
+              : options.migrationName === P021_MIGRATION_NAME
+                ? 'p021'
+                : options.migrationName === D40_MIGRATION_NAME
+                  ? 'd40'
+                  : options.migrationName === P013_MIGRATION_NAME
+                    ? 'p013'
+                    : options.migrationName === P009_MIGRATION_NAME
+                      ? 'p009'
+                      : 'p007';
   const stripped = stripSqlNoise(sql);
   const sqlForForbiddenPatterns =
     scope === 'p026-audit-fix'
@@ -805,7 +900,8 @@ export function scanMigrationText(sql, options = {}) {
   requireAdditiveAlterTables(stripped, issues, scope);
   requireApprovedAlterTypes(sql, issues, scope);
   requireSafeFunctions(sql, issues, scope);
-  requireP008Security(sql, stripped, issues, scope);
+  if (scope === 'p034') requireP034Security(sql, stripped, issues);
+  else requireP008Security(sql, stripped, issues, scope);
   if (scope === 'd40') requireD40Contract(sql, stripped, issues);
 
   if (/--project-ref\b/i.test(sql) || /\b[a-z0-9]{20}\.supabase\.co\b/i.test(sql)) {
