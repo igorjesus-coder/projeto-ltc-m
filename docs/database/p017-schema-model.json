@@ -1,25 +1,25 @@
 {
   "schemaContract": "ltcm.p017.schema-integrity.v1",
   "fingerprintContract": "ltcm.p017.schema-fingerprint.v1",
-  "migrationCount": 18,
-  "fingerprint": "0c63209deff70ac9fcf04d84cba6bd732925339084e0e51648b8e09063737e91",
+  "migrationCount": 19,
+  "fingerprint": "3a793592eab7e236c64c364a14db306ad70884caeb677e4376aa02586cbc8438",
   "summary": {
-    "relationCount": 28,
-    "tableCount": 19,
+    "relationCount": 32,
+    "tableCount": 23,
     "viewCount": 9,
     "materializedViewCount": 0,
-    "columnCount": 488,
-    "functionCount": 33,
-    "triggerCount": 66,
-    "indexCount": 79,
-    "primaryKeyCount": 19,
-    "uniqueConstraintCount": 20,
-    "foreignKeyCount": 55,
-    "checkConstraintCount": 101,
-    "protectedRlsTableCount": 19,
-    "forceRlsTableCount": 19,
-    "policyCount": 49,
-    "grantCount": 71,
+    "columnCount": 526,
+    "functionCount": 39,
+    "triggerCount": 78,
+    "indexCount": 100,
+    "primaryKeyCount": 23,
+    "uniqueConstraintCount": 28,
+    "foreignKeyCount": 65,
+    "checkConstraintCount": 125,
+    "protectedRlsTableCount": 23,
+    "forceRlsTableCount": 23,
+    "policyCount": 63,
+    "grantCount": 75,
     "typeCount": 10
   },
   "model": {
@@ -2242,6 +2242,396 @@
           {
             "position": 9,
             "name": "structural_range",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          }
+        ]
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_item_observations",
+        "kind": "table",
+        "rowSecurity": true,
+        "forceRowSecurity": true,
+        "options": [],
+        "comment": null,
+        "definition": null,
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "uuid",
+            "nullable": false,
+            "default": "gen_random_uuid()",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 2,
+            "name": "snapshot_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 3,
+            "name": "project_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 4,
+            "name": "project_code",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 5,
+            "name": "source_line_key",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 6,
+            "name": "item_id",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 7,
+            "name": "occurrence_ordinal",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 8,
+            "name": "occurrence_fingerprint",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          }
+        ]
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_project_observations",
+        "kind": "table",
+        "rowSecurity": true,
+        "forceRowSecurity": true,
+        "options": [],
+        "comment": null,
+        "definition": null,
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "uuid",
+            "nullable": false,
+            "default": "gen_random_uuid()",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 2,
+            "name": "snapshot_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 3,
+            "name": "project_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 4,
+            "name": "project_code",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 5,
+            "name": "occurrence_ordinal",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 6,
+            "name": "occurrence_fingerprint",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          }
+        ]
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_snapshots",
+        "kind": "table",
+        "rowSecurity": true,
+        "forceRowSecurity": true,
+        "options": [],
+        "comment": null,
+        "definition": null,
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "uuid",
+            "nullable": false,
+            "default": "gen_random_uuid()",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 10,
+            "name": "status",
+            "type": "text",
+            "nullable": false,
+            "default": "'success'::text",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 11,
+            "name": "authority_revision",
+            "type": "bigint",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 12,
+            "name": "captured_by_user_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 13,
+            "name": "request_id",
+            "type": "text",
+            "nullable": true,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 14,
+            "name": "capture_source",
+            "type": "text",
+            "nullable": false,
+            "default": "'api'::text",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 15,
+            "name": "captured_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": "now()",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 16,
+            "name": "completed_at",
+            "type": "timestamp with time zone",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 2,
+            "name": "import_batch_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 3,
+            "name": "project_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 4,
+            "name": "scope_type",
+            "type": "text",
+            "nullable": false,
+            "default": "'project'::text",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 5,
+            "name": "schema_version",
+            "type": "smallint",
+            "nullable": false,
+            "default": "1",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 6,
+            "name": "source_artifact_hash",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 7,
+            "name": "snapshot_fingerprint",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 8,
+            "name": "fingerprint_algorithm",
+            "type": "text",
+            "nullable": false,
+            "default": "'sha256-canonical-v1'::text",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 9,
+            "name": "source_observation_contract",
+            "type": "text",
+            "nullable": false,
+            "default": "'ltcm.p015.reconciliation.v1'::text",
+            "generated": null,
+            "comment": null
+          }
+        ]
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_source_references",
+        "kind": "table",
+        "rowSecurity": true,
+        "forceRowSecurity": true,
+        "options": [],
+        "comment": null,
+        "definition": null,
+        "columns": [
+          {
+            "position": 1,
+            "name": "id",
+            "type": "uuid",
+            "nullable": false,
+            "default": "gen_random_uuid()",
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 2,
+            "name": "project_id",
+            "type": "uuid",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 3,
+            "name": "project_observation_id",
+            "type": "uuid",
+            "nullable": true,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 4,
+            "name": "item_observation_id",
+            "type": "uuid",
+            "nullable": true,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 5,
+            "name": "reference_ordinal",
+            "type": "integer",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 6,
+            "name": "kind",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 7,
+            "name": "locator",
+            "type": "text",
+            "nullable": false,
+            "default": null,
+            "generated": null,
+            "comment": null
+          },
+          {
+            "position": 8,
+            "name": "fingerprint",
             "type": "text",
             "nullable": false,
             "default": null,
@@ -6928,6 +7318,641 @@
       },
       {
         "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "ck_p034_item_observation_code",
+        "type": "check",
+        "columns": [
+          "project_code"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (project_code ~ '^[A-Z0-9][A-Z0-9._/-]{0,63}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "ck_p034_item_observation_fingerprint",
+        "type": "check",
+        "columns": [
+          "occurrence_fingerprint"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (lower(occurrence_fingerprint) = occurrence_fingerprint AND occurrence_fingerprint ~ '^[0-9a-f]{64}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "ck_p034_item_observation_id",
+        "type": "check",
+        "columns": [
+          "item_id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (item_id IS NULL OR btrim(item_id) <> ''::text AND item_id = btrim(item_id))"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "ck_p034_item_observation_line",
+        "type": "check",
+        "columns": [
+          "source_line_key"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (source_line_key ~ '^p012-line-v1:[0-9a-f]{64}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "ck_p034_item_observation_ordinal",
+        "type": "check",
+        "columns": [
+          "occurrence_ordinal"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (occurrence_ordinal > 0)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "fk_p034_item_observation_project",
+        "type": "foreign_key",
+        "columns": [
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "projects",
+        "referencedColumns": [
+          "id"
+        ],
+        "definition": "FOREIGN KEY (project_id) REFERENCES ltc_m.projects(id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "fk_p034_item_observation_snapshot",
+        "type": "foreign_key",
+        "columns": [
+          "snapshot_id",
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "p034_provenance_snapshots",
+        "referencedColumns": [
+          "id",
+          "project_id"
+        ],
+        "definition": "FOREIGN KEY (snapshot_id, project_id) REFERENCES ltc_m.p034_provenance_snapshots(id, project_id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "pk_p034_item_observations",
+        "type": "primary_key",
+        "columns": [
+          "id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "uq_p034_item_observation_id_project",
+        "type": "unique",
+        "columns": [
+          "id",
+          "project_id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "uq_p034_item_observation_ordinal",
+        "type": "unique",
+        "columns": [
+          "snapshot_id",
+          "occurrence_ordinal"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (snapshot_id, occurrence_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "ck_p034_project_observation_code",
+        "type": "check",
+        "columns": [
+          "project_code"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (project_code ~ '^[A-Z0-9][A-Z0-9._/-]{0,63}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "ck_p034_project_observation_fingerprint",
+        "type": "check",
+        "columns": [
+          "occurrence_fingerprint"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (lower(occurrence_fingerprint) = occurrence_fingerprint AND occurrence_fingerprint ~ '^[0-9a-f]{64}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "ck_p034_project_observation_ordinal",
+        "type": "check",
+        "columns": [
+          "occurrence_ordinal"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (occurrence_ordinal > 0)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "fk_p034_project_observation_project",
+        "type": "foreign_key",
+        "columns": [
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "projects",
+        "referencedColumns": [
+          "id"
+        ],
+        "definition": "FOREIGN KEY (project_id) REFERENCES ltc_m.projects(id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "fk_p034_project_observation_snapshot",
+        "type": "foreign_key",
+        "columns": [
+          "snapshot_id",
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "p034_provenance_snapshots",
+        "referencedColumns": [
+          "id",
+          "project_id"
+        ],
+        "definition": "FOREIGN KEY (snapshot_id, project_id) REFERENCES ltc_m.p034_provenance_snapshots(id, project_id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "pk_p034_project_observations",
+        "type": "primary_key",
+        "columns": [
+          "id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "uq_p034_project_observation_id_project",
+        "type": "unique",
+        "columns": [
+          "id",
+          "project_id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "uq_p034_project_observation_ordinal",
+        "type": "unique",
+        "columns": [
+          "snapshot_id",
+          "occurrence_ordinal"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (snapshot_id, occurrence_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_algorithm",
+        "type": "check",
+        "columns": [
+          "fingerprint_algorithm"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (fingerprint_algorithm = 'sha256-canonical-v1'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_artifact_hash",
+        "type": "check",
+        "columns": [
+          "source_artifact_hash"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (lower(source_artifact_hash) = source_artifact_hash AND source_artifact_hash ~ '^[0-9a-f]{64}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_completed",
+        "type": "check",
+        "columns": [
+          "completed_at",
+          "captured_at"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (completed_at >= captured_at)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_contract",
+        "type": "check",
+        "columns": [
+          "source_observation_contract"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (source_observation_contract = 'ltcm.p015.reconciliation.v1'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_fingerprint",
+        "type": "check",
+        "columns": [
+          "snapshot_fingerprint"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (lower(snapshot_fingerprint) = snapshot_fingerprint AND snapshot_fingerprint ~ '^[0-9a-f]{64}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_request",
+        "type": "check",
+        "columns": [
+          "request_id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (request_id IS NULL OR btrim(request_id) <> ''::text AND char_length(request_id) <= 200)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_revision",
+        "type": "check",
+        "columns": [
+          "authority_revision"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (authority_revision > 0)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_schema",
+        "type": "check",
+        "columns": [
+          "schema_version"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (schema_version = 1)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_scope",
+        "type": "check",
+        "columns": [
+          "scope_type"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (scope_type = 'project'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_source",
+        "type": "check",
+        "columns": [
+          "capture_source"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (capture_source = 'api'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ck_p034_snapshot_status",
+        "type": "check",
+        "columns": [
+          "status"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (status = 'success'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "fk_p034_snapshot_actor",
+        "type": "foreign_key",
+        "columns": [
+          "captured_by_user_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "app_users",
+        "referencedColumns": [
+          "id"
+        ],
+        "definition": "FOREIGN KEY (captured_by_user_id) REFERENCES ltc_m.app_users(id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "fk_p034_snapshot_batch",
+        "type": "foreign_key",
+        "columns": [
+          "import_batch_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "import_batches",
+        "referencedColumns": [
+          "id"
+        ],
+        "definition": "FOREIGN KEY (import_batch_id) REFERENCES ltc_m.import_batches(id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "fk_p034_snapshot_project",
+        "type": "foreign_key",
+        "columns": [
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "projects",
+        "referencedColumns": [
+          "id"
+        ],
+        "definition": "FOREIGN KEY (project_id) REFERENCES ltc_m.projects(id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "pk_p034_provenance_snapshots",
+        "type": "primary_key",
+        "columns": [
+          "id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_batch_project",
+        "type": "unique",
+        "columns": [
+          "import_batch_id",
+          "project_id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (import_batch_id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_fingerprint",
+        "type": "unique",
+        "columns": [
+          "snapshot_fingerprint"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (snapshot_fingerprint)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_id_project",
+        "type": "unique",
+        "columns": [
+          "id",
+          "project_id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_project_revision",
+        "type": "unique",
+        "columns": [
+          "project_id",
+          "authority_revision"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "UNIQUE (project_id, authority_revision)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "ck_p034_source_reference_fingerprint",
+        "type": "check",
+        "columns": [
+          "fingerprint"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (lower(fingerprint) = fingerprint AND fingerprint ~ '^[0-9a-f]{64}$'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "ck_p034_source_reference_kind",
+        "type": "check",
+        "columns": [
+          "kind"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (kind = ANY (ARRAY['source'::text, 'database'::text]))"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "ck_p034_source_reference_locator",
+        "type": "check",
+        "columns": [
+          "locator"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (btrim(locator) <> ''::text AND char_length(locator) <= 1024 AND locator !~* '(?:[A-Z]:\\\\|(?:^|\\s)/(?:home|Users)/|postgres(?:ql)?://|https?://|(^|[^a-z0-9_])(?:password|token|private_key|client_secret)[[:space:]]*=)'::text)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "ck_p034_source_reference_one_parent",
+        "type": "check",
+        "columns": [
+          "project_observation_id",
+          "item_observation_id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (((project_observation_id IS NOT NULL)::integer + (item_observation_id IS NOT NULL)::integer) = 1)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "ck_p034_source_reference_ordinal",
+        "type": "check",
+        "columns": [
+          "reference_ordinal"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "CHECK (reference_ordinal > 0)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "fk_p034_source_reference_item_observation",
+        "type": "foreign_key",
+        "columns": [
+          "item_observation_id",
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "p034_provenance_item_observations",
+        "referencedColumns": [
+          "id",
+          "project_id"
+        ],
+        "definition": "FOREIGN KEY (item_observation_id, project_id) REFERENCES ltc_m.p034_provenance_item_observations(id, project_id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "fk_p034_source_reference_project",
+        "type": "foreign_key",
+        "columns": [
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "projects",
+        "referencedColumns": [
+          "id"
+        ],
+        "definition": "FOREIGN KEY (project_id) REFERENCES ltc_m.projects(id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "fk_p034_source_reference_project_observation",
+        "type": "foreign_key",
+        "columns": [
+          "project_observation_id",
+          "project_id"
+        ],
+        "referencedSchema": "ltc_m",
+        "referencedTable": "p034_provenance_project_observations",
+        "referencedColumns": [
+          "id",
+          "project_id"
+        ],
+        "definition": "FOREIGN KEY (project_observation_id, project_id) REFERENCES ltc_m.p034_provenance_project_observations(id, project_id) ON DELETE RESTRICT"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "pk_p034_source_references",
+        "type": "primary_key",
+        "columns": [
+          "id"
+        ],
+        "referencedSchema": null,
+        "referencedTable": null,
+        "referencedColumns": [],
+        "definition": "PRIMARY KEY (id)"
+      },
+      {
+        "schema": "ltc_m",
         "table": "plan_versions",
         "name": "ck_plan_versions_approval",
         "type": "check",
@@ -8196,6 +9221,216 @@
       },
       {
         "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "ix_p034_item_observation_identity",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE INDEX ix_p034_item_observation_identity ON ltc_m.p034_provenance_item_observations USING btree (snapshot_id, project_code, source_line_key, occurrence_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "ix_p034_item_observation_project_identity",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE INDEX ix_p034_item_observation_project_identity ON ltc_m.p034_provenance_item_observations USING btree (project_id, project_code, source_line_key)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "pk_p034_item_observations",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX pk_p034_item_observations ON ltc_m.p034_provenance_item_observations USING btree (id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "uq_p034_item_observation_id_project",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_item_observation_id_project ON ltc_m.p034_provenance_item_observations USING btree (id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "uq_p034_item_observation_ordinal",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_item_observation_ordinal ON ltc_m.p034_provenance_item_observations USING btree (snapshot_id, occurrence_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "ix_p034_project_observation_identity",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE INDEX ix_p034_project_observation_identity ON ltc_m.p034_provenance_project_observations USING btree (snapshot_id, project_code, occurrence_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "pk_p034_project_observations",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX pk_p034_project_observations ON ltc_m.p034_provenance_project_observations USING btree (id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "uq_p034_project_observation_id_project",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_project_observation_id_project ON ltc_m.p034_provenance_project_observations USING btree (id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "uq_p034_project_observation_ordinal",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_project_observation_ordinal ON ltc_m.p034_provenance_project_observations USING btree (snapshot_id, occurrence_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ix_p034_snapshot_batch_project",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE INDEX ix_p034_snapshot_batch_project ON ltc_m.p034_provenance_snapshots USING btree (import_batch_id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "ix_p034_snapshot_project_latest",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE INDEX ix_p034_snapshot_project_latest ON ltc_m.p034_provenance_snapshots USING btree (project_id, authority_revision DESC)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "pk_p034_provenance_snapshots",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX pk_p034_provenance_snapshots ON ltc_m.p034_provenance_snapshots USING btree (id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_batch_project",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_snapshot_batch_project ON ltc_m.p034_provenance_snapshots USING btree (import_batch_id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_fingerprint",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_snapshot_fingerprint ON ltc_m.p034_provenance_snapshots USING btree (snapshot_fingerprint)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_id_project",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_snapshot_id_project ON ltc_m.p034_provenance_snapshots USING btree (id, project_id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "uq_p034_snapshot_project_revision",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_snapshot_project_revision ON ltc_m.p034_provenance_snapshots USING btree (project_id, authority_revision)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "ix_p034_source_reference_item",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE INDEX ix_p034_source_reference_item ON ltc_m.p034_provenance_source_references USING btree (project_id, item_observation_id, reference_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "ix_p034_source_reference_project",
+        "unique": false,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE INDEX ix_p034_source_reference_project ON ltc_m.p034_provenance_source_references USING btree (project_id, project_observation_id, reference_ordinal)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "pk_p034_source_references",
+        "unique": true,
+        "primary": true,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX pk_p034_source_references ON ltc_m.p034_provenance_source_references USING btree (id)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "uq_p034_source_reference_item_ordinal",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_source_reference_item_ordinal ON ltc_m.p034_provenance_source_references USING btree (item_observation_id, reference_ordinal) WHERE (item_observation_id IS NOT NULL)"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "uq_p034_source_reference_project_ordinal",
+        "unique": true,
+        "primary": false,
+        "valid": true,
+        "ready": true,
+        "definition": "CREATE UNIQUE INDEX uq_p034_source_reference_project_ordinal ON ltc_m.p034_provenance_source_references USING btree (project_observation_id, reference_ordinal) WHERE (project_observation_id IS NOT NULL)"
+      },
+      {
+        "schema": "ltc_m",
         "table": "plan_versions",
         "name": "ix_plan_versions_source",
         "unique": false,
@@ -8520,6 +9755,72 @@
         "securityDefiner": false,
         "volatility": "volatile",
         "definitionHash": "0d3f9733593e0cfc094cb9bd9c51d3294a885d8484d31af625f359f27f5329d2"
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_item_observation_reference_guard",
+        "identityArguments": "",
+        "resultType": "trigger",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": false,
+        "volatility": "volatile",
+        "definitionHash": "6be18e249d10108612d8f2828790892db41b5e3dcdfa5955465e0b5a16bfc5cd"
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_project_observation_reference_guard",
+        "identityArguments": "",
+        "resultType": "trigger",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": false,
+        "volatility": "volatile",
+        "definitionHash": "114eaa9c4ce622320a02a3ebbe0d8ce59194928decbab045fcedc809c652dbb2"
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_context_guard",
+        "identityArguments": "",
+        "resultType": "trigger",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": false,
+        "volatility": "volatile",
+        "definitionHash": "cf87bfa70f44cfbb146d8b5450a62ac052b7d588b913715d230e1cde90027320"
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_reject_delete",
+        "identityArguments": "",
+        "resultType": "trigger",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": false,
+        "volatility": "volatile",
+        "definitionHash": "f8c31033eea0b5b988e0d9971deb7c9ac075cca12e210b67986e138651d4418f"
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_reject_update",
+        "identityArguments": "",
+        "resultType": "trigger",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": false,
+        "volatility": "volatile",
+        "definitionHash": "dc25d02b52bb8142d4a31d8e64e9f29ea812efba3887ed81025254ffb83ed7ce"
+      },
+      {
+        "schema": "ltc_m",
+        "name": "p034_provenance_source_hash_matches_batch",
+        "identityArguments": "",
+        "resultType": "trigger",
+        "kind": "function",
+        "language": "plpgsql",
+        "securityDefiner": false,
+        "volatility": "volatile",
+        "definitionHash": "2a4c6e35bee2c0c83d4d73c582b9c594159e8fcca790327e9ab9bb31a5a86152"
       },
       {
         "schema": "ltc_m",
@@ -9017,6 +10318,78 @@
       },
       {
         "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "trg_p034_item_no_delete",
+        "definition": "CREATE TRIGGER trg_p034_item_no_delete BEFORE DELETE ON ltc_m.p034_provenance_item_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "trg_p034_item_no_update",
+        "definition": "CREATE TRIGGER trg_p034_item_no_update BEFORE UPDATE ON ltc_m.p034_provenance_item_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "trg_p034_item_reference_cardinality",
+        "definition": "CREATE CONSTRAINT TRIGGER trg_p034_item_reference_cardinality AFTER INSERT ON ltc_m.p034_provenance_item_observations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_item_observation_reference_guard()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "trg_p034_project_no_delete",
+        "definition": "CREATE TRIGGER trg_p034_project_no_delete BEFORE DELETE ON ltc_m.p034_provenance_project_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "trg_p034_project_no_update",
+        "definition": "CREATE TRIGGER trg_p034_project_no_update BEFORE UPDATE ON ltc_m.p034_provenance_project_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "trg_p034_project_reference_cardinality",
+        "definition": "CREATE CONSTRAINT TRIGGER trg_p034_project_reference_cardinality AFTER INSERT ON ltc_m.p034_provenance_project_observations DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_project_observation_reference_guard()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "trg_p034_snapshot_context",
+        "definition": "CREATE TRIGGER trg_p034_snapshot_context BEFORE INSERT ON ltc_m.p034_provenance_snapshots FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_context_guard()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "trg_p034_snapshot_hash",
+        "definition": "CREATE TRIGGER trg_p034_snapshot_hash BEFORE INSERT ON ltc_m.p034_provenance_snapshots FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_source_hash_matches_batch()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "trg_p034_snapshot_no_delete",
+        "definition": "CREATE TRIGGER trg_p034_snapshot_no_delete BEFORE DELETE ON ltc_m.p034_provenance_snapshots FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "trg_p034_snapshot_no_update",
+        "definition": "CREATE TRIGGER trg_p034_snapshot_no_update BEFORE UPDATE ON ltc_m.p034_provenance_snapshots FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "trg_p034_reference_no_delete",
+        "definition": "CREATE TRIGGER trg_p034_reference_no_delete BEFORE DELETE ON ltc_m.p034_provenance_source_references FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete()"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "trg_p034_reference_no_update",
+        "definition": "CREATE TRIGGER trg_p034_reference_no_update BEFORE UPDATE ON ltc_m.p034_provenance_source_references FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update()"
+      },
+      {
+        "schema": "ltc_m",
         "table": "plan_versions",
         "name": "trg_00_plan_versions_no_delete",
         "definition": "CREATE TRIGGER trg_00_plan_versions_no_delete BEFORE DELETE ON ltc_m.plan_versions FOR EACH ROW EXECUTE FUNCTION ltc_m.prevent_physical_delete()"
@@ -9409,6 +10782,18 @@
       },
       {
         "schema": "ltc_m",
+        "table": "import_batches",
+        "name": "p034_writer_batches_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role])))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
         "table": "import_row_errors",
         "name": "import_row_errors_insert",
         "permissive": true,
@@ -9565,6 +10950,150 @@
       },
       {
         "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "p034_item_observations_runtime_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_runtime"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = 'admin'::ltc_m.app_role OR (EXISTS ( SELECT 1\n           FROM ltc_m.projects p\n             JOIN ltc_m.clients c ON c.id = p.client_id\n          WHERE p.id = p034_provenance_item_observations.project_id AND p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL))))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "p034_item_observations_writer_insert",
+        "permissive": true,
+        "command": "a",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": null,
+        "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.p034_provenance_snapshots s\n  WHERE s.id = p034_provenance_item_observations.snapshot_id AND s.project_id = p034_provenance_item_observations.project_id)) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_item_observations.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_item_observations",
+        "name": "p034_item_observations_writer_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_item_observations.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "p034_project_observations_runtime_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_runtime"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = 'admin'::ltc_m.app_role OR (EXISTS ( SELECT 1\n           FROM ltc_m.projects p\n             JOIN ltc_m.clients c ON c.id = p.client_id\n          WHERE p.id = p034_provenance_project_observations.project_id AND p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL))))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "p034_project_observations_writer_insert",
+        "permissive": true,
+        "command": "a",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": null,
+        "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.p034_provenance_snapshots s\n  WHERE s.id = p034_provenance_project_observations.snapshot_id AND s.project_id = p034_provenance_project_observations.project_id)) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_project_observations.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_project_observations",
+        "name": "p034_project_observations_writer_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_project_observations.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "p034_snapshots_runtime_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_runtime"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = 'admin'::ltc_m.app_role OR p034_provenance_snapshots.status = 'success'::text AND (EXISTS ( SELECT 1\n           FROM ltc_m.projects p\n             JOIN ltc_m.clients c ON c.id = p.client_id\n          WHERE p.id = p034_provenance_snapshots.project_id AND p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL))))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "p034_snapshots_writer_insert",
+        "permissive": true,
+        "command": "a",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": null,
+        "check": "captured_by_user_id = ltc_m.current_actor_id(true) AND capture_source = current_setting('ltc_m.source'::text, true) AND capture_source = 'api'::text AND NOT request_id IS DISTINCT FROM NULLIF(current_setting('ltc_m.request_id'::text, true), ''::text) AND (EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_snapshots.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_snapshots",
+        "name": "p034_snapshots_writer_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_snapshots.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "p034_source_references_runtime_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_runtime"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = 'admin'::ltc_m.app_role OR (EXISTS ( SELECT 1\n           FROM ltc_m.projects p\n             JOIN ltc_m.clients c ON c.id = p.client_id\n          WHERE p.id = p034_provenance_source_references.project_id AND p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL))))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "p034_source_references_writer_insert",
+        "permissive": true,
+        "command": "a",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": null,
+        "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_source_references.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "p034_provenance_source_references",
+        "name": "p034_source_references_writer_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = ANY (ARRAY['editor'::ltc_m.app_role, 'admin'::ltc_m.app_role]))) AND (EXISTS ( SELECT 1\n   FROM ltc_m.projects p\n  WHERE p.id = p034_provenance_source_references.project_id AND ((EXISTS ( SELECT 1\n           FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n          WHERE ac.app_role = 'admin'::ltc_m.app_role)) OR p.status = 'active'::ltc_m.project_status AND p.deleted_at IS NULL)))",
+        "check": null
+      },
+      {
+        "schema": "ltc_m",
         "table": "plan_versions",
         "name": "plan_versions_insert",
         "permissive": true,
@@ -9634,6 +11163,18 @@
         ],
         "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role OR authorization_context.app_role = 'editor'::ltc_m.app_role AND project_items.active = true AND project_items.deleted_at IS NULL AND (EXISTS ( SELECT 1\n           FROM ltc_m.projects\n          WHERE projects.id = project_items.project_id))))",
         "check": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() authorization_context(app_user_id, app_role)\n  WHERE authorization_context.app_role = 'admin'::ltc_m.app_role OR authorization_context.app_role = 'editor'::ltc_m.app_role AND project_items.active = true AND project_items.deleted_at IS NULL AND (EXISTS ( SELECT 1\n           FROM ltc_m.projects\n          WHERE projects.id = project_items.project_id))))"
+      },
+      {
+        "schema": "ltc_m",
+        "table": "projects",
+        "name": "p034_writer_projects_select",
+        "permissive": true,
+        "command": "r",
+        "roles": [
+          "ltc_m_provenance_writer"
+        ],
+        "using": "(EXISTS ( SELECT 1\n   FROM ltc_m.authorization_context() ac(app_user_id, app_role)\n  WHERE ac.app_role = 'admin'::ltc_m.app_role OR projects.status = 'active'::ltc_m.project_status AND projects.deleted_at IS NULL))",
+        "check": null
       },
       {
         "schema": "ltc_m",
@@ -10048,6 +11589,38 @@
       {
         "schema": "ltc_m",
         "object": "monthly_source_artifacts",
+        "objectType": "relation",
+        "grantee": "ltc_m_runtime",
+        "privilege": "SELECT",
+        "grantable": false
+      },
+      {
+        "schema": "ltc_m",
+        "object": "p034_provenance_item_observations",
+        "objectType": "relation",
+        "grantee": "ltc_m_runtime",
+        "privilege": "SELECT",
+        "grantable": false
+      },
+      {
+        "schema": "ltc_m",
+        "object": "p034_provenance_project_observations",
+        "objectType": "relation",
+        "grantee": "ltc_m_runtime",
+        "privilege": "SELECT",
+        "grantable": false
+      },
+      {
+        "schema": "ltc_m",
+        "object": "p034_provenance_snapshots",
+        "objectType": "relation",
+        "grantee": "ltc_m_runtime",
+        "privilege": "SELECT",
+        "grantable": false
+      },
+      {
+        "schema": "ltc_m",
+        "object": "p034_provenance_source_references",
         "objectType": "relation",
         "grantee": "ltc_m_runtime",
         "privilege": "SELECT",

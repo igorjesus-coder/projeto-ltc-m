@@ -16,6 +16,8 @@ const P021_MIGRATION = '20260828100000_add_p021_authorization_approver.sql';
 const P026_MIGRATION = '20260901100000_add_p026_master_data_management.sql';
 const P026_AUDIT_FIX_MIGRATION = '20260902100000_fix_p026_catalog_audit_identity.sql';
 const P029_MIGRATION = '20260903100000_add_p029_plan_content_revision.sql';
+const P034_MIGRATION = '20260910100000_add_p034_provenance_foundation.sql';
+const P034_MIGRATION_INVENTORY_UPDATED_TO_19 = 'P034_MIGRATION_INVENTORY_UPDATED_TO_19';
 const FUTURE_MIGRATION = '20990101000000_future_valid_migration.sql';
 const HISTORICAL_MIDDLE = '20260730150000_historical_middle.sql';
 const HISTORICAL_BEFORE_FINAL = '20260804115959_historical_before_final.sql';
@@ -44,6 +46,7 @@ test('as três suítes aceitam as migrations atuais e sucessoras arbitrárias', 
     P021_MIGRATION,
     P026_MIGRATION,
     P026_AUDIT_FIX_MIGRATION,
+    P034_MIGRATION,
   ];
   const future = [...current, FUTURE_MIGRATION];
 
@@ -62,11 +65,15 @@ test('o inventário atual real é aceito sem teto global de cardinalidade', asyn
     path.join(REPOSITORY_ROOT, 'supabase', 'migrations'),
     P016_MIGRATION_BASELINE,
   );
-  assert.equal(inventory.length, 18);
+  assert.equal(inventory.length, 19);
   assert.ok(inventory.length > P016_MIGRATION_BASELINE.length);
   assert.ok(inventory.some((migration) => migration.name === P026_MIGRATION));
   assert.ok(inventory.some((migration) => migration.name === P026_AUDIT_FIX_MIGRATION));
   assert.ok(inventory.some((migration) => migration.name === P029_MIGRATION));
+  assert.ok(
+    inventory.some((migration) => migration.name === P034_MIGRATION),
+    P034_MIGRATION_INVENTORY_UPDATED_TO_19,
+  );
 });
 
 test('o modo histórico do P013 seleciona exatamente o baseline e exclui sucessoras', async () => {

@@ -41,9 +41,9 @@ export function validateP017Sources({
   const relations = snapshot.model.relations;
   const tables = relations.filter((relation) => relation.kind === 'table');
   const views = relations.filter((relation) => relation.kind === 'view');
-  if (tables.length !== 19) issues.push(`inventário P008 de tabelas divergente: ${tables.length}`);
+  if (tables.length !== 23) issues.push(`inventário P008 de tabelas divergente: ${tables.length}`);
   if (views.length !== 9) issues.push(`inventário P016 de views divergente: ${views.length}`);
-  if (snapshot.model.policies.length !== 49) {
+  if (snapshot.model.policies.length !== 63) {
     issues.push(`inventário P008 de policies divergente: ${snapshot.model.policies.length}`);
   }
   if (tables.some((table) => !table.rowSecurity || !table.forceRowSecurity)) {
