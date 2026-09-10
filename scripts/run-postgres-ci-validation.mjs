@@ -495,6 +495,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
     evidence.regressions.p034_postgres = true;
     evidence.p034_postgres = {
       passed: true,
+      execution_marker: 'P034_POSTGRES_CI_EXECUTED_NOT_SKIPPED',
       cluster_mode: 'isolated_docker',
       database: P013_DATABASE,
       host_class: 'loopback',

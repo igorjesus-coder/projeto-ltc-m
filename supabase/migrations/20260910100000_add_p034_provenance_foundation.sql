@@ -158,7 +158,7 @@ create table ltc_m.p034_provenance_source_references (
     constraint ck_p034_source_reference_locator check (
         btrim(locator) <> ''
         and char_length(locator) <= 1024
-        and locator !~* E'(?:[A-Z]:\\\\|(?:^|\\s)/(?:home|Users)/|postgres(?:ql)?://|https?://|\\b(?:password|token|private_key|client_secret)\\s*=)'
+        and locator !~* E'(?:[A-Z]:\\\\|(?:^|\\s)/(?:home|Users)/|postgres(?:ql)?://|https?://|(^|[^a-z0-9_])(?:password|token|private_key|client_secret)[[:space:]]*=)'
     ),
     constraint ck_p034_source_reference_fingerprint check (
         lower(fingerprint) = fingerprint

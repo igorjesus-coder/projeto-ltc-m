@@ -24,11 +24,42 @@ const ITEM_OBSERVATION_ID = '00000000-0000-4000-8000-000000034010';
 const PROJECT_REFERENCE_ID = '00000000-0000-4000-8000-000000034011';
 const ITEM_REFERENCE_ID = '00000000-0000-4000-8000-000000034012';
 const MISSING_REFERENCE_OBSERVATION_ID = '00000000-0000-4000-8000-000000034013';
+const DRAFT_SNAPSHOT_ID = '00000000-0000-4000-8000-000000034014';
+const DRAFT_PROJECT_OBSERVATION_ID = '00000000-0000-4000-8000-000000034015';
+const DRAFT_ITEM_OBSERVATION_ID = '00000000-0000-4000-8000-000000034016';
+const DRAFT_REFERENCE_ID = '00000000-0000-4000-8000-000000034017';
+const SECOND_BATCH_ID = '00000000-0000-4000-8000-000000034018';
+const SECOND_PROJECT_OBSERVATION_ID = '00000000-0000-4000-8000-000000034019';
+const SECOND_ITEM_OBSERVATION_ID = '00000000-0000-4000-8000-000000034020';
+const SECOND_PROJECT_REFERENCE_ID = '00000000-0000-4000-8000-000000034021';
+const SECOND_ITEM_REFERENCE_ID = '00000000-0000-4000-8000-000000034022';
+const DUPLICATE_PROJECT_OBSERVATION_ID = '00000000-0000-4000-8000-000000034023';
+const DUPLICATE_PROJECT_REFERENCE_ID = '00000000-0000-4000-8000-000000034024';
+const DUPLICATE_ITEM_OBSERVATION_ID = '00000000-0000-4000-8000-000000034025';
+const DUPLICATE_ITEM_REFERENCE_ID = '00000000-0000-4000-8000-000000034026';
+const NULL_ITEM_OBSERVATION_ID = '00000000-0000-4000-8000-000000034027';
+const NULL_ITEM_REFERENCE_ID = '00000000-0000-4000-8000-000000034028';
+const TRIMMED_ITEM_OBSERVATION_ID = '00000000-0000-4000-8000-000000034029';
+const TRIMMED_ITEM_REFERENCE_ID = '00000000-0000-4000-8000-000000034030';
+const INVALID_PROJECT_OBSERVATION_ID = '00000000-0000-4000-8000-000000034031';
+const INVALID_ITEM_OBSERVATION_ID = '00000000-0000-4000-8000-000000034032';
+const INVALID_REFERENCE_ID = '00000000-0000-4000-8000-000000034033';
+const INVALID_SNAPSHOT_ID = '00000000-0000-4000-8000-000000034034';
+const FK_REFERENCE_ID = '00000000-0000-4000-8000-000000034035';
 const SOURCE_HASH = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const DRAFT_SOURCE_HASH = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const SECOND_SOURCE_HASH = 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 const LINE_KEY = `p012-line-v1:${'c'.repeat(64)}`;
 const SYNTHETIC_PASSWORD = 'p034_local_test_only';
 const ADMIN_BOOTSTRAP_MIGRATION = '20260731103000_add_ltcm_audit_read_event.sql';
+const MARKERS = Object.freeze({
+  runtimeCannotAssumeWriter: 'RUNTIME_CANNOT_ASSUME_PROVENANCE_WRITER',
+  projectDuplicate: 'PROJECT_DUPLICATE_OCCURRENCE_CARDINALITY_PRESERVED',
+  itemDuplicate: 'ITEM_DUPLICATE_OCCURRENCE_CARDINALITY_PRESERVED',
+  commitIsolation: 'PROVENANCE_POOL_COMMIT_STATE_ISOLATED',
+  rollbackIsolation: 'PROVENANCE_POOL_ROLLBACK_STATE_ISOLATED',
+  sessionIsolation: 'PROVENANCE_POOL_SESSION_STATE_ISOLATED',
+});
 
 function databaseUrl() {
   if (!DATABASE_URL) throw new Error('P034_POSTGRES_ENV_MISSING');
@@ -120,8 +151,74 @@ async function setupFixtures(admin) {
     await client.query(
       `insert into ltc_m.import_batches (id, source_name, source_hash, submitted_by_user_id)
        values ($1::uuid, 'p034-a.xlsx', $2::text, $3::uuid),
-              ($4::uuid, 'p034-b.xlsx', $5::text, $3::uuid)`,
-      [BATCH_ID, SOURCE_HASH, ADMIN_ID, DRAFT_BATCH_ID, DRAFT_SOURCE_HASH],
+              ($4::uuid, 'p034-b.xlsx', $5::text, $3::uuid),
+              ($6::uuid, 'p034-c.xlsx', $7::text, $3::uuid)`,
+      [
+        BATCH_ID,
+        SOURCE_HASH,
+        ADMIN_ID,
+        DRAFT_BATCH_ID,
+        DRAFT_SOURCE_HASH,
+        SECOND_BATCH_ID,
+        SECOND_SOURCE_HASH,
+      ],
+    );
+    await client.query('commit');
+  } catch (error) {
+    await client.query('rollback').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function setupDraftFacts(admin) {
+  const client = await admin.connect();
+  try {
+    await client.query('begin');
+    await client.query(
+      `select ltc_m.set_actor_context($1::uuid, 'ci-p034|admin', 'p034-draft-fixture', null, 'api', false)`,
+      [ADMIN_ID],
+    );
+    await client.query(
+      `insert into ltc_m.p034_provenance_snapshots
+         (id, import_batch_id, project_id, source_artifact_hash, snapshot_fingerprint,
+          authority_revision, captured_by_user_id, request_id, captured_at, completed_at)
+       values ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, 1, $6::uuid,
+               'p034-draft-fixture', now(), now())`,
+      [
+        DRAFT_SNAPSHOT_ID,
+        DRAFT_BATCH_ID,
+        DRAFT_PROJECT_ID,
+        DRAFT_SOURCE_HASH,
+        '7'.repeat(64),
+        ADMIN_ID,
+      ],
+    );
+    await client.query(
+      `insert into ltc_m.p034_provenance_project_observations
+         (id, snapshot_id, project_id, project_code, occurrence_ordinal, occurrence_fingerprint)
+       values ($1::uuid, $2::uuid, $3::uuid, 'P034-B', 1, $4::text)`,
+      [DRAFT_PROJECT_OBSERVATION_ID, DRAFT_SNAPSHOT_ID, DRAFT_PROJECT_ID, '8'.repeat(64)],
+    );
+    await client.query(
+      `insert into ltc_m.p034_provenance_item_observations
+         (id, snapshot_id, project_id, project_code, source_line_key, item_id,
+          occurrence_ordinal, occurrence_fingerprint)
+       values ($1::uuid, $2::uuid, $3::uuid, 'P034-B', $4::text, null, 1, $5::text)`,
+      [DRAFT_ITEM_OBSERVATION_ID, DRAFT_SNAPSHOT_ID, DRAFT_PROJECT_ID, LINE_KEY, '9'.repeat(64)],
+    );
+    await client.query(
+      `insert into ltc_m.p034_provenance_source_references
+         (id, project_id, project_observation_id, reference_ordinal, kind, locator, fingerprint)
+       values ($1::uuid, $2::uuid, $3::uuid, 1, 'source', 'P034 draft source', $4::text)`,
+      [DRAFT_REFERENCE_ID, DRAFT_PROJECT_ID, DRAFT_PROJECT_OBSERVATION_ID, 'a'.repeat(64)],
+    );
+    await client.query(
+      `insert into ltc_m.p034_provenance_source_references
+         (project_id, item_observation_id, reference_ordinal, kind, locator, fingerprint)
+       values ($1::uuid, $2::uuid, 1, 'source', 'P034 draft item source', $3::text)`,
+      [DRAFT_PROJECT_ID, DRAFT_ITEM_OBSERVATION_ID, 'b'.repeat(64)],
     );
     await client.query('commit');
   } catch (error) {
@@ -191,6 +288,150 @@ async function inRole(pool, role, operation, { commit = false, requestId = 'p034
   }
 }
 
+async function assertSessionIsolation(pool, targetRole, commit, marker) {
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query(`set local role ${targetRole}`);
+    await client.query(
+      `select ltc_m.set_actor_context($1::uuid, 'ci-p034|editor', 'p034-hygiene', null, 'api', false)`,
+      [EDITOR_ID],
+    );
+    if (commit) await client.query('commit');
+    else await client.query('rollback');
+    const state = await client.query(`
+      select current_user, session_user,
+             coalesce(current_setting('ltc_m.app_user_id', true), '') as app_user_id,
+             coalesce(current_setting('ltc_m.request_id', true), '') as request_id,
+             coalesce(current_setting('ltc_m.source', true), '') as source
+    `);
+    assert.deepEqual(
+      state.rows[0],
+      {
+        current_user: WRITER_LOGIN,
+        session_user: WRITER_LOGIN,
+        app_user_id: '',
+        request_id: '',
+        source: '',
+      },
+      marker,
+    );
+  } finally {
+    client.release();
+  }
+}
+
+async function assertRuntimeCannotAssumeWriter(runtime) {
+  const client = await runtime.connect();
+  try {
+    await client.query('begin');
+    await client.query('set local role ltc_m_runtime');
+    await assertRejected(
+      client.query('set local role ltc_m_provenance_writer'),
+      /permission denied|cannot set role|42501/iu,
+    );
+    await client.query('rollback');
+  } finally {
+    client.release();
+  }
+}
+
+async function assertRoleDenied(pool, role, sql, expression = /permission denied|42501/iu) {
+  await assertRejected(
+    inRole(pool, role, (client) => client.query(sql)),
+    expression,
+  );
+}
+
+async function inAdmin(pool, operation, { commit = false, requestId = 'p034-admin' } = {}) {
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query(
+      `select ltc_m.set_actor_context($1::uuid, 'ci-p034|admin', $2::text, null, 'api', false)`,
+      [ADMIN_ID, requestId],
+    );
+    const result = await operation(client);
+    if (commit) await client.query('commit');
+    else await client.query('rollback');
+    return result;
+  } catch (error) {
+    await client.query('rollback').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function assertDmlDenied(pool, role, table) {
+  await assertRoleDenied(pool, role, `insert into ltc_m.${table} default values`);
+  await assertRoleDenied(pool, role, `update ltc_m.${table} set id = id where false`);
+  await assertRoleDenied(pool, role, `delete from ltc_m.${table} where false`);
+  await assertRoleDenied(pool, role, `truncate table ltc_m.${table}`);
+}
+
+async function assertProjectCodeRejected(writer, value, ordinal) {
+  await assertRejected(
+    inRole(writer, 'ltc_m_provenance_writer', (client) =>
+      client.query(
+        `insert into ltc_m.p034_provenance_project_observations
+           (id, snapshot_id, project_id, project_code, occurrence_ordinal, occurrence_fingerprint)
+         values ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::integer, $6::text)`,
+        [INVALID_PROJECT_OBSERVATION_ID, SNAPSHOT_ID, PROJECT_ID, value, ordinal, 'a'.repeat(64)],
+      ),
+    ),
+    /violates check constraint|23514/iu,
+  );
+}
+
+async function assertItemValueRejected(writer, itemId, ordinal) {
+  await assertRejected(
+    inRole(writer, 'ltc_m_provenance_writer', (client) =>
+      client.query(
+        `insert into ltc_m.p034_provenance_item_observations
+           (id, snapshot_id, project_id, project_code, source_line_key, item_id,
+            occurrence_ordinal, occurrence_fingerprint)
+         values ($1::uuid, $2::uuid, $3::uuid, 'P034-A', $4::text, $5::text, $6::integer, $7::text)`,
+        [
+          INVALID_ITEM_OBSERVATION_ID,
+          SNAPSHOT_ID,
+          PROJECT_ID,
+          LINE_KEY,
+          itemId,
+          ordinal,
+          'b'.repeat(64),
+        ],
+      ),
+    ),
+    /violates check constraint|23514/iu,
+  );
+}
+
+async function assertLocatorRejected(writer, locator, ordinal) {
+  try {
+    await assertRejected(
+      inRole(writer, 'ltc_m_provenance_writer', (client) =>
+        client.query(
+          `insert into ltc_m.p034_provenance_source_references
+           (id, project_id, project_observation_id, reference_ordinal, kind, locator, fingerprint)
+         values ($1::uuid, $2::uuid, $3::uuid, $4::integer, 'source', $5::text, $6::text)`,
+          [
+            INVALID_REFERENCE_ID,
+            PROJECT_ID,
+            PROJECT_OBSERVATION_ID,
+            ordinal,
+            locator,
+            'c'.repeat(64),
+          ],
+        ),
+      ),
+      /violates check constraint|23514/iu,
+    );
+  } catch (error) {
+    throw new Error(`locator not rejected: ${locator}; ${error.message}`);
+  }
+}
+
 async function catalogAssertions(admin) {
   const result = await admin.query(`
     select
@@ -205,6 +446,21 @@ async function catalogAssertions(admin) {
       not exists (
         select 1 from pg_catalog.pg_auth_members m where m.roleid = r.oid
       ) as no_memberships,
+      not exists (
+        select 1 from pg_catalog.pg_auth_members m
+        join pg_catalog.pg_roles runtime on runtime.oid = m.member
+        where m.roleid = r.oid and runtime.rolname = 'ltc_m_runtime'
+      ) as runtime_cannot_assume_writer,
+      not exists (
+        select 1 from pg_catalog.pg_class c
+        where c.relowner = r.oid and c.relnamespace = 'ltc_m'::regnamespace
+          and c.relname like 'p034_%'
+      ) as no_table_ownership,
+      not exists (
+        select 1 from pg_catalog.pg_proc p
+        where p.proowner = r.oid and p.pronamespace = 'ltc_m'::regnamespace
+          and p.proname like 'p034_%'
+      ) as no_function_ownership,
       (select count(*)::integer from pg_catalog.pg_class c
         join pg_catalog.pg_namespace n on n.oid = c.relnamespace
        where n.nspname = 'ltc_m' and c.relname like 'p034_%' and c.relkind = 'r') as p034_table_count
@@ -223,6 +479,9 @@ async function catalogAssertions(admin) {
     rolbypassrls: false,
     password_empty: true,
     no_memberships: true,
+    runtime_cannot_assume_writer: true,
+    no_table_ownership: true,
+    no_function_ownership: true,
     p034_table_count: 4,
   });
   const rls = await admin.query(`
@@ -253,9 +512,24 @@ test(
       await rebuildFromZero(admin);
       await catalogAssertions(admin);
       await setupFixtures(admin);
+      await setupDraftFacts(admin);
       await installSyntheticRoles(admin);
       writer = new Pool({ connectionString: roleDatabaseUrl(WRITER_LOGIN), max: 1 });
       runtime = new Pool({ connectionString: roleDatabaseUrl(RUNTIME_LOGIN), max: 1 });
+      await assertRuntimeCannotAssumeWriter(runtime);
+
+      await assertSessionIsolation(
+        writer,
+        'ltc_m_provenance_writer',
+        true,
+        MARKERS.commitIsolation,
+      );
+      await assertSessionIsolation(
+        writer,
+        'ltc_m_provenance_writer',
+        false,
+        MARKERS.rollbackIsolation,
+      );
 
       await assertRejected(
         writer.query('select 1 from ltc_m.p034_provenance_snapshots'),
@@ -274,6 +548,14 @@ test(
         can_update: false,
         can_delete: false,
       });
+      const writerProjects = await inRole(writer, 'ltc_m_provenance_writer', (client) =>
+        client.query(`select count(*)::integer as count from ltc_m.projects`),
+      );
+      assert.equal(writerProjects.rows[0].count, 1);
+      const writerBatches = await inRole(writer, 'ltc_m_provenance_writer', (client) =>
+        client.query(`select count(*)::integer as count from ltc_m.import_batches`),
+      );
+      assert.equal(writerBatches.rows[0].count, 3);
 
       await inRole(
         writer,
@@ -326,6 +608,368 @@ test(
           );
         },
         { commit: true },
+      );
+      const writerVisibleFacts = await inRole(writer, 'ltc_m_provenance_writer', async (client) => {
+        const result = await client.query(`
+          select project_id::text, count(*)::integer as count
+            from ltc_m.p034_provenance_source_references
+           group by project_id
+           order by project_id
+        `);
+        return result.rows;
+      });
+      assert.deepEqual(writerVisibleFacts, [{ project_id: PROJECT_ID, count: 2 }]);
+      const writerVisibleCounts = await inRole(writer, 'ltc_m_provenance_writer', (client) =>
+        client.query(`
+          select
+            (select count(*)::integer from ltc_m.p034_provenance_snapshots) as snapshots,
+            (select count(*)::integer from ltc_m.p034_provenance_project_observations) as project_observations,
+            (select count(*)::integer from ltc_m.p034_provenance_item_observations) as item_observations,
+            (select count(*)::integer from ltc_m.p034_provenance_source_references) as source_references
+        `),
+      );
+      assert.deepEqual(writerVisibleCounts.rows[0], {
+        snapshots: 1,
+        project_observations: 1,
+        item_observations: 1,
+        source_references: 2,
+      });
+      const runtimeVisibleFacts = await inRole(runtime, 'ltc_m_runtime', async (client) => {
+        const result = await client.query(`
+          select project_id::text, count(*)::integer as count
+            from ltc_m.p034_provenance_source_references
+           group by project_id
+           order by project_id
+        `);
+        return result.rows;
+      });
+      assert.deepEqual(runtimeVisibleFacts, [{ project_id: PROJECT_ID, count: 2 }]);
+      const runtimeVisibleCounts = await inRole(runtime, 'ltc_m_runtime', (client) =>
+        client.query(`
+          select
+            (select count(*)::integer from ltc_m.p034_provenance_snapshots) as snapshots,
+            (select count(*)::integer from ltc_m.p034_provenance_project_observations) as project_observations,
+            (select count(*)::integer from ltc_m.p034_provenance_item_observations) as item_observations,
+            (select count(*)::integer from ltc_m.p034_provenance_source_references) as source_references
+        `),
+      );
+      assert.deepEqual(runtimeVisibleCounts.rows[0], {
+        snapshots: 1,
+        project_observations: 1,
+        item_observations: 1,
+        source_references: 2,
+      });
+      assert.ok(
+        MARKERS.sessionIsolation === 'PROVENANCE_POOL_SESSION_STATE_ISOLATED',
+        MARKERS.sessionIsolation,
+      );
+
+      for (const table of [
+        'p034_provenance_snapshots',
+        'p034_provenance_project_observations',
+        'p034_provenance_item_observations',
+        'p034_provenance_source_references',
+      ]) {
+        await assertDmlDenied(writer, 'ltc_m_provenance_writer', table);
+        await assertDmlDenied(runtime, 'ltc_m_runtime', table);
+      }
+      for (const table of ['projects', 'import_batches']) {
+        await assertRoleDenied(
+          writer,
+          'ltc_m_provenance_writer',
+          `insert into ltc_m.${table} default values`,
+        );
+        await assertRoleDenied(
+          writer,
+          'ltc_m_provenance_writer',
+          `update ltc_m.${table} set id = id where false`,
+        );
+        await assertRoleDenied(
+          writer,
+          'ltc_m_provenance_writer',
+          `delete from ltc_m.${table} where false`,
+        );
+      }
+
+      await inRole(
+        writer,
+        'ltc_m_provenance_writer',
+        async (client) => {
+          await client.query(
+            `insert into ltc_m.p034_provenance_project_observations
+               (id, snapshot_id, project_id, project_code, occurrence_ordinal, occurrence_fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 'P034-A', 60, $4::text)`,
+            [DUPLICATE_PROJECT_OBSERVATION_ID, SNAPSHOT_ID, PROJECT_ID, '2'.repeat(64)],
+          );
+          await client.query(
+            `insert into ltc_m.p034_provenance_source_references
+               (id, project_id, project_observation_id, reference_ordinal, kind, locator, fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 1, 'source', 'P034 duplicate project source', $4::text)`,
+            [
+              DUPLICATE_PROJECT_REFERENCE_ID,
+              PROJECT_ID,
+              DUPLICATE_PROJECT_OBSERVATION_ID,
+              '3'.repeat(64),
+            ],
+          );
+          await client.query(
+            `insert into ltc_m.p034_provenance_item_observations
+               (id, snapshot_id, project_id, project_code, source_line_key, item_id,
+                occurrence_ordinal, occurrence_fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 'P034-A', $4::text, 'ITEM-1', 2, $5::text)`,
+            [DUPLICATE_ITEM_OBSERVATION_ID, SNAPSHOT_ID, PROJECT_ID, LINE_KEY, '4'.repeat(64)],
+          );
+          await client.query(
+            `insert into ltc_m.p034_provenance_source_references
+               (id, project_id, item_observation_id, reference_ordinal, kind, locator, fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 1, 'source', 'P034 duplicate item source', $4::text)`,
+            [
+              DUPLICATE_ITEM_REFERENCE_ID,
+              PROJECT_ID,
+              DUPLICATE_ITEM_OBSERVATION_ID,
+              '5'.repeat(64),
+            ],
+          );
+        },
+        { commit: true },
+      );
+      const duplicateCounts = await admin.query(
+        `
+        select
+          (select count(*)::integer from ltc_m.p034_provenance_project_observations where snapshot_id = $1::uuid and project_code = 'P034-A') as project_count,
+          (select count(*)::integer from ltc_m.p034_provenance_item_observations where snapshot_id = $1::uuid and project_code = 'P034-A' and source_line_key = $2::text) as item_count
+      `,
+        [SNAPSHOT_ID, LINE_KEY],
+      );
+      assert.deepEqual(duplicateCounts.rows[0], { project_count: 2, item_count: 2 });
+      assert.ok(
+        MARKERS.projectDuplicate === 'PROJECT_DUPLICATE_OCCURRENCE_CARDINALITY_PRESERVED',
+        MARKERS.projectDuplicate,
+      );
+      assert.ok(
+        MARKERS.itemDuplicate === 'ITEM_DUPLICATE_OCCURRENCE_CARDINALITY_PRESERVED',
+        MARKERS.itemDuplicate,
+      );
+      await inRole(
+        writer,
+        'ltc_m_provenance_writer',
+        async (client) => {
+          await client.query(
+            `insert into ltc_m.p034_provenance_item_observations
+               (id, snapshot_id, project_id, project_code, source_line_key, item_id,
+                occurrence_ordinal, occurrence_fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 'P034-A', $4::text, null, 3, $5::text),
+                    ($6::uuid, $2::uuid, $3::uuid, 'P034-A', $4::text, 'ITEM-TRIMMED', 4, $7::text)`,
+            [
+              NULL_ITEM_OBSERVATION_ID,
+              SNAPSHOT_ID,
+              PROJECT_ID,
+              LINE_KEY,
+              '6'.repeat(64),
+              TRIMMED_ITEM_OBSERVATION_ID,
+              '7'.repeat(64),
+            ],
+          );
+          await client.query(
+            `insert into ltc_m.p034_provenance_source_references
+               (id, project_id, item_observation_id, reference_ordinal, kind, locator, fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 1, 'source', 'P034 null item source', $4::text),
+                    ($5::uuid, $2::uuid, $6::uuid, 1, 'source', 'P034 trimmed item source', $4::text)`,
+            [
+              NULL_ITEM_REFERENCE_ID,
+              PROJECT_ID,
+              NULL_ITEM_OBSERVATION_ID,
+              '8'.repeat(64),
+              TRIMMED_ITEM_REFERENCE_ID,
+              TRIMMED_ITEM_OBSERVATION_ID,
+            ],
+          );
+        },
+        { commit: true },
+      );
+      for (const [value, ordinal] of [
+        ['p034-a', 10],
+        [' P034-A', 11],
+        ['', 12],
+        ['A'.repeat(65), 13],
+        ['P034@A', 14],
+      ]) {
+        await assertProjectCodeRejected(writer, value, ordinal);
+      }
+      for (const [value, ordinal] of [
+        [`p012-line-v1:${'c'.repeat(63)}`, 20],
+        [`p012-line-v1:${'C'.repeat(64)}`, 21],
+        [`wrong-prefix:${'c'.repeat(64)}`, 22],
+        [`p012-line-v1: ${'c'.repeat(64)}`, 23],
+      ]) {
+        await assertRejected(
+          inRole(writer, 'ltc_m_provenance_writer', (client) =>
+            client.query(
+              `insert into ltc_m.p034_provenance_item_observations
+                 (id, snapshot_id, project_id, project_code, source_line_key, item_id,
+                  occurrence_ordinal, occurrence_fingerprint)
+               values ($1::uuid, $2::uuid, $3::uuid, 'P034-A', $4::text, null, $5::integer, $6::text)`,
+              [
+                INVALID_ITEM_OBSERVATION_ID,
+                SNAPSHOT_ID,
+                PROJECT_ID,
+                value,
+                ordinal,
+                'd'.repeat(64),
+              ],
+            ),
+          ),
+          /violates check constraint|23514/iu,
+        );
+      }
+      for (const [value, ordinal] of [
+        ['', 30],
+        ['   ', 31],
+        [' ITEM', 32],
+        ['ITEM ', 33],
+      ]) {
+        await assertItemValueRejected(writer, value, ordinal);
+      }
+      for (const [value, ordinal] of [
+        ['C:\\Users\\Igor\\source.xlsx', 40],
+        ['/home/igor/source.xlsx', 41],
+        ['/Users/igor/source.xlsx', 42],
+        ['postgresql://localhost/ltcm', 43],
+        ['https://example.invalid/source', 44],
+        ['password=secret', 45],
+        ['token=secret', 46],
+        ['private_key=secret', 47],
+        ['client_secret=secret', 48],
+      ]) {
+        await assertLocatorRejected(writer, value, ordinal);
+      }
+      await assertRejected(
+        inRole(writer, 'ltc_m_provenance_writer', (client) =>
+          client.query(
+            `insert into ltc_m.p034_provenance_snapshots
+             (import_batch_id, project_id, source_artifact_hash, snapshot_fingerprint, authority_revision, captured_by_user_id, request_id, completed_at)
+             values ($1::uuid, $2::uuid, $3::text, $4::text, 10, $5::uuid, 'p034-write', now())`,
+            [SECOND_BATCH_ID, PROJECT_ID, SECOND_SOURCE_HASH, '8'.repeat(64), ADMIN_ID],
+          ),
+        ),
+        /actor context mismatch|42501/iu,
+      );
+      await assertRejected(
+        inRole(writer, 'ltc_m_provenance_writer', (client) =>
+          client.query(
+            `insert into ltc_m.p034_provenance_snapshots
+             (import_batch_id, project_id, source_artifact_hash, snapshot_fingerprint, authority_revision, captured_by_user_id, request_id, capture_source, completed_at)
+             values ($1::uuid, $2::uuid, $3::text, $4::text, 11, $5::uuid, 'p034-write', 'system', now())`,
+            [SECOND_BATCH_ID, PROJECT_ID, SECOND_SOURCE_HASH, '9'.repeat(64), EDITOR_ID],
+          ),
+        ),
+        /row-level security|42501/iu,
+      );
+      await assertRejected(
+        inRole(
+          writer,
+          'ltc_m_provenance_writer',
+          (client) =>
+            client.query(
+              `insert into ltc_m.p034_provenance_item_observations
+                 (id, snapshot_id, project_id, project_code, source_line_key, item_id,
+                  occurrence_ordinal, occurrence_fingerprint)
+               values ($1::uuid, $2::uuid, $3::uuid, 'P034-A', $4::text, null, 50, $5::text)`,
+              [INVALID_ITEM_OBSERVATION_ID, SNAPSHOT_ID, PROJECT_ID, LINE_KEY, 'e'.repeat(64)],
+            ),
+          { commit: true },
+        ),
+        /requires source reference|23514/iu,
+      );
+
+      await assertRejected(
+        inAdmin(admin, (client) =>
+          client.query(
+            `insert into ltc_m.p034_provenance_source_references
+               (id, project_id, project_observation_id, reference_ordinal, kind, locator, fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 90, 'source', 'P034 missing parent', $4::text)`,
+            [FK_REFERENCE_ID, PROJECT_ID, INVALID_PROJECT_OBSERVATION_ID, 'f'.repeat(64)],
+          ),
+        ),
+        /fk_p034_source_reference_project_observation|23503/iu,
+      );
+      await assertRejected(
+        inAdmin(admin, (client) =>
+          client.query(
+            `insert into ltc_m.p034_provenance_source_references
+               (id, project_id, project_observation_id, reference_ordinal, kind, locator, fingerprint)
+             values ($1::uuid, $2::uuid, $3::uuid, 91, 'source', 'P034 divergent project', $4::text)`,
+            [FK_REFERENCE_ID, DRAFT_PROJECT_ID, PROJECT_OBSERVATION_ID, 'f'.repeat(64)],
+          ),
+        ),
+        /fk_p034_source_reference_project_observation|23503/iu,
+      );
+      await assertRejected(
+        inAdmin(admin, (client) =>
+          client.query(
+            `insert into ltc_m.p034_provenance_snapshots
+             (id, import_batch_id, project_id, source_artifact_hash, snapshot_fingerprint,
+              authority_revision, captured_by_user_id, request_id, completed_at)
+           values ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, 10, $6::uuid, 'p034-admin', now())`,
+            [INVALID_SNAPSHOT_ID, BATCH_ID, PROJECT_ID, SOURCE_HASH, '1'.repeat(64), ADMIN_ID],
+          ),
+        ),
+        /uq_p034_snapshot_batch_project|23505/iu,
+      );
+      await assertRejected(
+        inAdmin(admin, (client) =>
+          client.query(
+            `insert into ltc_m.p034_provenance_snapshots
+             (id, import_batch_id, project_id, source_artifact_hash, snapshot_fingerprint,
+              authority_revision, captured_by_user_id, request_id, completed_at)
+           values ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, 1, $6::uuid, 'p034-admin', now())`,
+            [
+              INVALID_SNAPSHOT_ID,
+              SECOND_BATCH_ID,
+              PROJECT_ID,
+              SECOND_SOURCE_HASH,
+              '2'.repeat(64),
+              ADMIN_ID,
+            ],
+          ),
+        ),
+        /uq_p034_snapshot_project_revision|23505/iu,
+      );
+      await assertRejected(
+        inAdmin(admin, (client) =>
+          client.query(
+            `insert into ltc_m.p034_provenance_snapshots
+             (id, import_batch_id, project_id, source_artifact_hash, snapshot_fingerprint,
+              authority_revision, captured_by_user_id, request_id, completed_at)
+           values ($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, 2, $6::uuid, 'p034-admin', now())`,
+            [
+              INVALID_SNAPSHOT_ID,
+              SECOND_BATCH_ID,
+              PROJECT_ID,
+              SECOND_SOURCE_HASH,
+              'd'.repeat(64),
+              ADMIN_ID,
+            ],
+          ),
+        ),
+        /uq_p034_snapshot_fingerprint|23505/iu,
+      );
+      await assertRejected(
+        inAdmin(admin, (client) =>
+          client.query(
+            `update ltc_m.p034_provenance_snapshots set status = 'success' where id = $1::uuid`,
+            [SNAPSHOT_ID],
+          ),
+        ),
+        /P034 provenance facts are immutable|55000/iu,
+      );
+      await assertRejected(
+        inAdmin(admin, (client) =>
+          client.query(`delete from ltc_m.p034_provenance_snapshots where id = $1::uuid`, [
+            SNAPSHOT_ID,
+          ]),
+        ),
+        /P034 provenance facts cannot be deleted|55000/iu,
       );
 
       await assertRejected(
@@ -423,10 +1067,10 @@ test(
           (select count(*)::integer from ltc_m.p034_provenance_source_references) as source_references
       `);
       assert.deepEqual(stored.rows[0], {
-        snapshots: 1,
-        project_observations: 1,
-        item_observations: 1,
-        source_references: 2,
+        snapshots: 2,
+        project_observations: 3,
+        item_observations: 5,
+        source_references: 8,
       });
     } finally {
       await writer?.end().catch(() => undefined);
