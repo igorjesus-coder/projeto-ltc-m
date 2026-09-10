@@ -1,9 +1,9 @@
 # P034 — Design formal de DDL para provenance
 
 **Design ID:** `ltcm.p034.provenance-ddl-design.v1`<br>
-**Contrato:** `ltcm.p034.quality.v3`<br>
+**Contrato:** `ltcm.p034.data-quality-center.v3`<br>
 **Fingerprint do contrato:** `3e1fc135c61634e759210e718ce04785de38e6be3b2c409468288df1d7a73117`<br>
-**Status:** documentação para revisão formal; não é migration executável<br>
+**Status:** revisão formal com alterações requeridas; não é migration executável<br>
 **Base:** `main == origin/main == 98749d8fa3ca038b67a40487e884a0d5088b0b3a`
 
 ## 1. Escopo e resultado
@@ -29,9 +29,16 @@ O desenho preserva as decisões D01–D26 e, em particular, `PERSIST_SOURCE_FACT
 `NO_AUTOMATIC_PROVENANCE_PURGE`, `PROVENANCE_RETENTION_POLICY_DEFERRED`,
 `NO_P034_HISTORY_UI`, `P015_UNCHANGED` e `IMPORT_DUPLICATION_NOT_P034_MVP_ELIGIBLE`.
 
-Marcadores desta entrega:
+Marcadores desta revisão:
 
-- `P034_PROVENANCE_DDL_DESIGN_READY_FOR_REVIEW`;
+- `P034_DESIGN_CONTRACT_ID_CORRECTED`;
+- `P034_P015_REFERENCE_ORDER_PARITY_CORRECTED`;
+- `P015_STABLE_TIE_ORDER_PRESERVED`;
+- `P015_SOURCE_REFERENCE_CARDINALITY_ENFORCED`;
+- `P034_REFERENCE_PARITY_WITHOUT_TRANSFORMATION`;
+- `P034_AUTHORITY_REVISION_LOCK_LEAST_PRIVILEGE_CORRECTED`;
+- `P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED`;
+- `P034_PROVENANCE_DDL_DESIGN_REVIEW_CHANGES_REQUIRED`;
 - `REFERENCE_PSEUDODDL_ONLY`;
 - `RETRY_IDEMPOTENCY_DOES_NOT_DEDUP_SOURCE_OCCURRENCES`;
 - `IMPORT_DUPLICATION_REMAINS_P015_ONLY`;
@@ -116,7 +123,8 @@ projeto de origem; (3) observações de item de origem; e (4) referências de or
 somente porque o fingerprint do finding P015 as usa.
 
 O snapshot é deliberadamente **single-project**. Um import batch com vários projetos produz
-vários envelopes no mesmo transaction, um por projeto. Não existe `scope_key` opaco, snapshot
+vários envelopes separados, um por projeto. Cada envelope tem sua própria transação de captura;
+não há transação batch all-or-nothing presumida. Não existe `scope_key` opaco, snapshot
 misto ou escopo inferido de string. O escopo exato é:
 
 `scope_type = 'project'` + `project_id` factual + `import_batch_id` + `source_artifact_hash`.
@@ -131,7 +139,8 @@ publicação/autoridade no envelope do snapshot. Não existe estado `pending` vi
 publicação nem tabela mutável de head.
 
 Todos os inserts do envelope, ocorrências e referências ocorrem na mesma transação. O snapshot
-com `status = 'success'` só se torna visível após o commit; transação abortada não deixa
+com `status = 'success'` — representação DB lowercase equivalente semanticamente a
+`SUCCESS` do contrato — só se torna visível após o commit; transação abortada não deixa
 snapshot parcialmente autoritativo. `authority_revision` determina o latest, não timestamps.
 
 ## 5. Especificação relacional congelada
@@ -156,9 +165,9 @@ nenhum `float`, `real` ou `double precision` é permitido. IDs relacionais exist
 | `source_observation_contract` | `text`        | NOT NULL, P015 v1               | CHECK `ltcm.p015.reconciliation.v1`              |
 | `status`                      | `text`        | NOT NULL, `success`             | CHECK exatamente `success`                       |
 | `authority_revision`          | `bigint`      | NOT NULL                        | CHECK `> 0`, monotônico por projeto              |
-| `captured_by_user_id`         | `uuid`        | nullable                        | FK `app_users(id)`, RESTRICT                     |
+| `captured_by_user_id`         | `uuid`        | NOT NULL                        | FK `app_users(id)`, RESTRICT; igual ao ator      |
 | `request_id`                  | `text`        | nullable                        | trim não vazio, no máximo 200                    |
-| `capture_source`              | `text`        | NOT NULL                        | token curto em allowlist                         |
+| `capture_source`              | `text`        | NOT NULL                        | exatamente `api`, ligado ao contexto             |
 | `captured_at`                 | `timestamptz` | NOT NULL, `now()`               | observabilidade, não ordenação                   |
 | `completed_at`                | `timestamptz` | NOT NULL                        | CHECK `>= captured_at`                           |
 
@@ -180,14 +189,14 @@ fingerprints de input/relatório/finding P015.
 
 ### 5.2 `ltc_m.p034_provenance_project_observations`
 
-| coluna                   | tipo      | nulidade/default            | regra e finalidade                   |
-| ------------------------ | --------- | --------------------------- | ------------------------------------ |
-| `id`                     | `uuid`    | NOT NULL, gen_random_uuid() | PK física                            |
-| `snapshot_id`            | `uuid`    | NOT NULL                    | FK composta ao snapshot, RESTRICT    |
-| `project_id`             | `uuid`    | NOT NULL                    | FK `projects`, RESTRICT; autorização |
-| `project_code`           | `text`    | NOT NULL                    | trim não vazio; identidade de origem |
-| `occurrence_ordinal`     | `integer` | NOT NULL                    | `> 0`, posição determinística        |
-| `occurrence_fingerprint` | `text`    | NOT NULL                    | SHA-256 lowercase, 64 hex            |
+| coluna                   | tipo      | nulidade/default            | regra e finalidade                        |
+| ------------------------ | --------- | --------------------------- | ----------------------------------------- |
+| `id`                     | `uuid`    | NOT NULL, gen_random_uuid() | PK física                                 |
+| `snapshot_id`            | `uuid`    | NOT NULL                    | FK composta ao snapshot, RESTRICT         |
+| `project_id`             | `uuid`    | NOT NULL                    | FK `projects`, RESTRICT; autorização      |
+| `project_code`           | `text`    | NOT NULL                    | regex P015 `^[A-Z0-9][A-Z0-9._/-]{0,63}$` |
+| `occurrence_ordinal`     | `integer` | NOT NULL                    | `> 0`, posição determinística             |
+| `occurrence_fingerprint` | `text`    | NOT NULL                    | SHA-256 lowercase, 64 hex                 |
 
 Constraints: `UNIQUE (snapshot_id, occurrence_ordinal)`, `UNIQUE (id, project_id)`, FK
 `(snapshot_id, project_id)` para o envelope e índice
@@ -199,16 +208,16 @@ participantes da regra não são copiados; o input P015 permanece completo fora 
 
 ### 5.3 `ltc_m.p034_provenance_item_observations`
 
-| coluna                   | tipo      | nulidade/default            | regra e finalidade                   |
-| ------------------------ | --------- | --------------------------- | ------------------------------------ |
-| `id`                     | `uuid`    | NOT NULL, gen_random_uuid() | PK física                            |
-| `snapshot_id`            | `uuid`    | NOT NULL                    | FK composta ao snapshot, RESTRICT    |
-| `project_id`             | `uuid`    | NOT NULL                    | FK `projects`, RESTRICT; autorização |
-| `project_code`           | `text`    | NOT NULL                    | código P015 normalizado              |
-| `source_line_key`        | `text`    | NOT NULL                    | identidade de linha, trim não vazio  |
-| `item_id`                | `text`    | nullable                    | valor P015 sem conversão silenciosa  |
-| `occurrence_ordinal`     | `integer` | NOT NULL                    | `> 0`, posição determinística        |
-| `occurrence_fingerprint` | `text`    | NOT NULL                    | SHA-256 lowercase, 64 hex            |
+| coluna                   | tipo      | nulidade/default            | regra e finalidade                       |
+| ------------------------ | --------- | --------------------------- | ---------------------------------------- |
+| `id`                     | `uuid`    | NOT NULL, gen_random_uuid() | PK física                                |
+| `snapshot_id`            | `uuid`    | NOT NULL                    | FK composta ao snapshot, RESTRICT        |
+| `project_id`             | `uuid`    | NOT NULL                    | FK `projects`, RESTRICT; autorização     |
+| `project_code`           | `text`    | NOT NULL                    | código P015 normalizado                  |
+| `source_line_key`        | `text`    | NOT NULL                    | regex P015 `^p012-line-v1:[0-9a-f]{64}$` |
+| `item_id`                | `text`    | nullable                    | valor P015 sem conversão silenciosa      |
+| `occurrence_ordinal`     | `integer` | NOT NULL                    | `> 0`, posição determinística            |
+| `occurrence_fingerprint` | `text`    | NOT NULL                    | SHA-256 lowercase, 64 hex                |
 
 Constraints: `UNIQUE (snapshot_id, occurrence_ordinal)`, `UNIQUE (id, project_id)`, FK
 `(snapshot_id, project_id)` e índice
@@ -223,24 +232,29 @@ ainda não persistida; um vínculo opcional futuro não poderá substituir o `it
 
 ### 5.4 `ltc_m.p034_provenance_source_references`
 
-| coluna                   | tipo      | nulidade/default            | regra e finalidade                  |
-| ------------------------ | --------- | --------------------------- | ----------------------------------- |
-| `id`                     | `uuid`    | NOT NULL, gen_random_uuid() | PK física                           |
-| `project_id`             | `uuid`    | NOT NULL                    | FK `projects`, RESTRICT; RLS direta |
-| `project_observation_id` | `uuid`    | nullable                    | FK composta opcional                |
-| `item_observation_id`    | `uuid`    | nullable                    | FK composta opcional                |
-| `reference_ordinal`      | `integer` | NOT NULL                    | `> 0`, ordem canônica               |
-| `kind`                   | `text`    | NOT NULL, `source`          | CHECK exatamente `source`           |
-| `locator`                | `text`    | NOT NULL                    | trim, limite e allowlist segura     |
-| `fingerprint`            | `text`    | NOT NULL                    | SHA-256 lowercase, 64 hex           |
+| coluna                   | tipo      | nulidade/default            | regra e finalidade                      |
+| ------------------------ | --------- | --------------------------- | --------------------------------------- |
+| `id`                     | `uuid`    | NOT NULL, gen_random_uuid() | PK física                               |
+| `project_id`             | `uuid`    | NOT NULL                    | FK `projects`, RESTRICT; RLS direta     |
+| `project_observation_id` | `uuid`    | nullable                    | FK composta opcional                    |
+| `item_observation_id`    | `uuid`    | nullable                    | FK composta opcional                    |
+| `reference_ordinal`      | `integer` | NOT NULL                    | `> 0`, ordem canônica                   |
+| `kind`                   | `text`    | NOT NULL                    | CHECK exatamente `source` ou `database` |
+| `locator`                | `text`    | NOT NULL                    | trim, limite e allowlist segura         |
+| `fingerprint`            | `text`    | NOT NULL                    | SHA-256 lowercase, 64 hex               |
 
-Constraints: XOR entre os dois pais (exatamente um não nulo), `kind = source`, FKs compostas
+Constraints: XOR entre os dois pais (exatamente um não nulo), `kind IN ('source', 'database')`, FKs compostas
 `(project_observation_id, project_id)` e `(item_observation_id, project_id)`, ambas RESTRICT;
 unique parcial por pai+ordinal e índices por `(project_id, parent, reference_ordinal)`. Não há
-referência `database`, pois o finding P034 usa somente `source_references`.
+`source_references` de P015 aceita ambos os kinds (`source` e `database`); portanto, o P034
+preserva o kind factual nessa relação, mesmo que o finding de duplicidade seja alimentado pela
+propriedade `source_references`. A propriedade P015 `database_references` continua fora deste
+modelo mínimo, pois não é usada por esses dois findings.
 
-Referências idênticas mantêm ocorrências distintas por ordinal. A ordenação é `kind`,
-`locator`, `fingerprint`, com o ordinal atribuído depois; nenhum unique colapsa o multiset.
+Referências idênticas mantêm ocorrências distintas por ordinal. A ordenação P015 é somente
+`kind + "\\0" + locator`; em empate, a ordenação estável preserva a ordem factual de entrada.
+`fingerprint` não é desempate semântico. O ordinal é atribuído depois dessa sequência, sem
+colapsar o multiset.
 
 ### 5.5 Mapa explícito P015 → provenance
 
@@ -256,7 +270,7 @@ persiste apenas os campos que participam das duas regras P034 e do `P015Finding`
 | project `currency_code`           | nenhum                             | não persistir; não participa da regra |
 | project `contract_value`          | nenhum                             | não persistir; minimização financeira |
 | project `database_contract_value` | nenhum                             | não persistir; não participa da regra |
-| project `source_references`       | source references                  | persistir sanitizado, ordem/multiset  |
+| project `source_references`       | source references                  | persistir exatamente, ordem/multiset  |
 | project `database_references`     | nenhum                             | não é usado pelo finding P034         |
 | item `project_code`               | item observation `project_code`    | persistir, parte da identidade        |
 | item `source_line_key`            | item observation `source_line_key` | persistir, parte da identidade        |
@@ -268,7 +282,7 @@ persiste apenas os campos que participam das duas regras P034 e do `P015Finding`
 | item `currency_code`              | nenhum                             | não participa da regra                |
 | item `total_amount`               | nenhum                             | minimização financeira                |
 | item `database_total_amount`      | nenhum                             | não participa da regra                |
-| item `source_references`          | source references                  | persistir sanitizado, ordem/multiset  |
+| item `source_references`          | source references                  | persistir exatamente, ordem/multiset  |
 | item `database_references`        | nenhum                             | não é usado pelo finding P034         |
 
 O identity map é, portanto, exatamente `project_code` para projetos e
@@ -286,18 +300,27 @@ validação equivalente antes do insert, quando envolver outro pai):
 - `scope_type = 'project'`, `schema_version = 1`, `status = 'success'` e
   `fingerprint_algorithm = 'sha256-canonical-v1'`;
 - `source_observation_contract = 'ltcm.p015.reconciliation.v1'`;
-- `capture_source ~ '^[a-z0-9][a-z0-9._:-]{0,63}$'`;
+- `capture_source = 'api'`;
 - `request_id IS NULL OR (btrim(request_id) <> '' AND char_length(request_id) <= 200)`;
-- `project_code` e `source_line_key` com `btrim(value) <> ''`;
+- `project_code ~ '^[A-Z0-9][A-Z0-9._/-]{0,63}$'`;
+- `source_line_key ~ '^p012-line-v1:[0-9a-f]{64}$'`;
+- `item_id IS NULL OR (btrim(item_id) <> '' AND item_id = btrim(item_id))`;
 - `occurrence_ordinal > 0` e `reference_ordinal > 0`;
 - `completed_at >= captured_at`;
 - `locator` com trim não vazio, `char_length(locator) <= 1024`, sem drive path,
   `/home`, `/Users`, URL HTTP(S), URL PostgreSQL ou tokens/segredos reconhecíveis;
-- referência com exatamente um parent ID e `kind = 'source'`.
+- referência com exatamente um parent ID e `kind IN ('source', 'database')`.
 
 O validador de locator deve ser compartilhado semanticamente com a rejeição P015. Um CHECK
 adicional mais restritivo nunca pode transformar uma referência P015-safe em outro valor e gerar
 um finding ID diferente; nesses casos o snapshot é inelegível.
+
+O padrão P015 real é:
+
+`/(?:[A-Z]:\\|(?:^|\\s)\/(?:home|Users)\/|postgres(?:ql)?:\/\/|https?:\/\/|\b(?:password|token|private_key|client_secret)\s*=)/iu`.
+
+O writer aplica esse teste antes do insert e persiste o `locator` byte a byte, já validado pelo
+normalizer P015; não há sanitização transformadora, truncamento ou remoção de partes.
 
 ### 5.7 FKs, deleção e ownership
 
@@ -318,7 +341,8 @@ Não lê nem persiste `raw_payload`.
 Para capturar um projeto, todos os grupos `project_code` candidatos devem resolver a um único
 `project_id` factual; o projeto deve existir e estar autorizado; cada item deve preservar
 `project_code + source_line_key`; a cardinalidade física, inclusive ocorrências iguais, deve
-chegar ao insert; e nenhuma referência P015 válida pode ser alterada silenciosamente.
+chegar ao insert; cada project/item observation deve ter ao menos uma `source_reference`; e
+nenhuma referência P015 válida pode ser alterada silenciosamente.
 
 Observação sem vínculo factual não é fabricada, atribuída a projeto arbitrário nem inserida
 como P034. O snapshot daquele escopo falha fechado antes da transação; P015 pode reportar seu
@@ -326,16 +350,38 @@ resultado fora desta fundação. Não existe projeto pseudo ou fallback por code
 
 ### 6.2 Ordenação e autoridade
 
-O latest é selecionado por `ORDER BY authority_revision DESC, snapshot_fingerprint ASC` por
-`project_id`. A revisão é alocada sob `SELECT ... FROM ltc_m.projects ... FOR UPDATE`, com
-projetos bloqueados em ordem ascendente de UUID textual. Só depois do lock o writer calcula
-`COALESCE(MAX(authority_revision), 0) + 1`; a unique `(project_id, authority_revision)` é
-defesa adicional. Nunca se usa `MAX + 1` sem lock/constraint.
+O latest é selecionado por `ORDER BY authority_revision DESC` por `project_id`; a unique
+`(project_id, authority_revision)` torna empate impossível. A revisão é alocada depois do lock
+advisory transacional definido na seção 7.4, com projetos bloqueados em ordem ascendente de UUID
+textual. Só depois do lock o writer calcula `COALESCE(MAX(authority_revision), 0) + 1`; a unique
+é defesa adicional. Nunca se usa `MAX + 1` sem lock/constraint.
 
-Ordenação canônica: projeto por `project_code`, `project_id`, referências; item por
-`project_code`, `source_line_key`, `item_id` (null primeiro), referências; referência por
-`kind`, `locator`, `fingerprint`. O ordinal é atribuído nesta ordenação e faz parte do material,
-logo a ordem de insert não muda fingerprint nem perde duplicatas.
+### 6.2.1 Paridade exata e empates estáveis
+
+O adapter deve primeiro construir as observações P015 normalizadas e aplicar exatamente os
+comparadores existentes:
+
+- projects: `project_code + "\\0" + (project_id ?? "")`;
+- items: `project_code + "\\0" + source_line_key + "\\0" + (item_id ?? "")`;
+- references: `kind + "\\0" + locator`.
+
+Não entram no comparator references, occurrence fingerprint, UUID técnico ou ordem de INSERT.
+O ambiente JavaScript suportado tem `Array.sort` estável; quando a chave empata, a ordem
+relativa da sequência factual/source recebida pelo adapter é preservada. Isso é obrigatório:
+P015 usa `group[0]` como base e `group.flatMap(source_references)` na ordem do grupo, e essa
+ordem participa do finding ID.
+
+`occurrence_ordinal` representa a posição depois da canonicalização P015 estável, não uma nova
+ordenação inventada pelo P034. A ordem física dos INSERTs SQL pode variar; a ordem semântica
+armazenada nos ordinais não pode variar. Se a origem não fornecer uma sequência factual
+reprodutível antes da persistência, o snapshot é inelegível, pois não há como preservar a
+identidade P015.
+
+Para referências com mesmo `kind + "\\0" + locator` e fingerprints diferentes, o adapter
+preserva a ordem de entrada estável; o fingerprint não vira desempate.
+
+Ordenação do snapshot fingerprint usa exatamente essas três sequências P015 e seus ordinais;
+não usa referências, occurrence fingerprint ou UUID técnico como novos critérios.
 
 ### 6.3 Material do snapshot
 
@@ -354,7 +400,9 @@ Usa-se exclusivamente `sha256Canonical` já existente, com material:
       "ordinal": 1,
       "project_code": "<normalized>",
       "project_id": "<uuid>",
-      "source_references": []
+      "source_references": [
+        { "kind": "source", "locator": "Valores Projetos LTC-M!C4", "fingerprint": "<sha256>" }
+      ]
     }
   ],
   "item_observations": [
@@ -363,18 +411,34 @@ Usa-se exclusivamente `sha256Canonical` já existente, com material:
       "project_code": "<normalized>",
       "source_line_key": "<normalized>",
       "item_id": null,
-      "source_references": []
+      "source_references": [
+        { "kind": "source", "locator": "Prev. Receita Mensal!A4:J4", "fingerprint": "<sha256>" }
+      ]
     }
   ]
 }
 ```
 
-Arrays são canônicos, incluem multiplicidade e referências sanitizadas. Timestamps, UUIDs
-técnicos das linhas, `authority_revision` e ordem de insert ficam fora. O occurrence fingerprint
+Arrays preservam as sequências P015 canônicas estáveis, incluem multiplicidade e referências
+P015-safe sem transformação. Timestamps, UUIDs técnicos das linhas, `authority_revision` e
+ordem de insert ficam fora. O occurrence fingerprint
 usa `ltcm.p034.provenance-occurrence.v1` e não substitui o ordinal. Artifact hash, provenance
 snapshot fp, P015 input/report/finding fps são conceitos distintos.
 
-### 6.4 Idempotência e replay
+### 6.4 Cardinalidade de referências
+
+`references(...)` do P015 exige array e `length > 0` para `project.source_references` e
+`item.source_references`. O writer valida isso antes da transação e o banco futuro reforça com
+dois constraint triggers deferrable, `trg_p034_project_reference_cardinality` em
+`ltc_m.p034_provenance_project_observations` e `trg_p034_item_reference_cardinality` em
+`ltc_m.p034_provenance_item_observations`, ambos `AFTER INSERT ... DEFERRABLE INITIALLY
+DEFERRED`. No commit, a função do trigger conta `p034_provenance_source_references` pelo
+parent ID e rejeita com erro qualificado se count for zero. As FKs e o CHECK XOR garantem que
+cada referência seja de exatamente um parent correto; unique parcial garante ordinal único;
+referências repetidas permanecem linhas distintas. Como a checagem é deferred, inserir pai e
+filhos na mesma transação é válido, mas `SUCCESS` sem referência é impossível.
+
+### 6.5 Idempotência e replay
 
 Retry exato de `import_batch_id + project_id + snapshot_fingerprint` encontra o snapshot e
 retorna sucesso sem novo envelope/fatos. Mesmo batch/projeto com fingerprint diferente falha
@@ -386,7 +450,15 @@ Ocorrência física legítima repetida recebe linha e ordinal próprios, mesmo c
 igual. Retry não cria nova linha. Em concorrência, a unique classifica replay exato ou conflito;
 não há dependência da ordem de chegada.
 
-### 6.5 Fluxo transacional
+`UNIQUE(import_batch_id, project_id)` significa uma captura lógica por projeto dentro de um
+batch P009 aceito. O writer não permite uma segunda captura corrigida no mesmo batch: como
+`source_hash` é a identidade imutável do artefato e o retry distinto seria ambíguo, a correção
+deve gerar novo `import_batch_id`. Assim, a unique não impede reprocessamento legítimo; impede
+mutação/reinterpretação do batch original. `UNIQUE(snapshot_fingerprint)` é globalmente correto
+porque o material inclui `import_batch_id` e `project_id`: mesmo conjunto lógico em novo batch
+é um novo artefato/captura, enquanto retry do mesmo batch é o mesmo fingerprint.
+
+### 6.6 Fluxo transacional
 
 `source validated → normalized observations → capture material → fingerprint → actor/import/scope → transaction → concurrency guard → replay/idempotency → snapshot → project occurrences → item occurrences → refs → invariants → publish authority SUCCESS → commit`.
 
@@ -416,6 +488,23 @@ Nenhuma parte é autoridade antes do commit.
 | novo fp                 | nova revisão após lock         |           não parcial |
 | publicação falha        | rollback completo              |                   não |
 
+### 6.7 Boundary transacional P009/P034
+
+P034 não altera a semântica business do P009. O importador primeiro conclui e commita sua
+transação de negócio autorizada; somente depois do commit, com as observações normalizadas e o
+`project_id` factual disponível, o orquestrador inicia uma transação independente de captura
+P034. Falha, timeout, deadlock ou indisponibilidade de provenance não faz rollback, não muda
+status, não reabre batch e não corrige silenciosamente `import_batches`/staging. O erro fica
+retryable e observável, e o batch P009 permanece com o resultado que já tinha.
+
+Para batch multi-project, o orquestrador chama uma captura independente por projeto. Um projeto
+que falha não desfaz os demais; isso é partial provenance por projeto, não partial snapshot:
+cada envelope individual é completo ou inexistente. Retry usa o par batch/projeto e seu
+fingerprint; latest é independente em cada projeto. Se a exigência futura mudar para
+atomicidade batch-level, parar com `P034_P009_TRANSACTION_SEMANTICS_DECISION_REQUIRED`.
+
+`P034_PROVENANCE_FAILURE_DOES_NOT_MUTATE_P009_BUSINESS_SEMANTICS`.
+
 ## 7. Imutabilidade, RLS e grants
 
 As quatro tabelas terão `ENABLE ROW LEVEL SECURITY` e `FORCE ROW LEVEL SECURITY`. O runtime
@@ -434,14 +523,17 @@ Escolhe-se o modelo híbrido **parent + `project_id` direto**: cada tabela filha
 permite prova direta de autorização e impede que uma referência de projeto seja ligada a pai de
 outro.
 
-Para `SELECT`, `INSERT` e `WITH CHECK`:
+Para `SELECT`, `INSERT` e `WITH CHECK`, a expressão de visibilidade deve reproduzir a policy
+P008 existente, sem inventar uma nova definição:
 
 - `authorization_context()` deve devolver ator ativo;
-- `admin` pode acessar projeto não apagado e seus dados;
-- `viewer`/`editor` somente acessam projeto ativo, não apagado, cujo cliente está visível,
-  conforme P008;
-- writer exige `current_setting('ltc_m.source', true) = 'p034-provenance'` e ator
-  `editor`/`admin`;
+- `admin` passa pela ramificação P008 de admin;
+- qualquer papel não-admin passa somente quando `projects.status = 'active'`,
+  `projects.deleted_at IS NULL` e existe linha em `ltc_m.clients` com
+  `clients.id = projects.client_id`; P008 não exige `clients.active` nessa policy;
+- para INSERT, além da mesma visibilidade factual, o ator deve ser `editor` ou `admin`,
+  `current_setting('ltc_m.source', true) = 'api'` e a linha deve ter
+  `captured_by_user_id = ltc_m.current_actor_id()`;
 - snapshot, observações e referências testam o `project_id` factual da própria linha.
 
 Como o snapshot é single-project, não há risco de envelope revelar existência ou count de
@@ -472,20 +564,87 @@ contexto existente P008 continua autoridade de ator. Não se adiciona função d
 Matriz operacional completa (aplica-se a cada uma das quatro tabelas; `—` significa privilégio
 revogado/não aplicável):
 
-| objeto              | papel                     | SELECT | INSERT | UPDATE | DELETE | REFERENCES | TRUNCATE | EXECUTE |
-| ------------------- | ------------------------- | -----: | -----: | -----: | -----: | ---------: | -------: | ------: |
-| cada tabela P034    | PUBLIC                    |      — |      — |      — |      — |          — |        — |       — |
-| cada tabela P034    | `ltc_m_runtime`           |    sim |      — |      — |      — |          — |        — |       — |
-| cada tabela P034    | `ltc_m_provenance_writer` |    sim |    sim |      — |      — |          — |        — |       — |
-| cada tabela P034    | owner migration           |    sim |    sim |    sim |    sim |        sim |      sim |       — |
-| funções de proteção | PUBLIC                    |      — |      — |      — |      — |          — |        — |       — |
-| funções de proteção | runtime                   |      — |      — |      — |      — |          — |        — |       — |
-| funções de proteção | writer                    |      — |      — |      — |      — |          — |        — |       — |
-| funções de proteção | owner migration           |      — |      — |      — |      — |          — |        — |     sim |
+| objeto                       | papel                     |   SELECT |        INSERT |        UPDATE |        DELETE | REFERENCES | TRUNCATE |        EXECUTE |
+| ---------------------------- | ------------------------- | -------: | ------------: | ------------: | ------------: | ---------: | -------: | -------------: |
+| cada tabela P034             | PUBLIC                    |        — |             — |             — |             — |          — |        — |              — |
+| cada tabela P034             | `ltc_m_runtime`           |      sim |             — |             — |             — |          — |        — |              — |
+| cada tabela P034             | `ltc_m_provenance_writer` |      sim |           sim |             — |             — |          — |        — |              — |
+| cada tabela P034             | owner migration           |      sim |           sim |           sim |           sim |        sim |      sim |              — |
+| `projects`, `import_batches` | `ltc_m_runtime`           |      sim | conforme P008 | conforme P008 | conforme P008 |          — |        — | P008 allowlist |
+| `projects`, `import_batches` | `ltc_m_provenance_writer` | sim, RLS |             — |             — |             — |          — |        — |              — |
+| funções de proteção          | PUBLIC                    |        — |             — |             — |             — |          — |        — |              — |
+| funções de proteção          | runtime                   |        — |             — |             — |             — |          — |        — |              — |
+| funções de proteção          | writer                    |        — |             — |             — |             — |          — |        — |              — |
+| funções de proteção          | owner migration           |        — |             — |             — |             — |          — |        — |            sim |
+
+Para evitar uma matriz enganosa, os privilégios P008 existentes de `projects` e
+`import_batches` não são ampliados nesta revisão: a linha do writer é uma necessidade futura
+condicionada à decisão de capability e à policy explícita equivalente à visibilidade P008.
+`ltc_m_runtime` mantém exatamente sua ACL já aplicada; a coluna “conforme P008” não autoriza
+qualquer mudança nesta PR.
 
 O owner estrutural é a única exceção operacional e não deve ser usado pela aplicação. A tabela
 de grants final também deverá revogar privilégios de sequences e de qualquer função auxiliar
 não explicitamente necessária.
+
+### 7.3 Context binding e capacidade de writer
+
+`captured_by_user_id` passa a ser `NOT NULL` no MVP e deve ser igual a
+`ltc_m.current_actor_id()` no `WITH CHECK`/writer validation. `request_id`, quando informado,
+deve ser igual a `current_setting('ltc_m.request_id', true)`; `capture_source` é exatamente
+`current_setting('ltc_m.source', true)` e, nesta captura autenticada, esse valor é `api`.
+O caller não escolhe outro ator, request ou source no INSERT. A função P008 continua validando
+`app_user_id`, `auth_subject`, usuário ativo, formato de source e request; provenance apenas
+amarra os valores já validados ao fato.
+
+O papel proposto é novo e futuro: `ltc_m_provenance_writer`, `NOLOGIN`, `NOSUPERUSER`,
+`NOCREATEDB`, `NOCREATEROLE`, `NOREPLICATION`, `NOBYPASSRLS`, `NOINHERIT`, sem ownership e sem
+memberships por padrão. Não pode ser criado, assumido ou recebido pelo runtime nesta revisão.
+O P019 real possui um único `DatabasePool`/`DATABASE_URL` e transação P008 para
+`ltc_m_runtime`; não existe hoje pool separado, login de ingestão ou grant de membership que
+permita `SET LOCAL ROLE` seguro. D26 também não autoriza acrescentar essa associação.
+
+A recomendação para uma decisão futura é um pool separado de ingestão com login dedicado,
+`NOINHERIT`, sem superuser/createdb/createrole/replication/bypass, `SET LOCAL ROLE
+ltc_m_provenance_writer` somente dentro da transação e nenhum membership para o pool de leitura.
+O login de ingestão precisaria de grants mínimos explícitos e EXECUTE apenas dos helpers P008
+necessários (`set_actor_context` e `authorization_context`), além de SELECT com RLS em
+`ltc_m.projects`, `ltc_m.import_batches` e snapshots para validar projeto, source hash e replay.
+Não se concede UPDATE em `ltc_m.projects`.
+
+Como esse pool/login/membership não existe na arquitetura autorizada atual e criá-lo é uma
+capability de segurança nova, o design não pode declarar essa parte congelada como aprovada:
+
+`P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED`
+
+Até decisão explícita, não se cria role, não se adiciona membership, não se concede INSERT ao
+runtime e não se inicia a migration 19.
+
+### 7.4 Source hash e privilégios mínimos de leitura do writer
+
+`source_artifact_hash` é redundante por decisão de rastreabilidade, mas nunca é aceito do caller
+como valor independente. O writer lê `ltc_m.import_batches.source_hash` pelo `import_batch_id`,
+exige hash não nulo/válido e verifica igualdade antes do insert. Um trigger futuro invoker
+`p034_provenance_source_hash_matches_batch` repetirá a verificação no banco; se o batch não for
+visível, o insert falha fechado. O batch P009 deve permanecer imutável, portanto não há janela
+para alterar o hash depois da verificação.
+
+Além das quatro tabelas P034, o writer requer somente `SELECT` em `ltc_m.projects` e
+`ltc_m.import_batches`, sujeito a policies de leitura que reproduzam P008; requer EXECUTE nos
+helpers P008 estritamente necessários. Esses privilégios não são implícitos pelo owner. O
+writer não recebe INSERT/UPDATE/DELETE em projects, import_batches ou qualquer outro domínio.
+
+Para autoridade, substitui-se o `FOR UPDATE` planejado por lock advisory transacional sem
+privilégio DML:
+
+`pg_advisory_xact_lock(hashtextextended('ltcm.p034.authority_revision/' || project_id::text, 0))`
+
+O namespace inclui o nome da capability e o UUID textual do projeto. Uma colisão de hash
+somente serializa projetos adicionais; não autoriza leitura cruzada nem altera o `project_id`
+usado em FKs/RLS. Projetos são ordenados por UUID textual antes dos locks; o deadlock/serialization
+retry repete a transação inteira. Só depois de todos os locks o writer calcula
+`COALESCE(MAX(authority_revision), 0) + 1`, protegido por `UNIQUE(project_id,
+authority_revision)`. `ltc_m.projects` não recebe UPDATE do writer.
 
 ## 8. Reader e derivação P034
 
@@ -541,7 +700,71 @@ As referências participam do material do finding; as referências armazenadas d
 P015-safe, na mesma semântica canônica. Se limite técnico tornar isso impossível, a captura é
 inelegível e não se cria silenciosamente ID novo.
 
+### 8.3 Material exato dos dois findings
+
+O código real cria `finding()` com o objeto completo sem `finding_id`, adiciona o contrato
+`ltcm.p015.finding.v1`, copia os dois arrays de referências e calcula
+`p015-finding-v1:${sha256Canonical(material)}`. Para os dois findings P034, a reconstrução
+determinística é:
+
+```json
+{
+  "contract": "ltcm.p015.finding.v1",
+  "finding_code": "DUPLICATE_PROJECT_SOURCE_IDENTITY ou DUPLICATE_ITEM_SOURCE_IDENTITY",
+  "severity": "ERROR",
+  "domain": "duplicate_identity",
+  "project_id": "project.project_id",
+  "project_code": "project.project_code ou item.project_code",
+  "item_id": "item.item_id ou null",
+  "source_line_key": "item.source_line_key ou null",
+  "competence_date": null,
+  "metric": null,
+  "currency_code": null,
+  "expected_value": null,
+  "observed_value": null,
+  "delta": null,
+  "source_references": "group.flatMap(source_references)",
+  "database_references": [],
+  "decision_reference": null,
+  "blocking": false,
+  "explanation": "texto literal P015 do código para a regra",
+  "remediation_class": "investigate_duplicate"
+}
+```
+
+Para projeto, `project = group[0]`, o agrupamento é `project_code`, a mensagem literal é
+`Multiple source project identities resolve to ${code}.`; para item, o agrupamento é
+`project_code + "\\0" + source_line_key`, o lookup é a primeira project observation daquele
+code, `item = group[0]` e a mensagem é `Repeated project plus source_line_key identity.`.
+O adapter deve gerar exatamente esses campos, incluindo arrays vazios, nulls, boolean e texto;
+não pode usar dados mínimos ausentes para preencher defaults diferentes. Com a mesma sequência
+P015 de observações/referências e o mesmo projeto base, o material e o finding ID são byte a
+byte semanticamente equivalentes. Caso contrário, `P034_P015_FINDING_IDENTITY_DECISION_REQUIRED`.
+
 `IMPORT_DUPLICATION_REMAINS_P015_ONLY`.
+
+### 8.4 Binding ambíguo de project code
+
+P015 aceita duas observações válidas com o mesmo `project_code` e `project_id` diferentes:
+`projectCode()` valida o código, `nullableText()` aceita ambos os IDs e nenhum invariant de
+P015 os proíbe. O pipeline P011/P012 pode produzir a ocorrência source antes de uma decisão de
+binding, e o código P015 usa determinísticamente o primeiro elemento do grupo para o
+`project_id` do finding; isso não torna o segundo vínculo falso.
+
+Este design escolhe a alternativa **B**: o caso é possível em P015, mas é inelegível para um
+envelope P034 single-project quando não há um único vínculo factual por `project_code`. A razão
+já aprovada é o v3/D21: provenance deve ter isolamento factual por projeto e o envelope
+`QualityFinding` exige projeto; D22 não autoriza atribuir o segundo fato ao primeiro. O writer
+rejeita o snapshot inteiro desse escopo antes do insert, não escolhe `group[0]` para storage,
+não fabrica projeto e não expõe finding P034. P015 continua podendo emitir seu finding original.
+
+Projeto existente captura normalmente; projeto novo aguarda o commit que crie seu `project_id`;
+não há FK para ID inexistente. Duplicidade source de projeto com um binding único captura todas
+as ocorrências. Item rejeitado pelo domínio ainda pode ser capturado como observation textual,
+pois não exige FK a `project_items`; sem projeto factual, aguarda ou rejeita o snapshot.
+
+`P034_DUPLICATE_PROJECT_BINDING_DECISION_REQUIRED` não é emitido: a decisão B é suportada por
+D21/D22 e é um boundary de elegibilidade, não uma nova decisão humana.
 
 ### 8.3 Paginação
 
@@ -551,6 +774,30 @@ aplica filtro, ordenação estável `(severity, code, project_id, item_id, sourc
 finding_id)` e `limit/offset` bounded. `totalItems` é o total desse conjunto autorizado e
 derivado; não conta facts brutos, snapshots antigos, import duplicates ou projetos sem acesso.
 Não se usa cursor que exponha existência de linha invisível.
+
+Consulta conceitual set-based para todos os projetos autorizados, sem N+1:
+
+```sql
+SELECT DISTINCT ON (s.project_id)
+       s.id, s.project_id, s.import_batch_id, s.snapshot_fingerprint,
+       s.authority_revision, s.source_artifact_hash
+  FROM ltc_m.p034_provenance_snapshots AS s
+  JOIN ltc_m.projects AS p ON p.id = s.project_id
+ WHERE s.status = 'success'
+   AND EXISTS (
+       SELECT 1 FROM ltc_m.authorization_context() AS ac
+       WHERE ac.app_role = 'admin'
+          OR (p.status = 'active' AND p.deleted_at IS NULL
+              AND EXISTS (SELECT 1 FROM ltc_m.clients AS c WHERE c.id = p.client_id))
+   )
+ ORDER BY s.project_id, s.authority_revision DESC;
+```
+
+Essa é a expressão P008 completa, sem helper novo nem permissão implícita. A seleção é
+seguida por joins/CTEs dos quatro objetos P034 autorizados e pela derivação server-side.
+
+Este bloco é consulta conceitual e não o pseudoddl de criação; o placeholder não autoriza SQL
+executável nesta PR.
 
 ## 9. Referências e minimização
 
@@ -595,12 +842,20 @@ sobre referência já sanitizada.
 | source references    | `project_id`                  | RLS/FK composta        | projeto factual           | autorização          | média       |
 | source references    | parent IDs                    | associação             | source_references P015    | parent autorizado    | média       |
 | source references    | `reference_ordinal`           | multiset canônico      | ordem P015                | baixa                | baixa       |
-| source references    | `kind`                        | tipo                   | source P015               | baixa                | baixa       |
+| source references    | `kind`                        | tipo                   | P015 source/database      | baixa                | baixa       |
 | source references    | `locator`                     | localização segura     | P015 reference            | nunca segredo        | média       |
 | source references    | `fingerprint`                 | integridade            | P015 reference            | baixa                | baixa       |
 
 Não há cópia de `raw_payload`, `source_range`, nome de planilha, caminho, URLs integrais,
 valores financeiros desnecessários, `database_references`, finding, explanation ou remediation.
+
+`receipt_actual` fica explicitamente fora do universo funcional e estrutural: não há coluna,
+FK, referência, índice, policy de leitura ou adapter P034 para seus IDs, status ou valores.
+
+Também não existe qualquer armazenamento de `quality_findings`, `alerts`, `inconsistencies`,
+`finding_status`, `acknowledgement`, `resolution`, `dismiss`, `owner` ou lifecycle. Findings
+continuam derivados em memória e desaparecem quando o snapshot atual deixa de satisfazer a
+regra.
 
 ## 10. Auditoria, observabilidade e retenção
 
@@ -642,65 +897,151 @@ indisponibilidade. Não há `down` que remova fatos ou reverta para staging.
 
 ## 12. Pseudoddl de referência
 
-O bloco seguinte é deliberadamente **não executável**. É um contrato de intenção para uma
-future migration; contém placeholders e comentários e não deve ser copiado para migrations sem
-revisão. Marcador:
+O bloco seguinte é deliberadamente **não executável**. É SQL de referência nomeado e
+sintaticamente plausível para uma future migration, condicionado à decisão de capability; não
+deve ser copiado para migrations sem revisão. Marcador:
 
 `REFERENCE_PSEUDODDL_ONLY`
 
 ```sql
 -- REFERENCE_PSEUDODDL_ONLY
--- NÃO EXECUTAR. NÃO É migration. Nomes e detalhes exigem revisão final.
+-- NÃO EXECUTAR. NÃO É migration e está condicionado a
+-- P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED.
 
-CREATE TABLE ltc_m.p034_provenance_snapshots (...);
-ALTER TABLE ltc_m.p034_provenance_snapshots
-  ADD CONSTRAINT ... FOREIGN KEY (import_batch_id)
-  REFERENCES ltc_m.import_batches(id) ON DELETE RESTRICT;
-ALTER TABLE ltc_m.p034_provenance_snapshots
-  ADD CONSTRAINT ... FOREIGN KEY (project_id)
-  REFERENCES ltc_m.projects(id) ON DELETE RESTRICT;
-ALTER TABLE ltc_m.p034_provenance_snapshots
-  ADD CONSTRAINT ... UNIQUE (import_batch_id, project_id);
-ALTER TABLE ltc_m.p034_provenance_snapshots
-  ADD CONSTRAINT ... UNIQUE (project_id, authority_revision);
-CREATE UNIQUE INDEX ... ON ltc_m.p034_provenance_snapshots (snapshot_fingerprint);
-CREATE INDEX ... ON ltc_m.p034_provenance_snapshots
-  (project_id, authority_revision DESC, snapshot_fingerprint ASC);
+CREATE TABLE ltc_m.p034_provenance_snapshots (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    import_batch_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    scope_type text NOT NULL DEFAULT 'project',
+    schema_version smallint NOT NULL DEFAULT 1,
+    source_artifact_hash text NOT NULL,
+    snapshot_fingerprint text NOT NULL,
+    fingerprint_algorithm text NOT NULL DEFAULT 'sha256-canonical-v1',
+    source_observation_contract text NOT NULL DEFAULT 'ltcm.p015.reconciliation.v1',
+    status text NOT NULL DEFAULT 'success',
+    authority_revision bigint NOT NULL,
+    captured_by_user_id uuid NOT NULL,
+    request_id text,
+    capture_source text NOT NULL DEFAULT 'api',
+    captured_at timestamptz NOT NULL DEFAULT now(),
+    completed_at timestamptz NOT NULL,
+    CONSTRAINT pk_p034_provenance_snapshots PRIMARY KEY (id),
+    CONSTRAINT uq_p034_snapshot_batch_project UNIQUE (import_batch_id, project_id),
+    CONSTRAINT uq_p034_snapshot_project_revision UNIQUE (project_id, authority_revision),
+    CONSTRAINT uq_p034_snapshot_fingerprint UNIQUE (snapshot_fingerprint),
+    CONSTRAINT uq_p034_snapshot_id_project UNIQUE (id, project_id),
+    CONSTRAINT fk_p034_snapshot_batch FOREIGN KEY (import_batch_id)
+        REFERENCES ltc_m.import_batches(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_p034_snapshot_project FOREIGN KEY (project_id)
+        REFERENCES ltc_m.projects(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_p034_snapshot_actor FOREIGN KEY (captured_by_user_id)
+        REFERENCES ltc_m.app_users(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_p034_snapshot_scope CHECK (scope_type = 'project'),
+    CONSTRAINT ck_p034_snapshot_schema CHECK (schema_version = 1),
+    CONSTRAINT ck_p034_snapshot_artifact_hash CHECK (lower(source_artifact_hash) = source_artifact_hash AND source_artifact_hash ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT ck_p034_snapshot_fingerprint CHECK (lower(snapshot_fingerprint) = snapshot_fingerprint AND snapshot_fingerprint ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT ck_p034_snapshot_algorithm CHECK (fingerprint_algorithm = 'sha256-canonical-v1'),
+    CONSTRAINT ck_p034_snapshot_contract CHECK (source_observation_contract = 'ltcm.p015.reconciliation.v1'),
+    CONSTRAINT ck_p034_snapshot_status CHECK (status = 'success'),
+    CONSTRAINT ck_p034_snapshot_revision CHECK (authority_revision > 0),
+    CONSTRAINT ck_p034_snapshot_request CHECK (request_id IS NULL OR (btrim(request_id) <> '' AND char_length(request_id) <= 200)),
+    CONSTRAINT ck_p034_snapshot_source CHECK (capture_source = 'api'),
+    CONSTRAINT ck_p034_snapshot_completed CHECK (completed_at >= captured_at)
+);
 
-CREATE TABLE ltc_m.p034_provenance_project_observations (...);
-ALTER TABLE ltc_m.p034_provenance_project_observations
-  ADD CONSTRAINT ... FOREIGN KEY (snapshot_id, project_id)
-  REFERENCES ltc_m.p034_provenance_snapshots(id, project_id) ON DELETE RESTRICT;
-CREATE UNIQUE INDEX ... ON ltc_m.p034_provenance_project_observations
-  (snapshot_id, occurrence_ordinal);
-CREATE INDEX ... ON ltc_m.p034_provenance_project_observations
-  (snapshot_id, project_code, occurrence_ordinal);
+CREATE INDEX ix_p034_snapshot_project_latest
+    ON ltc_m.p034_provenance_snapshots (project_id, authority_revision DESC);
+CREATE INDEX ix_p034_snapshot_batch_project
+    ON ltc_m.p034_provenance_snapshots (import_batch_id, project_id);
 
-CREATE TABLE ltc_m.p034_provenance_item_observations (...);
-ALTER TABLE ltc_m.p034_provenance_item_observations
-  ADD CONSTRAINT ... FOREIGN KEY (snapshot_id, project_id)
-  REFERENCES ltc_m.p034_provenance_snapshots(id, project_id) ON DELETE RESTRICT;
-CREATE UNIQUE INDEX ... ON ltc_m.p034_provenance_item_observations
-  (snapshot_id, occurrence_ordinal);
-CREATE INDEX ... ON ltc_m.p034_provenance_item_observations
-  (snapshot_id, project_code, source_line_key, occurrence_ordinal);
+CREATE TABLE ltc_m.p034_provenance_project_observations (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    snapshot_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    project_code text NOT NULL,
+    occurrence_ordinal integer NOT NULL,
+    occurrence_fingerprint text NOT NULL,
+    CONSTRAINT pk_p034_project_observations PRIMARY KEY (id),
+    CONSTRAINT uq_p034_project_observation_id_project UNIQUE (id, project_id),
+    CONSTRAINT uq_p034_project_observation_ordinal UNIQUE (snapshot_id, occurrence_ordinal),
+    CONSTRAINT fk_p034_project_observation_snapshot FOREIGN KEY (snapshot_id, project_id)
+        REFERENCES ltc_m.p034_provenance_snapshots(id, project_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_p034_project_observation_project FOREIGN KEY (project_id)
+        REFERENCES ltc_m.projects(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_p034_project_observation_code CHECK (project_code ~ '^[A-Z0-9][A-Z0-9._/-]{0,63}$'),
+    CONSTRAINT ck_p034_project_observation_ordinal CHECK (occurrence_ordinal > 0),
+    CONSTRAINT ck_p034_project_observation_fingerprint CHECK (lower(occurrence_fingerprint) = occurrence_fingerprint AND occurrence_fingerprint ~ '^[0-9a-f]{64}$')
+);
 
-CREATE TABLE ltc_m.p034_provenance_source_references (...);
-ALTER TABLE ltc_m.p034_provenance_source_references
-  ADD CONSTRAINT ... CHECK ((project_observation_id IS NOT NULL)::integer +
-                             (item_observation_id IS NOT NULL)::integer = 1);
-ALTER TABLE ltc_m.p034_provenance_source_references
-  ADD CONSTRAINT ... FOREIGN KEY (project_observation_id, project_id)
-  REFERENCES ltc_m.p034_provenance_project_observations(id, project_id) ON DELETE RESTRICT;
-ALTER TABLE ltc_m.p034_provenance_source_references
-  ADD CONSTRAINT ... FOREIGN KEY (item_observation_id, project_id)
-  REFERENCES ltc_m.p034_provenance_item_observations(id, project_id) ON DELETE RESTRICT;
-CREATE UNIQUE INDEX ... ON ltc_m.p034_provenance_source_references
-  (project_observation_id, reference_ordinal) WHERE project_observation_id IS NOT NULL;
-CREATE UNIQUE INDEX ... ON ltc_m.p034_provenance_source_references
-  (item_observation_id, reference_ordinal) WHERE item_observation_id IS NOT NULL;
+CREATE INDEX ix_p034_project_observation_identity
+    ON ltc_m.p034_provenance_project_observations (snapshot_id, project_code, occurrence_ordinal);
 
--- Todas as tabelas:
+CREATE TABLE ltc_m.p034_provenance_item_observations (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    snapshot_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    project_code text NOT NULL,
+    source_line_key text NOT NULL,
+    item_id text,
+    occurrence_ordinal integer NOT NULL,
+    occurrence_fingerprint text NOT NULL,
+    CONSTRAINT pk_p034_item_observations PRIMARY KEY (id),
+    CONSTRAINT uq_p034_item_observation_id_project UNIQUE (id, project_id),
+    CONSTRAINT uq_p034_item_observation_ordinal UNIQUE (snapshot_id, occurrence_ordinal),
+    CONSTRAINT fk_p034_item_observation_snapshot FOREIGN KEY (snapshot_id, project_id)
+        REFERENCES ltc_m.p034_provenance_snapshots(id, project_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_p034_item_observation_project FOREIGN KEY (project_id)
+        REFERENCES ltc_m.projects(id) ON DELETE RESTRICT,
+    CONSTRAINT ck_p034_item_observation_code CHECK (project_code ~ '^[A-Z0-9][A-Z0-9._/-]{0,63}$'),
+    CONSTRAINT ck_p034_item_observation_line CHECK (source_line_key ~ '^p012-line-v1:[0-9a-f]{64}$'),
+    CONSTRAINT ck_p034_item_observation_id CHECK (item_id IS NULL OR (btrim(item_id) <> '' AND item_id = btrim(item_id))),
+    CONSTRAINT ck_p034_item_observation_ordinal CHECK (occurrence_ordinal > 0),
+    CONSTRAINT ck_p034_item_observation_fingerprint CHECK (lower(occurrence_fingerprint) = occurrence_fingerprint AND occurrence_fingerprint ~ '^[0-9a-f]{64}$')
+);
+
+CREATE INDEX ix_p034_item_observation_identity
+    ON ltc_m.p034_provenance_item_observations (snapshot_id, project_code, source_line_key, occurrence_ordinal);
+CREATE INDEX ix_p034_item_observation_project_identity
+    ON ltc_m.p034_provenance_item_observations (project_id, project_code, source_line_key);
+
+CREATE TABLE ltc_m.p034_provenance_source_references (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    project_id uuid NOT NULL,
+    project_observation_id uuid,
+    item_observation_id uuid,
+    reference_ordinal integer NOT NULL,
+    kind text NOT NULL,
+    locator text NOT NULL,
+    fingerprint text NOT NULL,
+    CONSTRAINT pk_p034_source_references PRIMARY KEY (id),
+    CONSTRAINT fk_p034_source_reference_project FOREIGN KEY (project_id)
+        REFERENCES ltc_m.projects(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_p034_source_reference_project_observation FOREIGN KEY (project_observation_id, project_id)
+        REFERENCES ltc_m.p034_provenance_project_observations(id, project_id) ON DELETE RESTRICT,
+    CONSTRAINT fk_p034_source_reference_item_observation FOREIGN KEY (item_observation_id, project_id)
+        REFERENCES ltc_m.p034_provenance_item_observations(id, project_id) ON DELETE RESTRICT,
+    CONSTRAINT ck_p034_source_reference_one_parent CHECK ((project_observation_id IS NOT NULL)::integer + (item_observation_id IS NOT NULL)::integer = 1),
+    CONSTRAINT ck_p034_source_reference_kind CHECK (kind IN ('source', 'database')),
+    CONSTRAINT ck_p034_source_reference_locator CHECK (btrim(locator) <> '' AND char_length(locator) <= 1024 AND locator !~* '(?:[A-Z]:\\\\|(?:^|\\s)/(?:home|Users)/|postgres(?:ql)?://|https?://|\\b(?:password|token|private_key|client_secret)\\s*=)'),
+    CONSTRAINT ck_p034_source_reference_fingerprint CHECK (lower(fingerprint) = fingerprint AND fingerprint ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT ck_p034_source_reference_ordinal CHECK (reference_ordinal > 0)
+);
+
+CREATE UNIQUE INDEX uq_p034_source_reference_project_ordinal
+    ON ltc_m.p034_provenance_source_references (project_observation_id, reference_ordinal)
+    WHERE project_observation_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_p034_source_reference_item_ordinal
+    ON ltc_m.p034_provenance_source_references (item_observation_id, reference_ordinal)
+    WHERE item_observation_id IS NOT NULL;
+CREATE INDEX ix_p034_source_reference_project
+    ON ltc_m.p034_provenance_source_references (project_id, project_observation_id, reference_ordinal);
+CREATE INDEX ix_p034_source_reference_item
+    ON ltc_m.p034_provenance_source_references (project_id, item_observation_id, reference_ordinal);
+
+-- O papel e o login são condicionados à decisão de capability; não executar agora.
+-- CREATE ROLE ltc_m_provenance_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
+-- Nenhum membership é concedido ao ltc_m_runtime.
+
 ALTER TABLE ltc_m.p034_provenance_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ltc_m.p034_provenance_snapshots FORCE ROW LEVEL SECURITY;
 ALTER TABLE ltc_m.p034_provenance_project_observations ENABLE ROW LEVEL SECURITY;
@@ -710,34 +1051,194 @@ ALTER TABLE ltc_m.p034_provenance_item_observations FORCE ROW LEVEL SECURITY;
 ALTER TABLE ltc_m.p034_provenance_source_references ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ltc_m.p034_provenance_source_references FORCE ROW LEVEL SECURITY;
 
-CREATE FUNCTION ltc_m.p034_provenance_reject_update() RETURNS trigger
-  LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$ ... $$;
-CREATE FUNCTION ltc_m.p034_provenance_reject_delete() RETURNS trigger
-  LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $$ ... $$;
-CREATE TRIGGER ... BEFORE UPDATE ON ltc_m.p034_provenance_snapshots
-  FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update();
-CREATE TRIGGER ... BEFORE DELETE ON ltc_m.p034_provenance_snapshots
-  FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete();
--- Repetir proteção para os três filhos.
+CREATE FUNCTION ltc_m.p034_provenance_reject_update()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $function$
+BEGIN
+    RAISE EXCEPTION 'P034 provenance facts are immutable' USING ERRCODE = '55000';
+END;
+$function$;
 
--- Policies devem usar authorization_context(), factual project_id e, para INSERT,
--- current_setting('ltc_m.source', true) = 'p034-provenance'.
-CREATE POLICY ... ON ltc_m.p034_provenance_snapshots FOR SELECT TO ltc_m_runtime
-  USING (/* projeto autorizado */);
-CREATE POLICY ... ON ltc_m.p034_provenance_snapshots FOR INSERT TO ltc_m_provenance_writer
-  WITH CHECK (/* ator editor/admin + source + projeto autorizado */);
--- Repetir SELECT/INSERT para observações e referências; não criar UPDATE/DELETE policies.
+CREATE FUNCTION ltc_m.p034_provenance_reject_delete()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $function$
+BEGIN
+    RAISE EXCEPTION 'P034 provenance facts cannot be deleted' USING ERRCODE = '55000';
+END;
+$function$;
 
-REVOKE ALL ON ltc_m.p034_provenance_snapshots FROM PUBLIC;
-REVOKE ALL ON ltc_m.p034_provenance_project_observations FROM PUBLIC;
-REVOKE ALL ON ltc_m.p034_provenance_item_observations FROM PUBLIC;
-REVOKE ALL ON ltc_m.p034_provenance_source_references FROM PUBLIC;
-REVOKE ALL ON FUNCTION ltc_m.p034_provenance_reject_update() FROM PUBLIC;
-REVOKE ALL ON FUNCTION ltc_m.p034_provenance_reject_delete() FROM PUBLIC;
+CREATE FUNCTION ltc_m.p034_provenance_source_hash_matches_batch()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $function$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM ltc_m.import_batches AS b
+        WHERE b.id = NEW.import_batch_id
+          AND b.source_hash = NEW.source_artifact_hash
+    ) THEN
+        RAISE EXCEPTION 'P034 source artifact hash does not match import batch' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$function$;
+
+CREATE FUNCTION ltc_m.p034_provenance_context_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $function$
+BEGIN
+    IF NEW.captured_by_user_id IS DISTINCT FROM ltc_m.current_actor_id(true)
+       OR NEW.request_id IS DISTINCT FROM NULLIF(current_setting('ltc_m.request_id', true), '')
+       OR NEW.capture_source IS DISTINCT FROM current_setting('ltc_m.source', true)
+       OR NEW.capture_source <> 'api' THEN
+        RAISE EXCEPTION 'P034 provenance actor context mismatch' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+END;
+$function$;
+
+CREATE FUNCTION ltc_m.p034_project_observation_reference_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $function$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM ltc_m.p034_provenance_source_references AS r
+        WHERE r.project_observation_id = NEW.id AND r.project_id = NEW.project_id
+    ) THEN
+        RAISE EXCEPTION 'P034 project observation requires source reference' USING ERRCODE = '23514';
+    END IF;
+    RETURN NULL;
+END;
+$function$;
+
+CREATE FUNCTION ltc_m.p034_item_observation_reference_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = '' AS $function$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM ltc_m.p034_provenance_source_references AS r
+        WHERE r.item_observation_id = NEW.id AND r.project_id = NEW.project_id
+    ) THEN
+        RAISE EXCEPTION 'P034 item observation requires source reference' USING ERRCODE = '23514';
+    END IF;
+    RETURN NULL;
+END;
+$function$;
+
+CREATE TRIGGER trg_p034_snapshot_hash
+    BEFORE INSERT ON ltc_m.p034_provenance_snapshots
+    FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_source_hash_matches_batch();
+CREATE TRIGGER trg_p034_snapshot_context
+    BEFORE INSERT ON ltc_m.p034_provenance_snapshots
+    FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_context_guard();
+
+CREATE CONSTRAINT TRIGGER trg_p034_project_reference_cardinality
+    AFTER INSERT ON ltc_m.p034_provenance_project_observations
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    EXECUTE FUNCTION ltc_m.p034_project_observation_reference_guard();
+CREATE CONSTRAINT TRIGGER trg_p034_item_reference_cardinality
+    AFTER INSERT ON ltc_m.p034_provenance_item_observations
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+    EXECUTE FUNCTION ltc_m.p034_item_observation_reference_guard();
+
+CREATE TRIGGER trg_p034_snapshot_no_update BEFORE UPDATE ON ltc_m.p034_provenance_snapshots FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update();
+CREATE TRIGGER trg_p034_snapshot_no_delete BEFORE DELETE ON ltc_m.p034_provenance_snapshots FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete();
+CREATE TRIGGER trg_p034_project_no_update BEFORE UPDATE ON ltc_m.p034_provenance_project_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update();
+CREATE TRIGGER trg_p034_project_no_delete BEFORE DELETE ON ltc_m.p034_provenance_project_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete();
+CREATE TRIGGER trg_p034_item_no_update BEFORE UPDATE ON ltc_m.p034_provenance_item_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update();
+CREATE TRIGGER trg_p034_item_no_delete BEFORE DELETE ON ltc_m.p034_provenance_item_observations FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete();
+CREATE TRIGGER trg_p034_reference_no_update BEFORE UPDATE ON ltc_m.p034_provenance_source_references FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_update();
+CREATE TRIGGER trg_p034_reference_no_delete BEFORE DELETE ON ltc_m.p034_provenance_source_references FOR EACH ROW EXECUTE FUNCTION ltc_m.p034_provenance_reject_delete();
+
+CREATE POLICY p034_snapshots_runtime_select ON ltc_m.p034_provenance_snapshots
+    FOR SELECT TO ltc_m_runtime USING (
+        EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac
+                WHERE ac.app_role = 'admin'
+                   OR (ltc_m.p034_provenance_snapshots.status = 'success' AND EXISTS (
+                       SELECT 1 FROM ltc_m.projects AS p
+                       JOIN ltc_m.clients AS c ON c.id = p.client_id
+                       WHERE p.id = ltc_m.p034_provenance_snapshots.project_id AND p.status = 'active' AND p.deleted_at IS NULL
+                   )))
+    );
+CREATE POLICY p034_snapshots_writer_select ON ltc_m.p034_provenance_snapshots
+    FOR SELECT TO ltc_m_provenance_writer USING (
+        EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac
+                WHERE ac.app_role IN ('editor', 'admin'))
+        AND EXISTS (SELECT 1 FROM ltc_m.projects AS p
+                    JOIN ltc_m.clients AS c ON c.id = p.client_id
+                    WHERE p.id = ltc_m.p034_provenance_snapshots.project_id
+                      AND (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role = 'admin')
+                           OR (p.status = 'active' AND p.deleted_at IS NULL)))
+    );
+CREATE POLICY p034_snapshots_writer_insert ON ltc_m.p034_provenance_snapshots
+    FOR INSERT TO ltc_m_provenance_writer WITH CHECK (
+        captured_by_user_id = ltc_m.current_actor_id(true)
+        AND capture_source = current_setting('ltc_m.source', true)
+        AND capture_source = 'api'
+        AND request_id IS NOT DISTINCT FROM NULLIF(current_setting('ltc_m.request_id', true), '')
+        AND EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac
+                    WHERE ac.app_role IN ('editor', 'admin'))
+    );
+
+-- As três policies de observação e as duas de referência usam a mesma expressão direta:
+-- authorization_context ativo, project_id factual, e o projeto P008 (admin ou
+-- status active + deleted_at null + client existente). As policies INSERT acrescentam
+-- current_actor_id(true), source api e consistência do snapshot/pai. Não há UPDATE/DELETE.
+CREATE POLICY p034_project_observations_runtime_select ON ltc_m.p034_provenance_project_observations
+    FOR SELECT TO ltc_m_runtime USING (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role = 'admin' OR (EXISTS (SELECT 1 FROM ltc_m.projects AS p JOIN ltc_m.clients AS c ON c.id = p.client_id WHERE p.id = ltc_m.p034_provenance_project_observations.project_id AND p.status = 'active' AND p.deleted_at IS NULL))));
+CREATE POLICY p034_item_observations_runtime_select ON ltc_m.p034_provenance_item_observations
+    FOR SELECT TO ltc_m_runtime USING (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role = 'admin' OR (EXISTS (SELECT 1 FROM ltc_m.projects AS p JOIN ltc_m.clients AS c ON c.id = p.client_id WHERE p.id = ltc_m.p034_provenance_item_observations.project_id AND p.status = 'active' AND p.deleted_at IS NULL))));
+CREATE POLICY p034_source_references_runtime_select ON ltc_m.p034_provenance_source_references
+    FOR SELECT TO ltc_m_runtime USING (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role = 'admin' OR (EXISTS (SELECT 1 FROM ltc_m.projects AS p JOIN ltc_m.clients AS c ON c.id = p.client_id WHERE p.id = ltc_m.p034_provenance_source_references.project_id AND p.status = 'active' AND p.deleted_at IS NULL))));
+CREATE POLICY p034_project_observations_writer_select ON ltc_m.p034_provenance_project_observations
+    FOR SELECT TO ltc_m_provenance_writer USING (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role IN ('editor', 'admin')));
+CREATE POLICY p034_item_observations_writer_select ON ltc_m.p034_provenance_item_observations
+    FOR SELECT TO ltc_m_provenance_writer USING (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role IN ('editor', 'admin')));
+CREATE POLICY p034_source_references_writer_select ON ltc_m.p034_provenance_source_references
+    FOR SELECT TO ltc_m_provenance_writer USING (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role IN ('editor', 'admin')));
+CREATE POLICY p034_project_observations_writer_insert ON ltc_m.p034_provenance_project_observations
+    FOR INSERT TO ltc_m_provenance_writer WITH CHECK (
+        EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role IN ('editor', 'admin'))
+        AND EXISTS (SELECT 1 FROM ltc_m.p034_provenance_snapshots AS s WHERE s.id = ltc_m.p034_provenance_project_observations.snapshot_id AND s.project_id = ltc_m.p034_provenance_project_observations.project_id)
+        AND EXISTS (SELECT 1 FROM ltc_m.projects AS p JOIN ltc_m.clients AS c ON c.id = p.client_id WHERE p.id = ltc_m.p034_provenance_project_observations.project_id AND (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role = 'admin') OR (p.status = 'active' AND p.deleted_at IS NULL)))
+    );
+CREATE POLICY p034_item_observations_writer_insert ON ltc_m.p034_provenance_item_observations
+    FOR INSERT TO ltc_m_provenance_writer WITH CHECK (
+        EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role IN ('editor', 'admin'))
+        AND EXISTS (SELECT 1 FROM ltc_m.p034_provenance_snapshots AS s WHERE s.id = ltc_m.p034_provenance_item_observations.snapshot_id AND s.project_id = ltc_m.p034_provenance_item_observations.project_id)
+        AND EXISTS (SELECT 1 FROM ltc_m.projects AS p JOIN ltc_m.clients AS c ON c.id = p.client_id WHERE p.id = ltc_m.p034_provenance_item_observations.project_id AND (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role = 'admin') OR (p.status = 'active' AND p.deleted_at IS NULL)))
+    );
+CREATE POLICY p034_source_references_writer_insert ON ltc_m.p034_provenance_source_references
+    FOR INSERT TO ltc_m_provenance_writer WITH CHECK (
+        EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role IN ('editor', 'admin'))
+        AND EXISTS (SELECT 1 FROM ltc_m.projects AS p JOIN ltc_m.clients AS c ON c.id = p.client_id WHERE p.id = ltc_m.p034_provenance_source_references.project_id AND (EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac WHERE ac.app_role = 'admin') OR (p.status = 'active' AND p.deleted_at IS NULL)))
+        AND EXISTS (SELECT 1 FROM ltc_m.p034_provenance_snapshots AS s WHERE s.project_id = ltc_m.p034_provenance_source_references.project_id AND (s.id = (SELECT po.snapshot_id FROM ltc_m.p034_provenance_project_observations AS po WHERE po.id = ltc_m.p034_provenance_source_references.project_observation_id AND po.project_id = ltc_m.p034_provenance_source_references.project_id) OR s.id = (SELECT io.snapshot_id FROM ltc_m.p034_provenance_item_observations AS io WHERE io.id = ltc_m.p034_provenance_source_references.item_observation_id AND io.project_id = ltc_m.p034_provenance_source_references.project_id)))
+    );
+
+CREATE POLICY p034_writer_projects_select ON ltc_m.projects
+    FOR SELECT TO ltc_m_provenance_writer USING (
+        EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac
+                WHERE ac.app_role = 'admin'
+                   OR (projects.status = 'active' AND projects.deleted_at IS NULL
+                       AND EXISTS (SELECT 1 FROM ltc_m.clients AS c WHERE c.id = projects.client_id)))
+    );
+CREATE POLICY p034_writer_batches_select ON ltc_m.import_batches
+    FOR SELECT TO ltc_m_provenance_writer USING (
+        EXISTS (SELECT 1 FROM ltc_m.authorization_context() AS ac
+                WHERE ac.app_role IN ('editor', 'admin'))
+    );
+
+REVOKE ALL PRIVILEGES ON ltc_m.p034_provenance_snapshots FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON ltc_m.p034_provenance_project_observations FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON ltc_m.p034_provenance_item_observations FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON ltc_m.p034_provenance_source_references FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION ltc_m.p034_provenance_reject_update() FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION ltc_m.p034_provenance_reject_delete() FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION ltc_m.p034_provenance_source_hash_matches_batch() FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION ltc_m.p034_provenance_context_guard() FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION ltc_m.p034_project_observation_reference_guard() FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON FUNCTION ltc_m.p034_item_observation_reference_guard() FROM PUBLIC;
 GRANT USAGE ON SCHEMA ltc_m TO ltc_m_runtime, ltc_m_provenance_writer;
-GRANT SELECT ON ALL FOUR TABLES TO ltc_m_runtime;
-GRANT SELECT, INSERT ON ALL FOUR TABLES TO ltc_m_provenance_writer;
--- Nunca conceder UPDATE, DELETE, TRUNCATE, REFERENCES ou EXECUTE à aplicação.
+GRANT SELECT ON ltc_m.p034_provenance_snapshots, ltc_m.p034_provenance_project_observations, ltc_m.p034_provenance_item_observations, ltc_m.p034_provenance_source_references TO ltc_m_runtime;
+GRANT SELECT, INSERT ON ltc_m.p034_provenance_snapshots, ltc_m.p034_provenance_project_observations, ltc_m.p034_provenance_item_observations, ltc_m.p034_provenance_source_references TO ltc_m_provenance_writer;
+GRANT SELECT ON ltc_m.projects, ltc_m.import_batches TO ltc_m_provenance_writer;
+GRANT EXECUTE ON FUNCTION ltc_m.set_actor_context(uuid, text, text, text, text, boolean) TO ltc_m_provenance_writer;
+GRANT EXECUTE ON FUNCTION ltc_m.authorization_context() TO ltc_m_provenance_writer;
+GRANT EXECUTE ON FUNCTION ltc_m.current_actor_id(boolean) TO ltc_m_provenance_writer;
+-- Nunca conceder UPDATE, DELETE, TRUNCATE, REFERENCES ou EXECUTE dos triggers à aplicação.
 ```
 
 O pseudoddl não introduz uma função de captura `SECURITY DEFINER`. Se uma revisão futura
@@ -766,6 +1267,16 @@ SQL injection antes de substituir o writer invoker.
 | função definer abusável             | bypass RLS                 | writer invoker, sem definer nova           |
 | DDL fora de ltc_m                   | dano a outro sistema       | scanner/schema qualification               |
 | backfill especulativo               | achado não comprovável     | `NO_TRUSTWORTHY_BACKFILL`                  |
+| runtime comprometido                | forjar facts               | runtime sem INSERT; FORCE RLS              |
+| writer comprometido                 | alterar domínio            | role sem UPDATE/DELETE; RLS factual        |
+| SET ROLE inseguro                   | escalation                 | nenhum SET no runtime; pool separado gated |
+| membership indevido                 | assumir writer             | NOINHERIT, sem membership por padrão       |
+| actor forjado                       | autoria falsa              | set_actor_context + current_actor_id       |
+| source hash forjado                 | replay/artefato falso      | trigger compara batch/source_hash          |
+| captured_by forjado                 | auditoria falsa            | NOT NULL + equality ao actor context       |
+| reference ausente                   | finding P015 inválido      | writer + deferred constraint trigger       |
+| drift de ordem canônica             | finding ID diferente       | comparators P015 + stable tie ordinal      |
+| coupling indevido P009              | rollback de import         | transações independentes por projeto       |
 
 ## 14. Plano de testes PostgreSQL futuro
 
@@ -801,26 +1312,52 @@ testes locais versionados cobrirem:
 27. logs/métricas não contêm payload, segredo, locator proibido ou valor desnecessário;
 28. scanner rejeita DDL fora de `ltc_m` e grants públicos indevidos.
 
+Casos específicos exigidos por esta revisão:
+
+1. comparator P015 exato de project (`project_code + "\\0" + project_id` nullable);
+2. comparator P015 exato de item (`project_code + "\\0" + source_line_key + "\\0" + item_id`);
+3. references com locator igual e fingerprint diferente preservam ordem de entrada;
+4. empate de comparator preserva stable tie order e `group[0]`;
+5. finding ID de cada duplicidade é byte a byte igual ao P015;
+6. project/item sem source reference são rejeitados no commit;
+7. `project_code` usa regex P015 exata;
+8. `source_line_key` usa regex P015 exata;
+9. `item_id` nulo, string válida, vazia e não trimmed;
+10. writer só pode assumir a role pelo mecanismo explicitamente aprovado;
+11. runtime não pode assumir writer nem via membership implícito;
+12. writer não pode UPDATE em `projects`;
+13. advisory lock serializa sem privilégio UPDATE;
+14. `captured_by_user_id` forjado é rejeitado;
+15. source hash divergente do batch é rejeitado;
+16. falha P034 não altera silenciosamente o resultado business P009;
+17. predicados RLS reproduzem exatamente admin/status/deleted/client de P008;
+18. batch multi-project mantém envelopes e retries independentes;
+19. mesmo batch/projeto com mesmo fingerprint é replay no-op;
+20. mesmo batch/projeto com fingerprint divergente é conflito sem mutação.
+
 ## 15. Ledger de decisões técnicas
 
 Estas são decisões técnicas do design, não substituem nem reabrem D16–D26.
 
-| ID           | pergunta              | decisão                            | alternativas rejeitadas | autoridade      | razão                      | reversibilidade      | impacto                |
-| ------------ | --------------------- | ---------------------------------- | ----------------------- | --------------- | -------------------------- | -------------------- | ---------------------- |
-| P034-DDL-D01 | onde guardar facts?   | Option P dedicada                  | staging S               | contrato + D01  | separação/imutabilidade    | alta antes migration | quatro tabelas         |
-| P034-DDL-D02 | qual escopo?          | single-project tipado              | mixed, `scope_key`      | D05/D17         | RLS/vínculo factual        | média                | envelope por projeto   |
-| P034-DDL-D03 | publicar como?        | Model C, SUCCESS atômico           | pending/head mutável    | D08/D09         | commit é visibilidade      | média                | sem pending            |
-| P034-DDL-D04 | ordenar latest?       | revision lock + fp                 | timestamp/max sem lock  | PostgreSQL/P008 | determinismo               | média                | lock project           |
-| P034-DDL-D05 | granularidade?        | occurrence física + ordinal        | unique identidade       | D03/D11         | cardinalidade P015         | baixa                | mais linhas            |
-| P034-DDL-D06 | guardar P015 inteiro? | typed minimum                      | raw/full payload        | D01/D02         | minimização                | alta                 | adapter futuro         |
-| P034-DDL-D07 | item_id type?         | text nullable                      | UUID obrigatório        | contrato P015   | string/null exato          | alta                 | sem FK item            |
-| P034-DDL-D08 | guardar refs?         | relação normalizada source         | typed/JSON              | finding ID P015 | canonicalização/RLS        | média                | quarta tabela          |
-| P034-DDL-D09 | child RLS?            | project_id + FK composta           | parent-only join        | P008            | menor leakage              | média                | coluna redundante      |
-| P034-DDL-D10 | quem escreve?         | writer dedicado invoker            | runtime/definer         | P008/D26        | menor attack surface       | média                | provisionamento futuro |
-| P034-DDL-D11 | dedupe?               | replay por snapshot fp             | unique occurrence       | D03/D11         | retry sem perder duplicate | alta                 | conflict handling      |
-| P034-DDL-D12 | histórico/backfill?   | append-only, sem purge/no backfill | purge/guess             | D04/D06         | evidência                  | baixa                | crescimento            |
-| P034-DDL-D13 | sem snapshot?         | fail closed                        | zero/fallback staging   | D05             | sem falso saudável         | alta                 | indisponibilidade      |
-| P034-DDL-D14 | shared primitive?     | só refactor equivalente            | payload parcial/novo ID | P015 unchanged  | contrato preservado        | alta                 | paridade               |
+| ID           | pergunta              | decisão                            | alternativas rejeitadas | autoridade      | razão                        | reversibilidade          | impacto              |
+| ------------ | --------------------- | ---------------------------------- | ----------------------- | --------------- | ---------------------------- | ------------------------ | -------------------- |
+| P034-DDL-D01 | onde guardar facts?   | Option P dedicada                  | staging S               | contrato + D01  | separação/imutabilidade      | alta antes migration     | quatro tabelas       |
+| P034-DDL-D02 | qual escopo?          | single-project tipado              | mixed, `scope_key`      | D05/D17         | RLS/vínculo factual          | média                    | envelope por projeto |
+| P034-DDL-D03 | publicar como?        | Model C, SUCCESS atômico           | pending/head mutável    | D08/D09         | commit é visibilidade        | média                    | sem pending          |
+| P034-DDL-D04 | ordenar latest?       | revision + advisory xact lock      | timestamp/max sem lock  | PostgreSQL/P008 | least privilege/determinismo | média                    | lock hash namespace  |
+| P034-DDL-D05 | granularidade?        | occurrence física + ordinal        | unique identidade       | D03/D11         | cardinalidade P015           | baixa                    | mais linhas          |
+| P034-DDL-D06 | guardar P015 inteiro? | typed minimum                      | raw/full payload        | D01/D02         | minimização                  | alta                     | adapter futuro       |
+| P034-DDL-D07 | item_id type?         | text nullable                      | UUID obrigatório        | contrato P015   | string/null exato            | alta                     | sem FK item          |
+| P034-DDL-D08 | guardar refs?         | relação normalizada, kinds P015    | typed/JSON              | finding ID P015 | canonicalização/RLS          | média                    | quarta tabela        |
+| P034-DDL-D09 | child RLS?            | project_id + FK composta           | parent-only join        | P008            | menor leakage                | média                    | coluna redundante    |
+| P034-DDL-D10 | quem escreve?         | writer dedicado invoker, gated     | runtime/definer         | P008/D26        | menor attack surface         | bloqueada por capability | decisão necessária   |
+| P034-DDL-D11 | dedupe?               | replay por snapshot fp             | unique occurrence       | D03/D11         | retry sem perder duplicate   | alta                     | conflict handling    |
+| P034-DDL-D12 | histórico/backfill?   | append-only, sem purge/no backfill | purge/guess             | D04/D06         | evidência                    | baixa                    | crescimento          |
+| P034-DDL-D13 | sem snapshot?         | fail closed                        | zero/fallback staging   | D05             | sem falso saudável           | alta                     | indisponibilidade    |
+| P034-DDL-D14 | shared primitive?     | só refactor equivalente            | payload parcial/novo ID | P015 unchanged  | contrato preservado          | alta                     | paridade             |
+| P034-DDL-D15 | refs mínimas?         | writer + constraint triggers       | somente check app       | P015 `length>0` | SUCCESS não inválido         | alta                     | trigger deferred     |
+| P034-DDL-D16 | actor binding?        | captured actor/request/source      | caller-authored values  | P008 context    | autoria não forjável         | alta                     | actor NOT NULL       |
+| P034-DDL-D17 | P009 boundary?        | transações independentes           | rollback P009 junto     | D16/D17         | não muda business import     | alta                     | retry P034 separado  |
 
 ## 16. Gate de revisão adversarial automatizada
 
@@ -859,4 +1396,6 @@ repetir a revisão completa — não somente o teste que falhou.
 - [x] Master Control permanece `Não iniciada / 0%`;
 - [x] nenhuma migration, DDL, DB remoto, deploy ou alteração funcional executada.
 
-`P034_PROVENANCE_DDL_DESIGN_READY_FOR_REVIEW`
+O marker de readiness do head anterior foi invalidado por este commit. O resultado desta revisão
+é `P034_PROVENANCE_DDL_DESIGN_REVIEW_CHANGES_REQUIRED` até que o owner decida o provisioning
+seguro do writer.
