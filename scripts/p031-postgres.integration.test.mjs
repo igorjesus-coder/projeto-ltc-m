@@ -65,6 +65,7 @@ async function rebuildFromZero(pool) {
   const client = await pool.connect();
   try {
     await client.query('drop schema if exists ltc_m cascade');
+    await client.query('drop role if exists ltc_m_provenance_writer');
     for (const migration of await migrations()) {
       await client.query(migration.sql);
       if (migration.name === ADMIN_BOOTSTRAP_MIGRATION) {
