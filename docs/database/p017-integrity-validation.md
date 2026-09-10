@@ -2,7 +2,7 @@
 
 Contrato do schema: `ltcm.p017.schema-integrity.v1`
 Contrato do fingerprint: `ltcm.p017.schema-fingerprint.v1`
-Fingerprint nominal: `cc9f29ac1a5a46a9bfba557d901699d0d241644d3fdd884e360eefdd081ff1ae`
+Fingerprint nominal: `3a793592eab7e236c64c364a14db306ad70884caeb677e4376aa02586cbc8438`
 
 ## Inventário nominal
 

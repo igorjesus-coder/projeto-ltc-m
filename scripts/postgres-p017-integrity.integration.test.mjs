@@ -137,6 +137,7 @@ async function rebuildFromZero(pool, expectedMigrationCount) {
   try {
     await assertEnvironment(client);
     await client.query('drop schema if exists ltc_m cascade');
+    await client.query('drop role if exists ltc_m_provenance_writer');
     for (const migration of await migrationInventory(expectedMigrationCount)) {
       currentMigration = migration.name;
       await client.query(migration.sql);
@@ -381,8 +382,8 @@ async function assertSecurityAndViews(pool, snapshot) {
   const protectedTables = snapshot.model.relations.filter(
     (relation) => relation.kind === 'table' && relation.rowSecurity && relation.forceRowSecurity,
   );
-  assert.equal(protectedTables.length, 19);
-  assert.equal(snapshot.model.policies.length, 49);
+  assert.equal(protectedTables.length, 23);
+  assert.equal(snapshot.model.policies.length, 63);
   const views = snapshot.model.relations.filter((relation) => relation.kind === 'view');
   assert.equal(views.length, 9);
   for (const view of views) {

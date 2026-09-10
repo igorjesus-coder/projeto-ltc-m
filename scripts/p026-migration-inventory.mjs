@@ -1,4 +1,4 @@
-export const P026_MIGRATION_COUNT = 18;
+export const P026_MIGRATION_COUNT = 19;
 
 export function assertP026MigrationInventory(names) {
   if (names.length !== P026_MIGRATION_COUNT) {

@@ -2,7 +2,7 @@
   "schemaContract": "ltcm.p017.schema-integrity.v1",
   "fingerprintContract": "ltcm.p017.schema-fingerprint.v1",
   "migrationCount": 19,
-  "fingerprint": "cc9f29ac1a5a46a9bfba557d901699d0d241644d3fdd884e360eefdd081ff1ae",
+  "fingerprint": "3a793592eab7e236c64c364a14db306ad70884caeb677e4376aa02586cbc8438",
   "summary": {
     "relationCount": 32,
     "tableCount": 23,
@@ -7860,7 +7860,7 @@
         "referencedSchema": null,
         "referencedTable": null,
         "referencedColumns": [],
-        "definition": "CHECK (btrim(locator) <> ''::text AND char_length(locator) <= 1024 AND locator !~* '(?:[A-Z]:\\\\|(?:^|\\s)/(?:home|Users)/|postgres(?:ql)?://|https?://|\\b(?:password|token|private_key|client_secret)\\s*=)'::text)"
+        "definition": "CHECK (btrim(locator) <> ''::text AND char_length(locator) <= 1024 AND locator !~* '(?:[A-Z]:\\\\|(?:^|\\s)/(?:home|Users)/|postgres(?:ql)?://|https?://|(^|[^a-z0-9_])(?:password|token|private_key|client_secret)[[:space:]]*=)'::text)"
       },
       {
         "schema": "ltc_m",

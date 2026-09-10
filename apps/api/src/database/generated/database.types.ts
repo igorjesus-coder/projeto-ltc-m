@@ -5,7 +5,7 @@
  */
 export const P017_SCHEMA_CONTRACT = 'ltcm.p017.schema-integrity.v1' as const;
 export const P017_SCHEMA_FINGERPRINT =
-  'cc9f29ac1a5a46a9bfba557d901699d0d241644d3fdd884e360eefdd081ff1ae' as const;
+  '3a793592eab7e236c64c364a14db306ad70884caeb677e4376aa02586cbc8438' as const;
 export const P019_DATABASE_TYPES_CONTRACT = 'ltcm.p019.database-types.v1' as const;
 
 /** Exact decimal text returned by the P019 pg parser; never an authoritative number. */

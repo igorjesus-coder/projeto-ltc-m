@@ -92,6 +92,7 @@ async function rebuildFromZero(pool) {
   try {
     await assertEnvironment(client);
     await client.query('drop schema if exists ltc_m cascade');
+    await client.query('drop role if exists ltc_m_provenance_writer');
     for (const migration of await migrationInventory()) {
       currentMigration = migration.name;
       await client.query(migration.sql);
