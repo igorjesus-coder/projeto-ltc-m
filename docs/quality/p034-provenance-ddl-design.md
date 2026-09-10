@@ -3,7 +3,7 @@
 **Design ID:** `ltcm.p034.provenance-ddl-design.v1`<br>
 **Contrato:** `ltcm.p034.data-quality-center.v3`<br>
 **Fingerprint do contrato:** `3e1fc135c61634e759210e718ce04785de38e6be3b2c409468288df1d7a73117`<br>
-**Status:** revisão formal com alterações requeridas; não é migration executável<br>
+**Status:** revisão formal aprovada; pronto para merge documental; não é migration executável<br>
 **Base:** `main == origin/main == 98749d8fa3ca038b67a40487e884a0d5088b0b3a`
 
 ## 1. Escopo e resultado
@@ -29,6 +29,12 @@ O desenho preserva as decisões D01–D26 e, em particular, `PERSIST_SOURCE_FACT
 `NO_AUTOMATIC_PROVENANCE_PURGE`, `PROVENANCE_RETENTION_POLICY_DEFERRED`,
 `NO_P034_HISTORY_UI`, `P015_UNCHANGED` e `IMPORT_DUPLICATION_NOT_P034_MVP_ELIGIBLE`.
 
+As decisões de capability aprovadas para esta revisão estão congeladas como `P034-D27` a
+`P034-D31`, todas com autoridade `HUMAN_OWNER_DECISION`. Elas definem um pool server-side
+dedicado, um login por ambiente, a capability PostgreSQL `NOLOGIN` e a assunção explícita por
+`SET LOCAL ROLE`; não alteram P019, não criam capability P021 e não autorizam implementação nesta
+PR.
+
 Marcadores desta revisão:
 
 - `P034_DESIGN_CONTRACT_ID_CORRECTED`;
@@ -37,12 +43,18 @@ Marcadores desta revisão:
 - `P015_SOURCE_REFERENCE_CARDINALITY_ENFORCED`;
 - `P034_REFERENCE_PARITY_WITHOUT_TRANSFORMATION`;
 - `P034_AUTHORITY_REVISION_LOCK_LEAST_PRIVILEGE_CORRECTED`;
-- `P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED`;
-- `P034_PROVENANCE_DDL_DESIGN_REVIEW_CHANGES_REQUIRED`;
+- `P034_PROVENANCE_CAPABILITY_DECISION_RESOLVED`;
+- `AUTOMATED_DESIGN_REVIEW_APPROVED`;
+- `P034_PROVENANCE_DDL_DESIGN_REVIEW_APPROVED_READY_FOR_MERGE`;
 - `REFERENCE_PSEUDODDL_ONLY`;
 - `RETRY_IDEMPOTENCY_DOES_NOT_DEDUP_SOURCE_OCCURRENCES`;
 - `IMPORT_DUPLICATION_REMAINS_P015_ONLY`;
 - `NO_TRUSTWORTHY_BACKFILL`.
+
+`P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED` e
+`P034_PROVENANCE_DDL_DESIGN_REVIEW_CHANGES_REQUIRED` permanecem somente como marcadores
+históricos da revisão do HEAD anterior `01993cec7c8b445b3b21233c14c44e6f2d11b643`; não são
+gates ativos deste HEAD.
 
 ## 2. Evidência normativa e limites
 
@@ -460,11 +472,23 @@ porque o material inclui `import_batch_id` e `project_id`: mesmo conjunto lógic
 
 ### 6.6 Fluxo transacional
 
-`source validated → normalized observations → capture material → fingerprint → actor/import/scope → transaction → concurrency guard → replay/idempotency → snapshot → project occurrences → item occurrences → refs → invariants → publish authority SUCCESS → commit`.
+`source validated → normalized observations → capture material → fingerprint → actor/import/scope →
+acquire P034_PROVENANCE_DATABASE_POOL → BEGIN → SET LOCAL ROLE ltc_m_provenance_writer →
+identity/actor checks → advisory lock → replay/idempotency → snapshot → project occurrences →
+item occurrences → refs → invariants → publish authority SUCCESS → COMMIT → release`.
 
-O writer usa papel dedicado `ltc_m_provenance_writer`, sem login persistente criado por esta
-entrega, sem `BYPASSRLS`, e não o `ltc_m_runtime` reader. O serviço valida Auth0/ator, chama
-`set_actor_context` conforme P008 e grava pelo writer. Todos os inserts ocorrem em uma transação.
+O writer usa exclusivamente o pool server-side dedicado `P034_PROVENANCE_DATABASE_POOL` e a
+capability `ltc_m_provenance_writer`; nunca usa `DATABASE_URL` como fallback. Antes do role change,
+`session_user` é `<p034_provenance_login>` e, depois de `SET LOCAL ROLE`, `current_user` é
+`ltc_m_provenance_writer`. O serviço valida Auth0/ator, chama `set_actor_context` conforme P008 e
+grava pelo writer. Todos os inserts ocorrem em uma transação.
+
+`SET LOCAL ROLE` é permitido pela membership de ambiente com `INHERIT FALSE, SET TRUE` e só
+existe durante a transação. `COMMIT` ou `ROLLBACK` remove o role local e os settings
+transaction-local (`actor_id`, `request_id` e `source`) antes de a conexão ser devolvida ao pool.
+O pool deve testar explicitamente que a conexão reutilizada começa sem actor anterior e sem role
+writer residual. A captura ausente ou inválida falha fechado com
+`P034_PROVENANCE_WRITER_UNAVAILABLE`; não há captura parcial nem downgrade para leitura/runtime.
 
 Deadlock ou serialization failure retenta a transação inteira, com novo replay check. Queda
 antes do commit deixa rollback; queda depois do commit é resolvida relendo o fingerprint.
@@ -558,8 +582,11 @@ Antes de conceder privilégios, a futura migration deverá revogar todos os priv
 
 `ltc_m_runtime` não recebe INSERT; o reader/API não pode fabricar provenance. A função de
 contexto existente P008 continua autoridade de ator. Não se adiciona função de ingestão
-`SECURITY DEFINER`. Se o writer dedicado não puder ser isolado, parar com
-`P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED`, sem improvisar grants ao runtime.
+`SECURITY DEFINER`. O login de ambiente não recebe grants funcionais diretos: somente a
+capability recebe os grants de domínio. O SELECT do writer nas quatro tabelas P034 é mínimo,
+mas necessário para replay do snapshot e para os predicados de integridade/pais das inserções;
+as policies continuam limitando as linhas ao ator/projeto autorizado. Não há SELECT genérico
+adicional em outros domínios.
 
 Matriz operacional completa (aplica-se a cada uma das quatro tabelas; `—` significa privilégio
 revogado/não aplicável):
@@ -577,9 +604,9 @@ revogado/não aplicável):
 | funções de proteção          | writer                    |        — |             — |             — |             — |          — |        — |              — |
 | funções de proteção          | owner migration           |        — |             — |             — |             — |          — |        — |            sim |
 
-Para evitar uma matriz enganosa, os privilégios P008 existentes de `projects` e
-`import_batches` não são ampliados nesta revisão: a linha do writer é uma necessidade futura
-condicionada à decisão de capability e à policy explícita equivalente à visibilidade P008.
+Os privilégios P008 existentes de `projects` e `import_batches` não são ampliados nesta revisão:
+a linha do writer é um requisito futuro explícito, com policy própria equivalente à visibilidade
+P008 e somente para validação de projeto, source hash e replay. Nenhum grant é aplicado nesta PR.
 `ltc_m_runtime` mantém exatamente sua ACL já aplicada; a coluna “conforme P008” não autoriza
 qualquer mudança nesta PR.
 
@@ -597,28 +624,81 @@ O caller não escolhe outro ator, request ou source no INSERT. A função P008 c
 `app_user_id`, `auth_subject`, usuário ativo, formato de source e request; provenance apenas
 amarra os valores já validados ao fato.
 
-O papel proposto é novo e futuro: `ltc_m_provenance_writer`, `NOLOGIN`, `NOSUPERUSER`,
-`NOCREATEDB`, `NOCREATEROLE`, `NOREPLICATION`, `NOBYPASSRLS`, `NOINHERIT`, sem ownership e sem
-memberships por padrão. Não pode ser criado, assumido ou recebido pelo runtime nesta revisão.
-O P019 real possui um único `DatabasePool`/`DATABASE_URL` e transação P008 para
-`ltc_m_runtime`; não existe hoje pool separado, login de ingestão ou grant de membership que
-permita `SET LOCAL ROLE` seguro. D26 também não autoriza acrescentar essa associação.
+As decisões humanas congelam a seguinte fronteira, sem alterar P019 existente:
 
-A recomendação para uma decisão futura é um pool separado de ingestão com login dedicado,
-`NOINHERIT`, sem superuser/createdb/createrole/replication/bypass, `SET LOCAL ROLE
-ltc_m_provenance_writer` somente dentro da transação e nenhum membership para o pool de leitura.
-O login de ingestão precisaria de grants mínimos explícitos e EXECUTE apenas dos helpers P008
-necessários (`set_actor_context` e `authorization_context`), além de SELECT com RLS em
-`ltc_m.projects`, `ltc_m.import_batches` e snapshots para validar projeto, source hash e replay.
-Não se concede UPDATE em `ltc_m.projects`.
+`P034-D27 = HUMAN_DECISION_APPROVED`<br>
+`P034-D28 = HUMAN_DECISION_APPROVED`<br>
+`P034-D29 = HUMAN_DECISION_APPROVED`<br>
+`P034-D30 = HUMAN_DECISION_APPROVED`<br>
+`P034-D31 = HUMAN_DECISION_APPROVED`
 
-Como esse pool/login/membership não existe na arquitetura autorizada atual e criá-lo é uma
-capability de segurança nova, o design não pode declarar essa parte congelada como aprovada:
+Autoridade: `HUMAN_OWNER_DECISION`.
 
-`P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED`
+| decisão    | estado congelado                                                                | autoridade             |
+| ---------- | ------------------------------------------------------------------------------- | ---------------------- |
+| `P034-D27` | `DEDICATED_PROVENANCE_WRITER_POOL` server-side, separado do pool/runtime normal | `HUMAN_OWNER_DECISION` |
+| `P034-D28` | `NO_RUNTIME_WRITER_MEMBERSHIP`                                                  | `HUMAN_OWNER_DECISION` |
+| `P034-D29` | `PROVENANCE_WRITER_NOLOGIN_CAPABILITY_ROLE`                                     | `HUMAN_OWNER_DECISION` |
+| `P034-D30` | `DEDICATED_PROVENANCE_LOGIN_WITH_EXPLICIT_ROLE_ASSUMPTION`                      | `HUMAN_OWNER_DECISION` |
+| `P034-D31` | `DEDICATED_PROVENANCE_DATABASE_CREDENTIAL`                                      | `HUMAN_OWNER_DECISION` |
 
-Até decisão explícita, não se cria role, não se adiciona membership, não se concede INSERT ao
-runtime e não se inicia a migration 19.
+`DATABASE_URL` continua sendo exclusivamente o pool/runtime normal. O reader P034 usa esse
+pool; o writer P034 usa exclusivamente `P034_PROVENANCE_DATABASE_POOL`, configurado por
+`P034_PROVENANCE_DATABASE_URL`, server-side e secreto. A URL de provenance é obrigatória quando
+o writer estiver habilitado, deve ser PostgreSQL válida, segura com TLS em produção e distinta de
+`DATABASE_URL`; igualdade, ausência ou invalidez falha fechado (`PROVENANCE_CREDENTIAL_MUST_BE_DISTINCT`)
+e nenhuma tentativa de fallback é permitida (`NO_PROVENANCE_DATABASE_URL_FALLBACK`). O writer
+indisponível sem configuração válida produz `P034_PROVENANCE_WRITER_UNAVAILABLE`; o reader pode
+continuar servindo leitura quando o writer ainda não estiver habilitado.
+
+O pool dedicado tem lifecycle/close explícito, timeout de conexão, idle e statement limitados,
+`application_name = 'ltcm-api-p034-provenance'`, limite de conexões bounded e nenhuma exposição
+ao browser. Reutiliza primitives do pool P019 quando possível, mas mantém lifecycle, credencial e
+instância separados. Não introduz ORM, Supabase client ou endpoint público novo. O writer depende
+explicitamente de `P034_PROVENANCE_DATABASE_POOL`; injetar `DATABASE_POOL` normal é erro de
+arquitetura/teste.
+
+`ltc_m_provenance_writer` é uma capability técnica PostgreSQL `NOLOGIN`, `NOINHERIT`,
+`NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOREPLICATION`, `NOBYPASSRLS`, sem ownership de
+tabelas/funções privilegiadas, sem memberships desnecessários e sem grants de domínio ao login.
+Ela recebe somente os privilégios mínimos explicitados na seção 7.2. O LOGIN simbólico
+`<p034_provenance_login>` não é owner, superuser, `BYPASSRLS`, `CREATEDB`, `CREATEROLE` ou
+`REPLICATION`, e é membro exclusivamente dessa capability, além do mínimo de conexão exigido
+pela infraestrutura. `ltc_m_runtime` e o login usado por `DATABASE_URL` não recebem membership,
+INSERT ou capacidade de assumir essa role. Não existe helper genérico que transforme o runtime em
+writer. Este invariant será testado por `RUNTIME_CANNOT_ASSUME_PROVENANCE_WRITER`.
+
+O membership é provisionado fora do repositório pela infraestrutura/DB do ambiente
+(`ENVIRONMENT_PROVISIONING_OWNS_LOGIN_AND_MEMBERSHIP`), sem nome real de login, password,
+connection string ou secret versionado. A forma PostgreSQL 17 conceitualmente compatível é:
+
+```sql
+GRANT ltc_m_provenance_writer
+TO <p034_provenance_login>
+WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
+```
+
+O login não recebe grants funcionais diretos; `CONNECT`, se necessário, é privilégio de
+infraestrutura, não de domínio. A migration futura pode criar a capability e seus ACLs, mas não
+cria login, password, secret ou membership dependente de nome de ambiente. Nenhuma migration 19
+é criada por esta revisão.
+
+Na transação do writer, a sequência é obrigatoriamente `acquire → BEGIN → SET LOCAL ROLE
+ltc_m_provenance_writer → confirmar session_user/current_user quando apropriado →
+ltc_m.set_actor_context(...) → validações → lock → replay/idempotência → inserts → checks →
+COMMIT → release`. Antes do role change, `session_user` permanece
+`<p034_provenance_login>`; após ele, `current_user` é `ltc_m_provenance_writer`. `session_user`
+não é autoridade de negócio: `authorization_context()` e `set_actor_context(...)` continuam
+determinando autorização humana. Em retry, a conexão é readquirida e toda a sequência é repetida;
+nenhum role persistente é usado. COMMIT e ROLLBACK limpam `SET LOCAL ROLE` e o actor/request/source
+transaction-local antes da reutilização da conexão (`PROVENANCE_POOL_SESSION_STATE_ISOLATED`).
+
+O desenho não cria capability Auth0/P021 (`NO_NEW_P021_CAPABILITY_REQUIRED`), não cria endpoint
+público (`P034_PROVENANCE_PUBLIC_ENDPOINT_DECISION_REQUIRED` não é necessário nesta etapa) e
+preserva `captured_by_user_id = ltc_m.current_actor_id(true)`, o `request_id` do contexto e
+`capture_source = 'api'`. A capability foi resolvida:
+
+`P034_PROVENANCE_CAPABILITY_DECISION_RESOLVED`
 
 ### 7.4 Source hash e privilégios mínimos de leitura do writer
 
@@ -898,15 +978,16 @@ indisponibilidade. Não há `down` que remova fatos ou reverta para staging.
 ## 12. Pseudoddl de referência
 
 O bloco seguinte é deliberadamente **não executável**. É SQL de referência nomeado e
-sintaticamente plausível para uma future migration, condicionado à decisão de capability; não
-deve ser copiado para migrations sem revisão. Marcador:
+sintaticamente plausível para uma future migration, com a capability já decidida; não deve ser
+copiado para migrations sem revisão. O login e seu membership continuam sendo provisionamento
+por ambiente, fora desta migration. Marcador:
 
 `REFERENCE_PSEUDODDL_ONLY`
 
 ```sql
 -- REFERENCE_PSEUDODDL_ONLY
--- NÃO EXECUTAR. NÃO É migration e está condicionado a
--- P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED.
+-- NÃO EXECUTAR. NÃO É migration. A role é versionável futuramente; o
+-- login/membership abaixo é ENVIRONMENT_PROVISIONING_ONLY.
 
 CREATE TABLE ltc_m.p034_provenance_snapshots (
     id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1038,9 +1119,18 @@ CREATE INDEX ix_p034_source_reference_project
 CREATE INDEX ix_p034_source_reference_item
     ON ltc_m.p034_provenance_source_references (project_id, item_observation_id, reference_ordinal);
 
--- O papel e o login são condicionados à decisão de capability; não executar agora.
--- CREATE ROLE ltc_m_provenance_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
--- Nenhum membership é concedido ao ltc_m_runtime.
+CREATE ROLE ltc_m_provenance_writer
+    NOLOGIN
+    NOSUPERUSER
+    NOCREATEDB
+    NOCREATEROLE
+    NOREPLICATION
+    NOBYPASSRLS
+    NOINHERIT;
+-- ENVIRONMENT_PROVISIONING_ONLY; não versionar nome real, password ou secret.
+-- GRANT ltc_m_provenance_writer TO <p034_provenance_login>
+--     WITH INHERIT FALSE, SET TRUE, ADMIN FALSE;
+-- Nenhum membership é concedido ao ltc_m_runtime ou ao login de DATABASE_URL.
 
 ALTER TABLE ltc_m.p034_provenance_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ltc_m.p034_provenance_snapshots FORCE ROW LEVEL SECURITY;
@@ -1239,6 +1329,7 @@ GRANT EXECUTE ON FUNCTION ltc_m.set_actor_context(uuid, text, text, text, text, 
 GRANT EXECUTE ON FUNCTION ltc_m.authorization_context() TO ltc_m_provenance_writer;
 GRANT EXECUTE ON FUNCTION ltc_m.current_actor_id(boolean) TO ltc_m_provenance_writer;
 -- Nunca conceder UPDATE, DELETE, TRUNCATE, REFERENCES ou EXECUTE dos triggers à aplicação.
+-- Não usar ALTER DEFAULT PRIVILEGES amplo; ACLs P034 devem ser explícitos e revisados.
 ```
 
 O pseudoddl não introduz uma função de captura `SECURITY DEFINER`. Se uma revisão futura
@@ -1248,35 +1339,46 @@ SQL injection antes de substituir o writer invoker.
 
 ## 13. Threat model e controles
 
-| ameaça                              | consequência               | controle                                   |
-| ----------------------------------- | -------------------------- | ------------------------------------------ |
-| reader fabrica fato                 | finding falso              | runtime sem INSERT; writer separado        |
-| writer usa projeto de outro cliente | vazamento/contaminação     | actor context + RLS + FK factual           |
-| update de ocorrência                | perda de evidência         | sem grant + FORCE RLS + trigger            |
-| delete/truncate                     | apagamento histórico       | grants revogados, owner separado, RESTRICT |
-| staging raw payload copiado         | segredo/caminho exposto    | modelo mínimo dedicado                     |
-| unique pelo code/linha              | duplicate legítimo perdido | ordinal físico, sem unique semântico       |
-| retry duplica fatos                 | contagem inflada           | snapshot fp/replay + unique batch/projeto  |
-| retry remove duplicate legítimo     | perda de cardinalidade     | idempotência não deduplica ocorrências     |
-| scope misto                         | existence/count leakage    | single-project e RLS direta                |
-| latest por timestamp                | resultado instável         | revision sob lock + tie-break fp           |
-| MAX+1 concorrente                   | conflito de autoridade     | lock ordenado + unique                     |
-| referência sensível                 | vazamento de segredo       | validação P015 + allowlist                 |
-| import duplicate no P034            | regra fora do contrato     | nenhum import identity                     |
-| sem snapshot tratado como zero      | falso saudável             | fail closed                                |
-| função definer abusável             | bypass RLS                 | writer invoker, sem definer nova           |
-| DDL fora de ltc_m                   | dano a outro sistema       | scanner/schema qualification               |
-| backfill especulativo               | achado não comprovável     | `NO_TRUSTWORTHY_BACKFILL`                  |
-| runtime comprometido                | forjar facts               | runtime sem INSERT; FORCE RLS              |
-| writer comprometido                 | alterar domínio            | role sem UPDATE/DELETE; RLS factual        |
-| SET ROLE inseguro                   | escalation                 | nenhum SET no runtime; pool separado gated |
-| membership indevido                 | assumir writer             | NOINHERIT, sem membership por padrão       |
-| actor forjado                       | autoria falsa              | set_actor_context + current_actor_id       |
-| source hash forjado                 | replay/artefato falso      | trigger compara batch/source_hash          |
-| captured_by forjado                 | auditoria falsa            | NOT NULL + equality ao actor context       |
-| reference ausente                   | finding P015 inválido      | writer + deferred constraint trigger       |
-| drift de ordem canônica             | finding ID diferente       | comparators P015 + stable tie ordinal      |
-| coupling indevido P009              | rollback de import         | transações independentes por projeto       |
+| ameaça                               | consequência               | controle                                                       |
+| ------------------------------------ | -------------------------- | -------------------------------------------------------------- |
+| reader fabrica fato                  | finding falso              | runtime sem INSERT; writer separado                            |
+| writer usa projeto de outro cliente  | vazamento/contaminação     | actor context + RLS + FK factual                               |
+| update de ocorrência                 | perda de evidência         | sem grant + FORCE RLS + trigger                                |
+| delete/truncate                      | apagamento histórico       | grants revogados, owner separado, RESTRICT                     |
+| staging raw payload copiado          | segredo/caminho exposto    | modelo mínimo dedicado                                         |
+| unique pelo code/linha               | duplicate legítimo perdido | ordinal físico, sem unique semântico                           |
+| retry duplica fatos                  | contagem inflada           | snapshot fp/replay + unique batch/projeto                      |
+| retry remove duplicate legítimo      | perda de cardinalidade     | idempotência não deduplica ocorrências                         |
+| scope misto                          | existence/count leakage    | single-project e RLS direta                                    |
+| latest por timestamp                 | resultado instável         | revision sob lock + tie-break fp                               |
+| MAX+1 concorrente                    | conflito de autoridade     | lock ordenado + unique                                         |
+| referência sensível                  | vazamento de segredo       | validação P015 + allowlist                                     |
+| import duplicate no P034             | regra fora do contrato     | nenhum import identity                                         |
+| sem snapshot tratado como zero       | falso saudável             | fail closed                                                    |
+| função definer abusável              | bypass RLS                 | writer invoker, sem definer nova                               |
+| DDL fora de ltc_m                    | dano a outro sistema       | scanner/schema qualification                                   |
+| backfill especulativo                | achado não comprovável     | `NO_TRUSTWORTHY_BACKFILL`                                      |
+| runtime comprometido                 | forjar facts               | runtime sem INSERT; FORCE RLS                                  |
+| writer comprometido                  | alterar domínio            | role sem UPDATE/DELETE; RLS factual                            |
+| SET ROLE inseguro                    | escalation                 | nenhum SET no runtime; pool separado gated                     |
+| membership indevido                  | assumir writer             | login dedicado, membership exclusivo, SET TRUE e NOINHERIT     |
+| credential do pool normal vazada     | insert indevido em P034    | sem membership writer para runtime                             |
+| credential do pool provenance vazada | insert indevido            | credential dedicada + role NOLOGIN + RLS/FORCE + actor context |
+| SQL injection no caminho normal      | assumir writer             | `DATABASE_URL` nunca tem SET writer                            |
+| SQL injection no caminho provenance  | ampliar mutação            | grants mínimos + RLS/FORCE + sem DML domínio                   |
+| role/contexto persistente            | vazamento entre operações  | `SET LOCAL ROLE`, settings transaction-local e reset testado   |
+| mesma credential nos dois pools      | bypass de isolamento       | validação rejeita URLs iguais                                  |
+| pool errado injetado                 | writer usa runtime         | dependência explícita `P034_PROVENANCE_DATABASE_POOL`          |
+| actor forjado                        | autoria falsa              | set_actor_context + current_actor_id                           |
+| source hash forjado                  | replay/artefato falso      | trigger compara batch/source_hash                              |
+| captured_by forjado                  | auditoria falsa            | NOT NULL + equality ao actor context                           |
+| reference ausente                    | finding P015 inválido      | writer + deferred constraint trigger                           |
+| drift de ordem canônica              | finding ID diferente       | comparators P015 + stable tie ordinal                          |
+| coupling indevido P009               | rollback de import         | transações independentes por projeto                           |
+
+O login nunca é owner e nunca recebe ACL funcional direta. `application_name` (`ltcm-api-p034-
+provenance`) é somente observabilidade, não autorização. `NOBYPASSRLS`, `FORCE RLS`, role
+`NOLOGIN/NOINHERIT` e ausência de membership do runtime compõem a barreira contra escalation.
 
 ## 14. Plano de testes PostgreSQL futuro
 
@@ -1335,6 +1437,38 @@ Casos específicos exigidos por esta revisão:
 19. mesmo batch/projeto com mesmo fingerprint é replay no-op;
 20. mesmo batch/projeto com fingerprint divergente é conflito sem mutação.
 
+Casos obrigatórios da fronteira de capability e pool:
+
+1. `<p034_provenance_login>` conecta pelo credential dedicado, mas não pelo
+   `DATABASE_URL` normal;
+2. antes de `SET LOCAL ROLE`, o login não insere provenance;
+3. `SET LOCAL ROLE ltc_m_provenance_writer` funciona somente pela membership com
+   `INHERIT FALSE, SET TRUE`;
+4. `session_user` permanece o login dedicado e `current_user` passa a ser a capability;
+5. `COMMIT` e `ROLLBACK` removem o role local;
+6. o login normal/runtime não possui membership, INSERT ou capacidade de assumir a capability;
+7. o writer não tem `BYPASSRLS`, não é owner e não atualiza/remove provenance ou domínio;
+8. membership não concede `ADMIN` ao login e não permite membership transitiva inesperada;
+9. URL ausente, malformada, sem password/username ou insegura em produção falha fechado;
+10. `P034_PROVENANCE_DATABASE_URL === DATABASE_URL` é rejeitada;
+11. a URL/credential do writer nunca aparece em browser env, logs ou repositório;
+12. erro de configuração não derruba leitura quando o writer não está habilitado, mas bloqueia
+    toda tentativa de captura sem fallback;
+13. writer recebe explicitamente `P034_PROVENANCE_DATABASE_POOL`; injeção do pool normal falha;
+14. connection/idle/statement timeouts são bounded, `application_name` é distinto e `close`
+    encerra o lifecycle;
+15. conexão reutilizada após sucesso/falha começa sem actor, request, source ou writer role
+    residual;
+16. retry readquire o pool e repete BEGIN/SET LOCAL ROLE/context/lock/replay integralmente;
+17. `ltc_m_runtime` nunca pode assumir writer, mesmo com SQL injection no caminho normal;
+18. provisioning do login/membership é externo à migration, sem password, secret ou nome real
+    versionado;
+19. `PUBLIC` não possui EXECUTE nas funções novas nem ACL funcional nas tabelas;
+20. policies `TO ltc_m_provenance_writer` continuam aplicáveis depois do `SET LOCAL ROLE`;
+21. `FORCE RLS` não é contornado pelo writer e o actor humano, não o login técnico, governa a
+    autorização;
+22. login provenance não recebe privilégios diretos que não estejam na capability.
+
 ## 15. Ledger de decisões técnicas
 
 Estas são decisões técnicas do design, não substituem nem reabrem D16–D26.
@@ -1359,13 +1493,27 @@ Estas são decisões técnicas do design, não substituem nem reabrem D16–D26.
 | P034-DDL-D16 | actor binding?        | captured actor/request/source      | caller-authored values  | P008 context    | autoria não forjável         | alta                     | actor NOT NULL       |
 | P034-DDL-D17 | P009 boundary?        | transações independentes           | rollback P009 junto     | D16/D17         | não muda business import     | alta                     | retry P034 separado  |
 
+As decisões abaixo são adições ao ledger, sem sobrescrever entradas existentes. Elas resolvem o
+gate de capability que aparece historicamente em D10; D10 não é blocker ativo deste documento.
+
+| ID           | questão                      | decisão congelada                                                                       | autoridade                          |
+| ------------ | ---------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------- |
+| P034-DDL-D18 | conexão do writer            | pool server-side dedicado `P034_PROVENANCE_DATABASE_POOL`, separado do reader           | `P034-D27` / `HUMAN_OWNER_DECISION` |
+| P034-DDL-D19 | runtime pode assumir writer? | não; `ltc_m_runtime` e o login normal não têm membership, INSERT ou SET writer          | `P034-D28` / `HUMAN_OWNER_DECISION` |
+| P034-DDL-D20 | natureza da role             | capability `NOLOGIN`, `NOINHERIT`, least-privilege, sem ownership/bypass/DML de domínio | `P034-D29` / `HUMAN_OWNER_DECISION` |
+| P034-DDL-D21 | como assumir writer?         | login dedicado por ambiente, membership exclusiva e `SET LOCAL ROLE` transaction-local  | `P034-D30` / `HUMAN_OWNER_DECISION` |
+| P034-DDL-D22 | credencial/provisioning      | `P034_PROVENANCE_DATABASE_URL` distinta, fail closed e login/membership fora do repo    | `P034-D31` / `HUMAN_OWNER_DECISION` |
+
 ## 16. Gate de revisão adversarial automatizada
 
 Antes da migration, a revisão automatizada deve verificar fingerprint/caminho do contrato,
 ausência de `IMPORT_DUPLICATION` e finding table, ausência de raw payload/segredo/path/URL,
 cardinalidade e uniques, escopo/FKs/RLS/FORCE, grants, imutabilidade, locks, replay,
 atomicidade, paridade P015, finding ID, pseudoddl não executável e ausência de alteração
-funcional.
+funcional. Nesta revisão final, deve também verificar D27–D31, pool/credential distintos,
+membership sem `INHERIT` e com `SET`, `SET LOCAL ROLE`, `session_user/current_user`, limpeza de
+estado de sessão, ausência de membership/grants diretos ao runtime/login, fail-closed e
+provisionamento externo.
 
 Se passar, registrar:
 
@@ -1389,13 +1537,25 @@ repetir a revisão completa — não somente o teste que falhou.
 - [x] P015 finding ID e referências preservados;
 - [x] `IMPORT_DUPLICATION` fora do P034;
 - [x] RLS/FORCE RLS, grants e imutabilidade congelados;
-- [x] writer separado do runtime reader;
+- [x] capability D27–D31 resolvida e completamente congelada;
+- [x] pool/credential/login do writer separados do runtime reader;
+- [x] runtime sem membership/INSERT e login sem grants funcionais diretos;
+- [x] `SET LOCAL ROLE`, actor context e higiene de sessão documentados;
 - [x] pseudoddl marcado não executável;
 - [x] threat model, testes, backfill, rollout e rollback documentados;
 - [x] no finding table e no import identity gate;
 - [x] Master Control permanece `Não iniciada / 0%`;
 - [x] nenhuma migration, DDL, DB remoto, deploy ou alteração funcional executada.
 
-O marker de readiness do head anterior foi invalidado por este commit. O resultado desta revisão
-é `P034_PROVENANCE_DDL_DESIGN_REVIEW_CHANGES_REQUIRED` até que o owner decida o provisioning
-seguro do writer.
+`P034_PROVENANCE_CAPABILITY_DECISION_RESOLVED`.
+
+O resultado desta revisão final é:
+
+`AUTOMATED_DESIGN_REVIEW_APPROVED`
+
+`P034_PROVENANCE_DDL_DESIGN_REVIEW_APPROVED_READY_FOR_MERGE`.
+
+O merge permanece deliberadamente não executado. O marker de readiness do HEAD anterior e os
+gates `P034_PROVENANCE_CAPABILITY_DECISION_REQUIRED` e
+`P034_PROVENANCE_DDL_DESIGN_REVIEW_CHANGES_REQUIRED` são somente histórico; o comentário formal
+anterior continua válido para o HEAD anterior e não é apagado.
