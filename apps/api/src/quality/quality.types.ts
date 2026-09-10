@@ -1,19 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
 
-export const P034_DATA_QUALITY_CONTRACT = 'ltcm.p034.data-quality-center.v1' as const;
+export const P034_DATA_QUALITY_CONTRACT = 'ltcm.p034.data-quality-center.v3' as const;
 
 export const QUALITY_SEVERITIES = ['INFO', 'WARNING', 'ERROR', 'BLOCKING'] as const;
 export type QualitySeverity = (typeof QUALITY_SEVERITIES)[number];
 
 export const QUALITY_RULES = [
   'PROJECT_VALUE_MISMATCH',
-  'ACTUAL_STATUS_UNRESOLVED',
   'UNPLANNED_BALANCE',
   'MISSING_REQUIRED_FIELD',
   'PROJECT_DATA_STALE',
   'DUPLICATE_PROJECT_SOURCE_IDENTITY',
   'DUPLICATE_ITEM_SOURCE_IDENTITY',
-  'IMPORT_DUPLICATION',
   'GRAIN_MISMATCH',
 ] as const;
 export type QualityRuleCode = (typeof QUALITY_RULES)[number];

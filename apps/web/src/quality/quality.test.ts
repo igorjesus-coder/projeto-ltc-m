@@ -35,7 +35,7 @@ describe('contrato local da central de qualidade P034', () => {
     );
     expect(
       parseQualityResponse({
-        contract: 'ltcm.p034.data-quality-center.v1',
+        contract: 'ltcm.p034.data-quality-center.v3',
         items: [
           {
             id: 'p034:1',

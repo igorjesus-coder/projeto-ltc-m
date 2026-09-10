@@ -52,13 +52,11 @@ function updateQuery(query: QualityQuery) {
 function ruleLabel(rule: QualityRuleCode): string {
   return {
     PROJECT_VALUE_MISMATCH: 'Contrato x item',
-    ACTUAL_STATUS_UNRESOLVED: 'Status do realizado',
     UNPLANNED_BALANCE: 'Saldo não programado',
     MISSING_REQUIRED_FIELD: 'Item incompleto',
     PROJECT_DATA_STALE: 'Projeto desatualizado',
     DUPLICATE_PROJECT_SOURCE_IDENTITY: 'Duplicidade de projeto',
     DUPLICATE_ITEM_SOURCE_IDENTITY: 'Duplicidade de item',
-    IMPORT_DUPLICATION: 'Duplicidade de importação',
     GRAIN_MISMATCH: 'Moeda/unidade',
   }[rule];
 }
