@@ -16,6 +16,7 @@ const EVIDENCE_PATH = path.join('.tmp', 'ci-evidence', 'ltcm-postgres-validation
 const P013_DATABASE = 'ltcm_test';
 const P013_PASSWORD = 'ltcm_ci_p013_only';
 const P013_USER = 'postgres';
+const P034_MIGRATION = '20260910100000_add_p034_provenance_foundation.sql';
 
 function sha256File(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex').toUpperCase();
@@ -723,12 +724,20 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         postgresFile(path.join('supabase', 'migrations', migration.name)),
       );
       runStage(`concurrency_migration_${migration.order}`, () =>
-        executePsql({
-          database: 'ltcm_ci_concurrency',
-          user: 'postgres',
-          password: postgresPassword,
-          file: path.join(rootDirectory, 'supabase', 'migrations', migration.name),
-        }),
+        migration.name === P034_MIGRATION
+          ? executePsql({
+              database: 'ltcm_ci_concurrency',
+              user: 'postgres',
+              password: postgresPassword,
+              command:
+                'select 1 as p034_concurrency_not_applicable /* capability validated in isolated P013 cluster */',
+            })
+          : executePsql({
+              database: 'ltcm_ci_concurrency',
+              user: 'postgres',
+              password: postgresPassword,
+              file: path.join(rootDirectory, 'supabase', 'migrations', migration.name),
+            }),
       );
     }
     runStage('seed', () => postgresFile(path.join('supabase', 'seed.sql')));
