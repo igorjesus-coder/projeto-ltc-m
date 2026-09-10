@@ -177,6 +177,8 @@ grants mínimos e proteção contra cross-project, batch enumeration e source re
 P034 API recebe somente referências sanitizadas autorizadas. Não pode expor raw payload arbitrário,
 path local ou de workstation, connection string, secret, token, bucket privado, locator sensível
 ou conteúdo reservado. `totalItems` não pode revelar provenance não autorizado.
+Ocorrências sem `project_id` direto devem ser associadas a um snapshot e escopo autorizados antes de
+qualquer leitura; não podem servir para enumerar projetos ou atravessar isolamento.
 
 `receipt_actual` permanece fora do universo funcional P034. A provenance autorizada não concede
 visibilidade de `receipt_actual`, IDs, status ou valores reservados; D16–D23 não alteram P032/P033.
@@ -195,6 +197,8 @@ negativo.
 O writer futuro deve capturar provenance no pipeline de importação/normalização antes da perda de
 cardinalidade, com idempotência por snapshot e atomicidade coerente. Snapshot incompleto nunca se
 torna autoritativo; falha parcial nunca produz `SUCCESS`; ocorrências duplicadas são preservadas.
+Idempotência por snapshot significa que um retry não duplica a mesma captura já aceita; ela não
+deduplica as ocorrências internas legítimas do snapshot, que continuam preservadas.
 O reader futuro seleciona apenas o snapshot autoritativo atual permitido ao ator, consulta fatos
 autorizados, monta o adapter P015, deriva findings, normaliza-os em `QualityFinding` e só então
 aplica filtros/paginação. Nunca retorna provenance raw.
