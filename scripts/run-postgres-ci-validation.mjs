@@ -672,6 +672,17 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       ],
       cleanup: 'pending',
     };
+    runStage('p013_cluster_provenance_cleanup', () =>
+      executePsql({
+        database: P013_DATABASE,
+        user: P013_USER,
+        password: P013_PASSWORD,
+        host: p013Endpoint.host,
+        port: p013Endpoint.port,
+        command:
+          'drop schema if exists ltc_m cascade; drop role if exists ltc_m_provenance_writer;',
+      }),
+    );
   };
 
   try {
