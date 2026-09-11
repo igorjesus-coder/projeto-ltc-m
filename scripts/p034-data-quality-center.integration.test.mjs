@@ -32,6 +32,8 @@ const ITEM_IDS = Object.freeze({
   deletedGrain: '00000000-0000-4000-8000-000000034124',
 });
 const SOURCE_LINE_KEY = `p012-line-v1:${'a'.repeat(64)}`;
+const ACTIVE_SNAPSHOT_ID = '00000000-0000-4000-8000-111111111102';
+const ACTIVE_SOURCE_SUFFIX = '1111111111';
 const SEED_SQL = path.join(ROOT, 'supabase', 'seed.sql');
 
 function databaseUrl() {
@@ -76,7 +78,14 @@ async function rebuildDatabase(client) {
   await client.query(await readFile(SEED_SQL, 'utf8'));
 }
 
-async function insertProject(client, id, code, status, deleted = false) {
+async function insertProject(
+  client,
+  id,
+  code,
+  status,
+  deleted = false,
+  projectName = `Projeto ${code}`,
+) {
   await client.query(
     `insert into ltc_m.projects (
        id, project_code, project_name, client_id, status, base_currency,
@@ -84,7 +93,7 @@ async function insertProject(client, id, code, status, deleted = false) {
      ) values ($1::uuid, $2::text, $3::text, $4::uuid, $5::ltc_m.project_status,
                'BRL', 1000, date '2026-09-01', $6::uuid,
                case when $7::boolean then timestamptz '2026-09-01 00:00:00+00' else null end)`,
-    [id, code, `Projeto ${code}`, CLIENT_ID, status, ADMIN_ID, deleted],
+    [id, code, projectName, CLIENT_ID, status, ADMIN_ID, deleted],
   );
 }
 
@@ -140,7 +149,12 @@ async function insertSnapshot(client, projectId, code, revision, suffix, duplica
     `insert into ltc_m.p034_provenance_source_references
        (project_id, project_observation_id, reference_ordinal, kind, locator, fingerprint)
      values ($1::uuid, $2::uuid, 1, 'source', $3::text, $4::text)`,
-    [projectId, projectObservationA, `${code}!A1`, `${suffix}${'3'.repeat(64 - suffix.length)}`],
+    [
+      projectId,
+      projectObservationA,
+      `${code}!${code === 'P034-A' ? 'A6' : 'A1'}`,
+      `${suffix}${'3'.repeat(64 - suffix.length)}`,
+    ],
   );
   if (!duplicate) return;
   await client.query(
@@ -159,7 +173,12 @@ async function insertSnapshot(client, projectId, code, revision, suffix, duplica
     `insert into ltc_m.p034_provenance_source_references
        (project_id, project_observation_id, reference_ordinal, kind, locator, fingerprint)
      values ($1::uuid, $2::uuid, 1, 'source', $3::text, $4::text)`,
-    [projectId, projectObservationB, `${code}!A2`, `${suffix}${'5'.repeat(64 - suffix.length)}`],
+    [
+      projectId,
+      projectObservationB,
+      `${code}!${code === 'P034-A' ? 'A7' : 'A2'}`,
+      `${suffix}${'5'.repeat(64 - suffix.length)}`,
+    ],
   );
   await client.query(
     `insert into ltc_m.p034_provenance_item_observations
@@ -205,7 +224,14 @@ async function insertFixtures(client) {
      values ($1::uuid, 'Cliente P034 Functional', 'Cliente P034 Functional', $2::uuid)`,
     [CLIENT_ID, ADMIN_ID],
   );
-  await insertProject(client, PROJECTS.active, 'P034-A', 'active');
+  await insertProject(
+    client,
+    PROJECTS.active,
+    'P034-A',
+    'active',
+    false,
+    `Projeto P034-A literal % _ ${String.fromCharCode(92)}`,
+  );
   await insertProject(client, PROJECTS.completed, 'P034-B', 'completed');
   await insertProject(client, PROJECTS.onHold, 'P034-C', 'on_hold');
   await insertProject(client, PROJECTS.draft, 'P034-D', 'draft');
@@ -364,6 +390,43 @@ async function expectUnavailable(operation) {
   await assert.rejects(operation, /P034_PROVENANCE_SNAPSHOT_UNAVAILABLE/u);
 }
 
+function compareLexical(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function publicPairOrder(projectId, itemId) {
+  return [
+    { kind: 'project', id: projectId },
+    { kind: 'item', id: itemId },
+  ]
+    .sort((left, right) => compareLexical(left.id, right.id))
+    .map(({ kind }) => kind);
+}
+
+function sourceFingerprint(suffix, digit) {
+  return `${suffix}${String(digit).repeat(64 - suffix.length)}`;
+}
+
+function searchableFields(finding) {
+  return [
+    finding.project.code,
+    finding.project.name,
+    finding.rule.code,
+    finding.rule.label,
+    finding.origin.entity,
+    finding.origin.findingOrigin,
+  ].filter((value) => typeof value === 'string');
+}
+
+function assertLiteralSearch(response, literal) {
+  assert.ok(response.totalItems > 0);
+  assert.ok(
+    response.items.every((finding) =>
+      searchableFields(finding).some((value) => value.includes(literal)),
+    ),
+  );
+}
+
 test(
   'P034 functional PostgreSQL valida escopo, cobertura, GRAIN, planos e paginação',
   { skip: !ENABLED },
@@ -393,14 +456,82 @@ test(
       assert.ok(all.items.some((finding) => finding.project.code === 'P034-C'));
       assert.ok(all.items.some((finding) => finding.project.code === 'P034-E'));
 
-      for (const query of [
-        parseQualityQuery({ rule: 'GRAIN_MISMATCH' }),
-        parseQualityQuery({ severity: 'ERROR' }),
-        parseQualityQuery({ search: 'P034-A' }),
-      ]) {
-        const response = await service.list(query, actor);
-        assert.ok(response.totalItems >= 0);
-      }
+      const grain = await service.list(parseQualityQuery({ rule: 'GRAIN_MISMATCH' }), actor);
+      assert.equal(grain.totalItems, 1);
+      assert.equal(grain.items.length, 1);
+      assert.ok(grain.items.every((finding) => finding.rule.code === 'GRAIN_MISMATCH'));
+      assert.equal(grain.items[0]?.project.code, 'P034-A');
+      assert.equal(grain.items[0]?.currencyCode, 'USD');
+      const nonGrainRule = await service.list(
+        parseQualityQuery({ rule: 'DUPLICATE_ITEM_SOURCE_IDENTITY' }),
+        actor,
+      );
+      assert.equal(nonGrainRule.totalItems, 1);
+      assert.ok(nonGrainRule.items.every((finding) => finding.rule.code !== 'GRAIN_MISMATCH'));
+      process.stdout.write('P034_FUNCTIONAL_RULE_FILTER_EXACTLY_PROVEN\n');
+
+      const errors = await service.list(parseQualityQuery({ severity: 'ERROR' }), actor);
+      assert.ok(errors.totalItems > 0);
+      assert.ok(errors.items.every((finding) => finding.severity === 'ERROR'));
+      const blocking = await service.list(parseQualityQuery({ severity: 'BLOCKING' }), actor);
+      assert.equal(blocking.totalItems, 0);
+      assert.deepEqual(blocking.items, []);
+      process.stdout.write('P034_FUNCTIONAL_SEVERITY_FILTER_EXACTLY_PROVEN\n');
+
+      const grainOrigin = await service.list(
+        parseQualityQuery({ rule: 'GRAIN_MISMATCH', origin: 'project_item' }),
+        actor,
+      );
+      assert.equal(grainOrigin.totalItems, 1);
+      assert.ok(grainOrigin.items.every((finding) => finding.origin.entity === 'project_item'));
+      const incompatibleGrainOrigin = await service.list(
+        parseQualityQuery({ rule: 'GRAIN_MISMATCH', origin: 'project' }),
+        actor,
+      );
+      assert.equal(incompatibleGrainOrigin.totalItems, 0);
+      assert.deepEqual(incompatibleGrainOrigin.items, []);
+
+      const normalSearch = await service.list(parseQualityQuery({ search: 'P034-A' }), actor);
+      assert.ok(normalSearch.totalItems > 0);
+      assert.ok(normalSearch.items.every((finding) => finding.project.code === 'P034-A'));
+      const literalPercent = await service.list(parseQualityQuery({ search: '%' }), actor);
+      assertLiteralSearch(literalPercent, '%');
+      assert.ok(literalPercent.items.some((finding) => finding.project.name.includes('%')));
+      const literalUnderscore = await service.list(parseQualityQuery({ search: '_' }), actor);
+      assertLiteralSearch(literalUnderscore, '_');
+      assert.ok(literalUnderscore.items.some((finding) => finding.project.name.includes('_')));
+      const literalBackslash = await service.list(
+        parseQualityQuery({ search: String.fromCharCode(92) }),
+        actor,
+      );
+      assertLiteralSearch(literalBackslash, String.fromCharCode(92));
+      assert.ok(
+        literalBackslash.items.some((finding) =>
+          finding.project.name.includes(String.fromCharCode(92)),
+        ),
+      );
+      const missingSearch = await service.list(
+        parseQualityQuery({ search: 'P034-NOT-IN-FIXTURE' }),
+        actor,
+      );
+      assert.equal(missingSearch.totalItems, 0);
+      assert.deepEqual(missingSearch.items, []);
+      const combined = await service.list(
+        parseQualityQuery({
+          rule: 'GRAIN_MISMATCH',
+          severity: 'ERROR',
+          origin: 'project_item',
+          search: 'P034-A',
+        }),
+        actor,
+      );
+      assert.equal(combined.totalItems, 1);
+      assert.equal(combined.items[0]?.rule.code, 'GRAIN_MISMATCH');
+      assert.equal(combined.items[0]?.severity, 'ERROR');
+      assert.equal(combined.items[0]?.origin.entity, 'project_item');
+      assert.equal(combined.items[0]?.project.code, 'P034-A');
+      process.stdout.write('P034_FUNCTIONAL_SEARCH_ESCAPING_POSTGRES_PROVEN\n');
+
       const projectOnly = await service.list(
         parseQualityQuery({ projectId: PROJECTS.active }),
         actor,
@@ -412,32 +543,130 @@ test(
       );
       assert.deepEqual(hiddenOrMissing.items, []);
 
-      const grain = await service.list(parseQualityQuery({ rule: 'GRAIN_MISMATCH' }), actor);
-      assert.equal(grain.items.filter((finding) => finding.project.code === 'P034-A').length, 1);
-      assert.equal(grain.items[0]?.currencyCode, 'USD');
       assert.equal(grain.items[0]?.navigationAction?.target, 'project_item');
       assert.equal(
         grain.items.some((finding) => finding.project.code === 'P034-DELETED'),
         false,
       );
 
-      const duplicates = await service.list(
+      const duplicateProject = await service.list(
         parseQualityQuery({ rule: 'DUPLICATE_PROJECT_SOURCE_IDENTITY' }),
         actor,
       );
-      assert.equal(duplicates.items.length, 1);
-      const pageOne = await service.list(parseQualityQuery({ sort: 'id', pageSize: '1' }), actor);
-      const pageTwo = await service.list(
-        parseQualityQuery({ sort: 'id', pageSize: '1', page: '2' }),
+      assert.equal(duplicateProject.totalItems, 1);
+      assert.equal(duplicateProject.items.length, 1);
+      assert.equal(duplicateProject.items[0]?.rule.code, 'DUPLICATE_PROJECT_SOURCE_IDENTITY');
+      assert.match(duplicateProject.items[0]?.id ?? '', /^p015-finding-v1:/u);
+      assert.equal(duplicateProject.items[0]?.project.code, 'P034-A');
+      assert.deepEqual(
+        duplicateProject.items[0]?.origin.sourceReferences?.map((reference) => reference.locator),
+        ['P034-A!A6', 'P034-A!A7'],
+      );
+      assert.deepEqual(
+        duplicateProject.items[0]?.origin.sourceReferences?.map(
+          (reference) => reference.fingerprint,
+        ),
+        [sourceFingerprint(ACTIVE_SOURCE_SUFFIX, 3), sourceFingerprint(ACTIVE_SOURCE_SUFFIX, 5)],
+      );
+
+      const duplicateItem = await service.list(
+        parseQualityQuery({ rule: 'DUPLICATE_ITEM_SOURCE_IDENTITY' }),
         actor,
       );
-      assert.equal(pageOne.totalItems, pageTwo.totalItems);
-      assert.notEqual(pageOne.items[0]?.id, pageTwo.items[0]?.id);
-      const pageDesc = await service.list(
+      assert.equal(duplicateItem.totalItems, 1);
+      assert.equal(duplicateItem.items.length, 1);
+      assert.equal(duplicateItem.items[0]?.rule.code, 'DUPLICATE_ITEM_SOURCE_IDENTITY');
+      assert.equal(duplicateItem.items[0]?.severity, 'ERROR');
+      assert.equal(duplicateItem.items[0]?.project.code, 'P034-A');
+      assert.match(duplicateItem.items[0]?.id ?? '', /^p015-finding-v1:/u);
+      assert.deepEqual(
+        duplicateItem.items[0]?.origin.sourceReferences?.map((reference) => reference.locator),
+        ['P034-A!B1', 'P034-A!B2'],
+      );
+      assert.deepEqual(
+        duplicateItem.items[0]?.origin.sourceReferences?.map((reference) => reference.fingerprint),
+        [sourceFingerprint(ACTIVE_SOURCE_SUFFIX, 8), sourceFingerprint(ACTIVE_SOURCE_SUFFIX, 9)],
+      );
+      process.stdout.write('P034_FUNCTIONAL_DUPLICATE_ITEM_POSTGRES_PROVEN\n');
+
+      const temporaryProjectId = `p034-provenance-project:${ACTIVE_SNAPSHOT_ID}:P034-A`;
+      const temporaryItemId = `p034-provenance-item:${ACTIVE_SNAPSHOT_ID}:P034-A:${SOURCE_LINE_KEY}`;
+      const temporaryOrder = publicPairOrder(temporaryProjectId, temporaryItemId);
+      const expectedPublicOrder = [duplicateProject.items[0].id, duplicateItem.items[0].id].sort(
+        compareLexical,
+      );
+      const actualPublicOrder = publicPairOrder(
+        duplicateProject.items[0].id,
+        duplicateItem.items[0].id,
+      );
+      assert.notDeepEqual(temporaryOrder, actualPublicOrder);
+      assert.deepEqual(
+        expectedPublicOrder,
+        [duplicateProject.items[0].id, duplicateItem.items[0].id].sort(compareLexical),
+      );
+      process.stdout.write('P034_PUBLIC_ID_ADVERSARIAL_ORDER_INVERSION_PROVEN\n');
+
+      const fullDataset = await service.list(
+        parseQualityQuery({ sort: 'rule', order: 'asc', pageSize: '100' }),
+        actor,
+      );
+      const allPublicIds = fullDataset.items.map((finding) => finding.id);
+      assert.equal(fullDataset.totalItems, allPublicIds.length);
+      assert.ok(allPublicIds.length > 1);
+      const expectedAsc = [...allPublicIds].sort(compareLexical);
+      const expectedDesc = [...expectedAsc].reverse();
+      const actualAsc = await service.list(
+        parseQualityQuery({ sort: 'id', order: 'asc', pageSize: '100' }),
+        actor,
+      );
+      assert.deepEqual(
+        actualAsc.items.map((finding) => finding.id),
+        expectedAsc,
+      );
+      assert.equal(actualAsc.totalItems, expectedAsc.length);
+      const actualDesc = await service.list(
+        parseQualityQuery({ sort: 'id', order: 'desc', pageSize: '100' }),
+        actor,
+      );
+      assert.deepEqual(
+        actualDesc.items.map((finding) => finding.id),
+        expectedDesc,
+      );
+      assert.equal(actualDesc.totalItems, expectedDesc.length);
+      process.stdout.write('P034_PUBLIC_ID_FULL_ORDER_POSTGRES_PROVEN\n');
+
+      for (const [index, expectedId] of expectedAsc.entries()) {
+        const page = await service.list(
+          parseQualityQuery({ sort: 'id', order: 'asc', pageSize: '1', page: String(index + 1) }),
+          actor,
+        );
+        assert.equal(page.items.length, 1);
+        assert.equal(page.items[0]?.id, expectedId);
+        assert.equal(page.totalItems, expectedAsc.length);
+        assert.equal(page.totalPages, expectedAsc.length);
+      }
+      const firstDesc = await service.list(
         parseQualityQuery({ sort: 'id', order: 'desc', pageSize: '1' }),
         actor,
       );
-      assert.notEqual(pageOne.items[0]?.id, pageDesc.items[0]?.id);
+      assert.equal(firstDesc.items.length, 1);
+      assert.equal(firstDesc.items[0]?.id, expectedDesc[0]);
+      assert.equal(firstDesc.totalItems, expectedDesc.length);
+      assert.equal(firstDesc.totalPages, expectedDesc.length);
+      process.stdout.write('P034_PUBLIC_ID_PAGE_BOUNDARY_POSTGRES_PROVEN\n');
+
+      for (const [kind, findingId] of [
+        ['project', duplicateProject.items[0].id],
+        ['item', duplicateItem.items[0].id],
+      ]) {
+        const pageNumber = expectedAsc.indexOf(findingId) + 1;
+        assert.ok(pageNumber > 0, `missing ${kind} duplicate from expected public order`);
+        const page = await service.list(
+          parseQualityQuery({ sort: 'id', order: 'asc', pageSize: '1', page: String(pageNumber) }),
+          actor,
+        );
+        assert.equal(page.items[0]?.id, findingId);
+      }
 
       await admin.query('begin');
       await insertSnapshot(admin, PROJECTS.active, 'P034-A', 2, '7777777777', false);
