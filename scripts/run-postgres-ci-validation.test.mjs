@@ -166,6 +166,11 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   assert.match(runner, /postgres-tableau-analytics\.integration\.test\.js/u);
   assert.match(runner, /evidence\.regressions\.p016_postgres = true/u);
   assert.match(runner, /p016_postgres: false/u);
+  assert.match(runner, /runStage\('p034_functional_postgres'/u);
+  assert.match(runner, /LTCM_P034_FUNCTIONAL_INTEGRATION: '1'/u);
+  assert.match(runner, /p034-data-quality-center\.integration\.test\.mjs/u);
+  assert.match(runner, /P034_FUNCTIONAL_POSTGRES_CI_EXECUTED_NOT_SKIPPED/u);
+  assert.match(runner, /p034_functional_postgres: false/u);
   assert.match(runner, /runStage\('p017_postgres'/u);
   assert.match(runner, /LTCM_P017_INTEGRATION: '1'/u);
   assert.match(runner, /LTCM_P017_ISOLATED_CLUSTER: '1'/u);
@@ -200,6 +205,10 @@ test('runner executa cobertura PostgreSQL P013 em ltcm_test antes de concluir co
   );
   assert.ok(
     runner.indexOf("runStage('p017_postgres'") < runner.indexOf("runStage('p019_postgres'"),
+  );
+  assert.ok(
+    runner.indexOf("runStage('p034_postgres'") <
+      runner.indexOf("runStage('p034_functional_postgres'"),
   );
   assert.ok(
     runner.indexOf("runStage('p017_postgres'") < runner.indexOf("runStage('p026_postgres'"),

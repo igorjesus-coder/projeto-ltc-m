@@ -6,11 +6,12 @@ import { BadRequestException } from '@nestjs/common';
 
 import { deriveP034DuplicateFindings } from '../src/quality/p015-duplicate-adapter.js';
 import {
+  compareQualityFindings,
   isMaterialBillingActual,
   QualityService,
   type QualityClock,
 } from '../src/quality/quality.service.js';
-import { parseQualityQuery } from '../src/quality/quality.types.js';
+import { parseQualityQuery, type QualityFinding } from '../src/quality/quality.types.js';
 
 const actor = Object.freeze({
   appUserId: '00000000-0000-4000-8000-000000034001',
@@ -170,7 +171,11 @@ test('P034 compoe resposta no contexto do ator e seleciona provenance latest', a
       assert.deepEqual(receivedActor, actor);
       return operation({
         query: async <Row>(text: string, receivedValues?: readonly unknown[]) => {
-          if (text.includes('snapshot_count')) return { rows: [{ snapshot_count: '1' } as Row] };
+          if (text.includes('scoped_project_count')) {
+            return {
+              rows: [{ scoped_project_count: '1', covered_project_count: '1' } as Row],
+            };
+          }
           sql = text;
           values = receivedValues ?? [];
           return { rows: [findingRow as Row] };
@@ -199,6 +204,7 @@ test('P034 compoe resposta no contexto do ator e seleciona provenance latest', a
   assert.match(sql, /v_tableau_data_quality/u);
   assert.match(sql, /finding_code = 'PROJECT_VALUE_MISMATCH'/u);
   assert.doesNotMatch(sql, /ACTUAL_STATUS_UNRESOLVED|IMPORT_DUPLICATION/u);
+  assert.match(sql, /scoped_projects/u);
   assert.match(sql, /distinct on \(snapshots\.project_id\)/u);
   assert.match(sql, /authority_revision desc/u);
   assert.match(sql, /p034_provenance_project_observations/u);
@@ -252,7 +258,11 @@ test('P034 materializa GRAIN_MISMATCH de moeda com identidade e navegação est�
     ) =>
       operation({
         query: async <Row>(text: string, receivedValues?: readonly unknown[]) => {
-          if (text.includes('snapshot_count')) return { rows: [{ snapshot_count: '1' } as Row] };
+          if (text.includes('scoped_project_count')) {
+            return {
+              rows: [{ scoped_project_count: '1', covered_project_count: '1' } as Row],
+            };
+          }
           sql = text;
           values = receivedValues ?? [];
           return text.includes('grain_findings') ? { rows: [grainRow as Row] } : { rows: [] };
@@ -328,13 +338,66 @@ test('P034 falha fechado quando nao ha snapshot autoritativo', async () => {
     actorTransaction: async <T>(
       _actor: typeof actor,
       operation: (client: {
-        query: () => Promise<{ rows: [{ snapshot_count: string }] }>;
+        query: () => Promise<{
+          rows: [{ scoped_project_count: string; covered_project_count: string }];
+        }>;
       }) => Promise<T>,
-    ) => operation({ query: async () => ({ rows: [{ snapshot_count: '0' }] }) }),
+    ) =>
+      operation({
+        query: async () => ({ rows: [{ scoped_project_count: '1', covered_project_count: '0' }] }),
+      }),
   };
   await assert.rejects(
     () => new QualityService(database as never).list(parseQualityQuery({}), actor),
     /P034_PROVENANCE_SNAPSHOT_UNAVAILABLE/u,
+  );
+});
+
+test('P034 retorna vazio quando o escopo autorizado está vazio', async () => {
+  const database = {
+    actorTransaction: async <T>(
+      _actor: typeof actor,
+      operation: (client: {
+        query: () => Promise<{
+          rows: [{ scoped_project_count: string; covered_project_count: string }];
+        }>;
+      }) => Promise<T>,
+    ) =>
+      operation({
+        query: async () => ({ rows: [{ scoped_project_count: '0', covered_project_count: '0' }] }),
+      }),
+  };
+  const response = await new QualityService(database as never).list(parseQualityQuery({}), actor);
+  assert.deepEqual(response.items, []);
+  assert.equal(response.totalItems, 0);
+  assert.equal(response.totalPages, 0);
+});
+
+test('P034 ordena findings finais por ID público e pagina após normalização', () => {
+  const databaseFinding = { ...findingRow, id: 'p016-finding-v1:z' };
+  const provenanceFinding = {
+    ...findingRow,
+    id: 'p015-finding-v1:a',
+    rule_code: 'DUPLICATE_PROJECT_SOURCE_IDENTITY',
+  };
+  const grainFinding = { ...findingRow, id: 'p034:grain-mismatch:z', rule_code: 'GRAIN_MISMATCH' };
+  const rows = [databaseFinding, provenanceFinding, grainFinding].map((row) => ({
+    ...row,
+    project: { id: row.project_id, code: row.project_code, name: row.project_name },
+    rule: { code: row.rule_code, label: row.rule_code },
+    origin: { entity: row.origin_entity },
+  })) as unknown as QualityFinding[];
+  assert.deepEqual(
+    rows
+      .sort((left, right) => compareQualityFindings(left, right, 'id', 'asc'))
+      .map((row) => row.id),
+    ['p015-finding-v1:a', 'p016-finding-v1:z', 'p034:grain-mismatch:z'],
+  );
+  assert.deepEqual(
+    rows
+      .sort((left, right) => compareQualityFindings(left, right, 'id', 'desc'))
+      .map((row) => row.id),
+    ['p034:grain-mismatch:z', 'p016-finding-v1:z', 'p015-finding-v1:a'],
   );
 });
 
@@ -348,7 +411,11 @@ test('P034 normaliza findings do adapter sem expor o payload de provenance', asy
     ) =>
       operation({
         query: async <Row>(text: string) => {
-          if (text.includes('snapshot_count')) return { rows: [{ snapshot_count: '1' } as Row] };
+          if (text.includes('scoped_project_count')) {
+            return {
+              rows: [{ scoped_project_count: '1', covered_project_count: '1' } as Row],
+            };
+          }
           return {
             rows: [
               {

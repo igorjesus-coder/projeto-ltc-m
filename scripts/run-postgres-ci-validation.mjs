@@ -320,6 +320,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       p026_postgres: false,
       p019_postgres: false,
       p034_postgres: false,
+      p034_functional_postgres: false,
     },
     p013_postgres: null,
     p016_postgres: null,
@@ -327,6 +328,7 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
     p026_postgres: null,
     p019_postgres: null,
     p034_postgres: null,
+    p034_functional_postgres: null,
     d40_d41: { scenarios: '0/47', passed: false },
     concurrency: null,
     postgres: null,
@@ -513,6 +515,41 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
         'cross_project_rls_and_composite_fks',
         'immutability_and_acl_denials',
         'synthetic_role_cleanup',
+      ],
+      cleanup: 'pending',
+    };
+    runStage('p034_functional_postgres', () =>
+      runProcess(
+        'node',
+        ['--test', path.join('scripts', 'p034-data-quality-center.integration.test.mjs')],
+        {
+          cwd: rootDirectory,
+          env: {
+            ...process.env,
+            LTCM_P034_FUNCTIONAL_INTEGRATION: '1',
+            LTCM_P034_DATABASE_URL: p013DatabaseUrl,
+          },
+          timeoutMs: 120_000,
+        },
+      ),
+    );
+    evidence.regressions.p034_functional_postgres = true;
+    evidence.p034_functional_postgres = {
+      passed: true,
+      execution_marker: 'P034_FUNCTIONAL_POSTGRES_CI_EXECUTED_NOT_SKIPPED',
+      cluster_mode: 'isolated_docker',
+      database: P013_DATABASE,
+      host_class: 'loopback',
+      postgres_major: 17,
+      command: 'node --test scripts/p034-data-quality-center.integration.test.mjs',
+      coverage: [
+        'portfolio_parameter_arity',
+        'canonical_project_scope_and_statuses',
+        'complete_and_partial_snapshot_coverage',
+        'latest_authority_revision',
+        'grain_positive_and_negative',
+        'public_id_sort_and_pagination',
+        'official_plan_zero_one_multiple',
       ],
       cleanup: 'pending',
     };
@@ -931,6 +968,10 @@ export async function runPostgresCiValidation(rootDirectory = process.cwd()) {
       }
       if (evidence.p034_postgres) {
         evidence.p034_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';
+      }
+      if (evidence.p034_functional_postgres) {
+        evidence.p034_functional_postgres.cleanup =
+          removeP013Container.code === 0 ? 'passed' : 'failed';
       }
       if (evidence.p019_postgres) {
         evidence.p019_postgres.cleanup = removeP013Container.code === 0 ? 'passed' : 'failed';

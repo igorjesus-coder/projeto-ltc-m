@@ -42,22 +42,35 @@ interface QualityRow {
   readonly total_items: string;
 }
 
+interface SnapshotCoverage {
+  readonly scoped_project_count: string;
+  readonly covered_project_count: string;
+}
+
 const MATERIAL_ACTUAL_FILTER = `events.metric_type = 'billing_actual'
     and events.status = 'posted'`;
 
 const SNAPSHOT_GUARD_SQL = `
-with latest_snapshots as (
+with request_params as (
+  select $1::uuid as project_id
+), scoped_projects as (
+  select projects.id
+  from ltc_m.projects as projects
+  cross join request_params
+  where projects.deleted_at is null
+    and (request_params.project_id is null or projects.id = request_params.project_id)
+), latest_snapshots as (
   select distinct on (snapshots.project_id) snapshots.project_id
   from ltc_m.p034_provenance_snapshots as snapshots
-  join ltc_m.projects as projects on projects.id = snapshots.project_id
+  join scoped_projects on scoped_projects.id = snapshots.project_id
   where snapshots.status = 'success'
-    and projects.status = 'active'
-    and projects.deleted_at is null
-    and ($1::uuid is null or snapshots.project_id = $1::uuid)
   order by snapshots.project_id, snapshots.authority_revision desc
 )
-select count(*)::bigint as snapshot_count
-from latest_snapshots`;
+select
+  count(scoped_projects.id)::bigint as scoped_project_count,
+  count(latest_snapshots.project_id)::bigint as covered_project_count
+from scoped_projects
+left join latest_snapshots on latest_snapshots.project_id = scoped_projects.id`;
 
 export interface ActualEventQualityInput {
   readonly metricType: string;
@@ -89,24 +102,22 @@ const RULE_LABELS: Readonly<Record<QualityRuleCode, string>> = {
   GRAIN_MISMATCH: 'Divergência de moeda/unidade',
 };
 
-const SORT_EXPRESSIONS = {
-  severity: 'severity_rank',
-  project: 'project_code',
-  rule: 'rule_code',
-  origin: 'origin_entity',
-  id: 'id',
-} as const;
-
 const FINDINGS_SQL = `
-with latest_snapshots as (
+with request_params as (
+  select $1::uuid as project_id, $2::timestamptz as evaluated_at
+), scoped_projects as (
+  select projects.*
+  from ltc_m.projects as projects
+  cross join request_params
+  where projects.deleted_at is null
+    and (request_params.project_id is null or projects.id = request_params.project_id)
+), latest_snapshots as (
   select distinct on (snapshots.project_id)
     snapshots.id,
     snapshots.project_id
   from ltc_m.p034_provenance_snapshots as snapshots
-  join ltc_m.projects as projects on projects.id = snapshots.project_id
+  join scoped_projects on scoped_projects.id = snapshots.project_id
   where snapshots.status = 'success'
-    and projects.status = 'active'
-    and projects.deleted_at is null
   order by snapshots.project_id, snapshots.authority_revision desc
 ), p016_findings as (
   select
@@ -130,7 +141,7 @@ with latest_snapshots as (
     quality.remediation_class as remediation,
     null::jsonb as provenance_payload
   from ltc_m.v_tableau_data_quality as quality
-  join ltc_m.projects as projects on projects.id = quality.project_id
+  join scoped_projects as projects on projects.id = quality.project_id
   where quality.finding_id is not null
     and quality.finding_code = 'PROJECT_VALUE_MISMATCH'
 ), incomplete_findings as (
@@ -155,7 +166,7 @@ with latest_snapshots as (
     'correct_database'::text as remediation,
     null::jsonb as provenance_payload
   from ltc_m.project_items as items
-  join ltc_m.projects as projects on projects.id = items.project_id
+  join scoped_projects as projects on projects.id = items.project_id
   cross join lateral (
     values
       ('description', nullif(btrim(items.description), '') is null),
@@ -184,19 +195,20 @@ with latest_snapshots as (
     projects.id as origin_entity_id,
     null::text as source_reference,
     concat('ltc_m.projects:', projects.id::text) as database_reference,
-    jsonb_build_object('evaluatedAt', $2::timestamptz, 'thresholdDays', 30) as evidence,
+     jsonb_build_object('evaluatedAt', request_params.evaluated_at, 'thresholdDays', 30) as evidence,
     'Project data is older than the 30-day freshness threshold.'::text as explanation,
     'correct_database'::text as remediation,
     null::jsonb as provenance_payload
-  from ltc_m.projects as projects
+  from scoped_projects as projects
+  cross join request_params
   where projects.deleted_at is null
     and projects.updated_at is not null
-    and $2::timestamptz - projects.updated_at > interval '30 days'
+    and request_params.evaluated_at - projects.updated_at > interval '30 days'
 ), official_plan_counts as (
   select scopes.project_id, count(distinct scopes.plan_version_id)::integer as official_plan_count
   from ltc_m.financial_plan_scopes as scopes
   join ltc_m.plan_versions as versions on versions.id = scopes.plan_version_id
-  join ltc_m.projects as projects on projects.id = scopes.project_id
+  join scoped_projects as projects on projects.id = scopes.project_id
   where scopes.metric_type = 'billing_planned'
     and scopes.planning_level = 'item'
     and versions.status in ('approved', 'locked')
@@ -207,20 +219,20 @@ with latest_snapshots as (
   from ltc_m.financial_plan_lines as lines
   join official_plan_counts as counts on counts.project_id = lines.project_id and counts.official_plan_count = 1
   join ltc_m.plan_versions as versions on versions.id = lines.plan_version_id and versions.status in ('approved', 'locked')
-  join ltc_m.projects as projects on projects.id = lines.project_id and lines.currency_code = projects.base_currency
+  join scoped_projects as projects on projects.id = lines.project_id and lines.currency_code = projects.base_currency
   where lines.metric_type = 'billing_planned' and lines.planning_level = 'item'
   group by lines.project_id
 ), posted_actuals as (
   select events.project_id, sum(events.amount) as actual_amount
   from ltc_m.financial_actual_events as events
-  join ltc_m.projects as projects on projects.id = events.project_id
+  join scoped_projects as projects on projects.id = events.project_id
   where ${MATERIAL_ACTUAL_FILTER}
     and events.currency_code = projects.base_currency
   group by events.project_id
 ), actual_currency_issues as (
   select distinct events.project_id
   from ltc_m.financial_actual_events as events
-  join ltc_m.projects as projects on projects.id = events.project_id
+  join scoped_projects as projects on projects.id = events.project_id
   where ${MATERIAL_ACTUAL_FILTER}
     and events.currency_code is distinct from projects.base_currency
   group by events.project_id
@@ -250,7 +262,7 @@ with latest_snapshots as (
     'correct_source'::text as remediation,
     null::jsonb as provenance_payload
   from ltc_m.project_items as items
-  join ltc_m.projects as projects on projects.id = items.project_id
+  join scoped_projects as projects on projects.id = items.project_id
   where items.active
     and items.deleted_at is null
     and projects.deleted_at is null
@@ -278,7 +290,7 @@ with latest_snapshots as (
     'The canonical balance remains positive after posted actuals and the official item plan.'::text as explanation,
     'correct_database'::text as remediation,
     null::jsonb as provenance_payload
-  from ltc_m.projects as projects
+  from scoped_projects as projects
   join official_plan_counts as counts on counts.project_id = projects.id and counts.official_plan_count = 1
   left join planned_totals as planned on planned.project_id = projects.id
   left join posted_actuals as actuals on actuals.project_id = projects.id
@@ -351,7 +363,7 @@ with latest_snapshots as (
     'investigate_duplicate'::text as remediation,
     jsonb_build_object('project_observations', groups.project_observations, 'item_observations', '[]'::jsonb) as provenance_payload
   from project_duplicate_groups as groups
-  join ltc_m.projects as projects on projects.id = groups.project_id
+  join scoped_projects as projects on projects.id = groups.project_id
   union all
   select
     concat('p034-provenance-item:', groups.snapshot_id::text, ':', groups.project_code, ':', groups.source_line_key) as id,
@@ -392,7 +404,7 @@ with latest_snapshots as (
       'item_observations', groups.item_observations
     ) as provenance_payload
   from item_duplicate_groups as groups
-  join ltc_m.projects as projects on projects.id = groups.project_id
+  join scoped_projects as projects on projects.id = groups.project_id
 ), findings as (
   select * from p016_findings
   union all select * from incomplete_findings
@@ -518,6 +530,55 @@ function expandRow(row: QualityRow): readonly QualityFinding[] {
   return matching.map((finding) => toFinding(row, finding));
 }
 
+const QUALITY_SEVERITY_RANK: Readonly<Record<QualitySeverity, number>> = {
+  BLOCKING: 1,
+  ERROR: 2,
+  WARNING: 3,
+  INFO: 4,
+};
+
+function compareText(left: string | undefined, right: string | undefined): number {
+  const leftValue = left ?? '';
+  const rightValue = right ?? '';
+  return leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0;
+}
+
+export function compareQualityFindings(
+  left: QualityFinding,
+  right: QualityFinding,
+  sort: QualityQuery['sort'],
+  order: QualityQuery['order'],
+): number {
+  const direction = order === 'desc' ? -1 : 1;
+  const primary =
+    sort === 'severity'
+      ? QUALITY_SEVERITY_RANK[left.severity] - QUALITY_SEVERITY_RANK[right.severity]
+      : sort === 'project'
+        ? compareText(left.project.code, right.project.code)
+        : sort === 'rule'
+          ? compareText(left.rule.code, right.rule.code)
+          : sort === 'origin'
+            ? compareText(left.origin.entity, right.origin.entity)
+            : compareText(left.id, right.id);
+  if (primary !== 0) return primary * direction;
+  if (sort === 'project' && order === 'asc') {
+    const ruleTie = compareText(left.rule.code, right.rule.code);
+    if (ruleTie !== 0) return ruleTie;
+  }
+  return compareText(left.id, right.id);
+}
+
+function emptyQualityResponse(query: QualityQuery): QualityResponse {
+  return {
+    contract: P034_DATA_QUALITY_CONTRACT,
+    items: [],
+    page: query.page,
+    pageSize: query.pageSize,
+    totalItems: 0,
+    totalPages: 0,
+  };
+}
+
 @Injectable()
 export class QualityService {
   constructor(
@@ -528,13 +589,15 @@ export class QualityService {
   async list(query: QualityQuery, actor: ActorContext): Promise<QualityResponse> {
     return this.database.actorTransaction(actor, async (client) => {
       const projectId = query.projectId ?? null;
-      const guard = await client.query<{ snapshot_count: string }>(SNAPSHOT_GUARD_SQL, [projectId]);
-      if (Number(guard.rows[0]?.snapshot_count ?? 0) === 0) {
+      const guard = await client.query<SnapshotCoverage>(SNAPSHOT_GUARD_SQL, [projectId]);
+      const scopedProjectCount = Number(guard.rows[0]?.scoped_project_count ?? 0);
+      const coveredProjectCount = Number(guard.rows[0]?.covered_project_count ?? 0);
+      if (scopedProjectCount === 0) return emptyQualityResponse(query);
+      if (coveredProjectCount !== scopedProjectCount) {
         throw new ServiceUnavailableException('P034_PROVENANCE_SNAPSHOT_UNAVAILABLE');
       }
       const values: unknown[] = [projectId, this.clock.now().toISOString()];
       const filters: string[] = [];
-      if (query.projectId) filters.push('project_id = $1::uuid');
       if (query.rule) {
         values.push(query.rule);
         filters.push(`rule_code = $${values.length}::text`);
@@ -555,13 +618,10 @@ export class QualityService {
         );
       }
       const where = filters.length > 0 ? `  and ${filters.join('\n  and ')}` : '';
-      const direction = query.order === 'desc' ? 'desc' : 'asc';
-      const result = await client.query<QualityRow>(
-        `${FINDINGS_SQL}${where}
-         order by ${SORT_EXPRESSIONS[query.sort]} ${direction}${query.sort === 'project' && query.order === 'asc' ? ', rule_code asc' : ''}, id asc`,
-        values,
-      );
-      const findings = result.rows.flatMap(expandRow);
+      const result = await client.query<QualityRow>(`${FINDINGS_SQL}${where}`, values);
+      const findings = result.rows
+        .flatMap(expandRow)
+        .sort((left, right) => compareQualityFindings(left, right, query.sort, query.order));
       const totalItems = findings.length;
       const offset = (query.page - 1) * query.pageSize;
       return {
