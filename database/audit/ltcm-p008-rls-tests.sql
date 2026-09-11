@@ -168,7 +168,12 @@ begin
         where
             pg_namespace.nspname = 'ltc_m'
             and pg_class.relkind = 'r'
-            and pg_class.relname not like 'p034_provenance_%'
+            and pg_class.relname not in (
+                'p034_provenance_snapshots',
+                'p034_provenance_project_observations',
+                'p034_provenance_item_observations',
+                'p034_provenance_source_references'
+            )
     )
     select
         (select count(*) from expected_tables),
@@ -313,7 +318,12 @@ begin
         from pg_catalog.pg_policies
         where
             pg_policies.schemaname = 'ltc_m'
-            and pg_policies.tablename not like 'p034_provenance_%'
+            and pg_policies.tablename not in (
+                'p034_provenance_snapshots',
+                'p034_provenance_project_observations',
+                'p034_provenance_item_observations',
+                'p034_provenance_source_references'
+            )
             and pg_policies.policyname not in (
                 'p034_writer_projects_select',
                 'p034_writer_batches_select'
@@ -412,7 +422,12 @@ begin
         from pg_catalog.pg_policies
         where
             pg_policies.schemaname = 'ltc_m'
-            and pg_policies.tablename not like 'p034_provenance_%'
+            and pg_policies.tablename not in (
+                'p034_provenance_snapshots',
+                'p034_provenance_project_observations',
+                'p034_provenance_item_observations',
+                'p034_provenance_source_references'
+            )
             and pg_policies.policyname not in (
                 'p034_writer_projects_select',
                 'p034_writer_batches_select'

@@ -50,14 +50,24 @@ select pg_catalog.jsonb_build_object(
             and pg_class.relkind = 'r'
             and pg_class.relrowsecurity
             and pg_class.relforcerowsecurity
-            and pg_class.relname not like 'p034_provenance_%'
+            and pg_class.relname not in (
+                'p034_provenance_snapshots',
+                'p034_provenance_project_observations',
+                'p034_provenance_item_observations',
+                'p034_provenance_source_references'
+            )
     ),
     'policy_count', (
         select count(*)
         from pg_catalog.pg_policies
         where
             pg_policies.schemaname = 'ltc_m'
-            and pg_policies.tablename not like 'p034_provenance_%'
+            and pg_policies.tablename not in (
+                'p034_provenance_snapshots',
+                'p034_provenance_project_observations',
+                'p034_provenance_item_observations',
+                'p034_provenance_source_references'
+            )
             and pg_policies.policyname not in (
                 'p034_writer_projects_select',
                 'p034_writer_batches_select'
@@ -68,7 +78,12 @@ select pg_catalog.jsonb_build_object(
         from pg_catalog.pg_policies
         where
             pg_policies.schemaname = 'ltc_m'
-            and pg_policies.tablename not like 'p034_provenance_%'
+            and pg_policies.tablename not in (
+                'p034_provenance_snapshots',
+                'p034_provenance_project_observations',
+                'p034_provenance_item_observations',
+                'p034_provenance_source_references'
+            )
             and pg_policies.policyname not in (
                 'p034_writer_projects_select',
                 'p034_writer_batches_select'
