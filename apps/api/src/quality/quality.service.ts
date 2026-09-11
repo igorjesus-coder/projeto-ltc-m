@@ -224,6 +224,39 @@ with latest_snapshots as (
   where ${MATERIAL_ACTUAL_FILTER}
     and events.currency_code is distinct from projects.base_currency
   group by events.project_id
+), grain_findings as (
+  select
+    concat('p034:grain-mismatch:', projects.id::text, ':', items.id::text) as id,
+    projects.id as project_id,
+    projects.project_code,
+    projects.project_name,
+    'GRAIN_MISMATCH'::text as rule_code,
+    'ERROR'::text as severity,
+    null::text as expected_value,
+    null::text as observed_value,
+    null::text as delta,
+    items.currency_code as currency_code,
+    'p034_database_projection'::text as finding_origin,
+    'project_item'::text as origin_entity,
+    items.id as origin_entity_id,
+    null::text as source_reference,
+    concat('ltc_m.project_items:', items.id::text) as database_reference,
+    jsonb_build_object(
+      'sourceLineKey', items.source_line_key,
+      'projectCurrency', projects.base_currency,
+      'itemCurrency', items.currency_code
+    ) as evidence,
+    'Item and project currencies are incompatible; values were not summed.'::text as explanation,
+    'correct_source'::text as remediation,
+    null::jsonb as provenance_payload
+  from ltc_m.project_items as items
+  join ltc_m.projects as projects on projects.id = items.project_id
+  where items.active
+    and items.deleted_at is null
+    and projects.deleted_at is null
+    and projects.base_currency is not null
+    and items.currency_code is not null
+    and items.currency_code <> projects.base_currency
 ), balance_findings as (
   select
     concat('p034:unplanned-balance:', projects.id::text) as id,
@@ -264,9 +297,9 @@ with latest_snapshots as (
         'project_code', observations.project_code,
         'project_id', observations.project_id::text,
         'source_references', coalesce((
-          select jsonb_agg(jsonb_build_object('kind', references.kind, 'locator', references.locator, 'fingerprint', references.fingerprint) order by references.reference_ordinal)
-          from ltc_m.p034_provenance_source_references as references
-          where references.project_observation_id = observations.id
+          select jsonb_agg(jsonb_build_object('kind', source_refs.kind, 'locator', source_refs.locator, 'fingerprint', source_refs.fingerprint) order by source_refs.reference_ordinal)
+          from ltc_m.p034_provenance_source_references as source_refs
+          where source_refs.project_observation_id = observations.id
         ), '[]'::jsonb)
       ) order by observations.occurrence_ordinal
     ) as project_observations
@@ -286,9 +319,9 @@ with latest_snapshots as (
         'source_line_key', observations.source_line_key,
         'item_id', observations.item_id,
         'source_references', coalesce((
-          select jsonb_agg(jsonb_build_object('kind', references.kind, 'locator', references.locator, 'fingerprint', references.fingerprint) order by references.reference_ordinal)
-          from ltc_m.p034_provenance_source_references as references
-          where references.item_observation_id = observations.id
+          select jsonb_agg(jsonb_build_object('kind', source_refs.kind, 'locator', source_refs.locator, 'fingerprint', source_refs.fingerprint) order by source_refs.reference_ordinal)
+          from ltc_m.p034_provenance_source_references as source_refs
+          where source_refs.item_observation_id = observations.id
         ), '[]'::jsonb)
       ) order by observations.occurrence_ordinal
     ) as item_observations
@@ -345,9 +378,9 @@ with latest_snapshots as (
           'project_code', observations.project_code,
           'project_id', observations.project_id::text,
           'source_references', coalesce((
-            select jsonb_agg(jsonb_build_object('kind', references.kind, 'locator', references.locator, 'fingerprint', references.fingerprint) order by references.reference_ordinal)
-            from ltc_m.p034_provenance_source_references as references
-            where references.project_observation_id = observations.id
+            select jsonb_agg(jsonb_build_object('kind', source_refs.kind, 'locator', source_refs.locator, 'fingerprint', source_refs.fingerprint) order by source_refs.reference_ordinal)
+            from ltc_m.p034_provenance_source_references as source_refs
+            where source_refs.project_observation_id = observations.id
           ), '[]'::jsonb)
         ))
         from ltc_m.p034_provenance_project_observations as observations
@@ -364,6 +397,7 @@ with latest_snapshots as (
   select * from p016_findings
   union all select * from incomplete_findings
   union all select * from stale_findings
+  union all select * from grain_findings
   union all select * from balance_findings
   union all select * from provenance_findings
 ), findings_labeled as (

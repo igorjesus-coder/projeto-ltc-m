@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import { BadRequestException } from '@nestjs/common';
@@ -210,6 +211,116 @@ test('P034 compoe resposta no contexto do ator e seleciona provenance latest', a
   assert.doesNotMatch(sql, /limit \$/u);
   assert.deepEqual(values, [null, '2026-09-09T12:00:00.000Z', 'ERROR', '%50\\%\\_\\\\%']);
   assert.doesNotMatch(sql, /insert\s+into|update\s+|delete\s+from|drop\s+/iu);
+});
+
+test('P034 materializa GRAIN_MISMATCH de moeda com identidade e navegação estáveis', async () => {
+  const itemId = '00000000-0000-4000-8000-000000034201';
+  const databaseLocator = `ltc_m.project_items:${itemId}`;
+  const databaseFingerprint = createHash('sha256').update(databaseLocator).digest('hex');
+  const grainRow = {
+    ...findingRow,
+    id: `p034:grain-mismatch:${findingRow.project_id}:${itemId}`,
+    rule_code: 'GRAIN_MISMATCH',
+    severity: 'ERROR',
+    expected_value: null,
+    observed_value: null,
+    delta: null,
+    currency_code: 'USD',
+    finding_origin: 'p034_database_projection',
+    origin_entity: 'project_item',
+    origin_entity_id: itemId,
+    source_reference: null,
+    database_reference: databaseLocator,
+    evidence: {
+      sourceLineKey: 'line-1',
+      projectCurrency: 'BRL',
+      itemCurrency: 'USD',
+    },
+    explanation: 'Item and project currencies are incompatible; values were not summed.',
+    remediation: 'correct_source',
+    provenance_payload: null,
+    total_items: '1',
+  };
+  let sql = '';
+  let values: readonly unknown[] = [];
+  const database = {
+    actorTransaction: async <T>(
+      _receivedActor: typeof actor,
+      operation: (client: {
+        query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
+      }) => Promise<T>,
+    ) =>
+      operation({
+        query: async <Row>(text: string, receivedValues?: readonly unknown[]) => {
+          if (text.includes('snapshot_count')) return { rows: [{ snapshot_count: '1' } as Row] };
+          sql = text;
+          values = receivedValues ?? [];
+          return text.includes('grain_findings') ? { rows: [grainRow as Row] } : { rows: [] };
+        },
+      }),
+  };
+  const query = {
+    projectId: findingRow.project_id,
+    rule: 'GRAIN_MISMATCH' as const,
+    severity: 'ERROR' as const,
+    sort: 'id' as const,
+    order: 'asc' as const,
+    page: 1,
+    pageSize: 25,
+  };
+  const clock: QualityClock = { now: () => new Date('2026-09-11T00:00:00.000Z') };
+
+  const first = await new QualityService(database as never, clock).list(query, actor);
+  const second = await new QualityService(database as never, clock).list(query, actor);
+  const finding = first.items[0];
+  assert.ok(finding);
+  assert.deepEqual(finding, {
+    id: grainRow.id,
+    project: {
+      id: findingRow.project_id,
+      code: findingRow.project_code,
+      name: findingRow.project_name,
+    },
+    rule: { code: 'GRAIN_MISMATCH', label: 'Divergência de moeda/unidade' },
+    severity: 'ERROR',
+    expectedValue: null,
+    observedValue: null,
+    delta: null,
+    currencyCode: 'USD',
+    origin: {
+      findingOrigin: 'p034_database_projection',
+      entity: 'project_item',
+      databaseReferences: [
+        {
+          kind: 'database',
+          locator: databaseLocator,
+          fingerprint: databaseFingerprint,
+        },
+      ],
+    },
+    evidence: grainRow.evidence,
+    explanation: grainRow.explanation,
+    remediation: 'correct_source',
+    navigationAction: {
+      target: 'project_item',
+      projectId: findingRow.project_id,
+      entityId: itemId,
+    },
+  });
+  assert.equal(second.items[0]?.id, finding.id);
+  assert.equal(first.totalItems, 1);
+  assert.equal(first.totalPages, 1);
+  assert.match(sql, /grain_findings/u);
+  assert.match(sql, /projects\.base_currency is not null/u);
+  assert.match(sql, /items\.currency_code is not null/u);
+  assert.match(sql, /items\.currency_code <> projects\.base_currency/u);
+  assert.doesNotMatch(sql, /provenance_payload.*GRAIN_MISMATCH/iu);
+  assert.deepEqual(values, [
+    findingRow.project_id,
+    '2026-09-11T00:00:00.000Z',
+    'GRAIN_MISMATCH',
+    'ERROR',
+  ]);
 });
 
 test('P034 falha fechado quando nao ha snapshot autoritativo', async () => {
