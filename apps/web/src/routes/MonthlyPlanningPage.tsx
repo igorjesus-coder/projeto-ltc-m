@@ -99,7 +99,9 @@ function differenceForCell(
   );
 }
 
-export function MonthlyPlanningPage() {
+export function MonthlyPlanningPage({
+  initialProjectId,
+}: { readonly initialProjectId?: string } = {}) {
   const { getAccessTokenSilently } = useAuth0();
   const { can } = useAuthorization();
   const [projects, setProjects] = useState<readonly PlanningProjectOption[]>([]);
@@ -142,7 +144,11 @@ export function MonthlyPlanningPage() {
         if (cancelled) return;
         const parsed = parsePlanningProjectsResponse(response);
         setProjects(parsed.projects);
-        setProjectId(parsed.projects[0]?.projectId ?? '');
+        setProjectId(
+          parsed.projects.some((project) => project.projectId === initialProjectId)
+            ? initialProjectId!
+            : (parsed.projects[0]?.projectId ?? ''),
+        );
       })
       .catch((error: unknown) => {
         if (!cancelled) setState({ kind: 'error', error });
@@ -150,7 +156,7 @@ export function MonthlyPlanningPage() {
     return () => {
       cancelled = true;
     };
-  }, [apiClient]);
+  }, [apiClient, initialProjectId]);
 
   useEffect(() => {
     if (!apiClient || !projectId) return undefined;

@@ -1,0 +1,483 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import test from 'node:test';
+
+import { BadRequestException } from '@nestjs/common';
+
+import { deriveP034DuplicateFindings } from '../src/quality/p015-duplicate-adapter.js';
+import {
+  compareQualityFindings,
+  isMaterialBillingActual,
+  QualityService,
+  type QualityClock,
+} from '../src/quality/quality.service.js';
+import { parseQualityQuery, type QualityFinding } from '../src/quality/quality.types.js';
+
+const actor = Object.freeze({
+  appUserId: '00000000-0000-4000-8000-000000034001',
+  authSubject: 'auth0|p034-viewer',
+  requestId: 'p034-request',
+  source: 'api' as const,
+});
+
+const findingRow = {
+  id: 'p016-finding:1',
+  project_id: '00000000-0000-4000-8000-000000034101',
+  project_code: 'P034-001',
+  project_name: 'Projeto P034',
+  rule_code: 'PROJECT_VALUE_MISMATCH',
+  severity: 'ERROR',
+  expected_value: '100.00',
+  observed_value: '90.00',
+  delta: '-10.00',
+  currency_code: 'BRL',
+  finding_origin: 'database_projection',
+  origin_entity: 'project',
+  origin_entity_id: '00000000-0000-4000-8000-000000034101',
+  source_reference: 'ltc_m.projects:1',
+  database_reference: 'ltc_m.project_items:project=1',
+  evidence: null,
+  explanation: null,
+  remediation: 'REVIEW_SOURCE_OR_DATABASE',
+  provenance_payload: null,
+  total_items: '1',
+};
+
+const sourceReference = {
+  kind: 'source' as const,
+  locator: 'Valores Projetos LTC-M!C4',
+  fingerprint: 'a'.repeat(64),
+};
+
+test('P034 valida allowlists, defaults e paginacao sem aceitar parametros desconhecidos', () => {
+  assert.deepEqual(parseQualityQuery({}), {
+    sort: 'project',
+    order: 'asc',
+    page: 1,
+    pageSize: 25,
+  });
+  assert.deepEqual(
+    parseQualityQuery({
+      projectId: '00000000-0000-4000-8000-000000034101',
+      rule: 'UNPLANNED_BALANCE',
+      severity: 'WARNING',
+      origin: 'project',
+      search: '  P034  ',
+      sort: 'severity',
+      order: 'desc',
+      page: '2',
+      pageSize: '50',
+    }),
+    {
+      projectId: '00000000-0000-4000-8000-000000034101',
+      rule: 'UNPLANNED_BALANCE',
+      severity: 'WARNING',
+      origin: 'project',
+      search: 'P034',
+      sort: 'severity',
+      order: 'desc',
+      page: 2,
+      pageSize: 50,
+    },
+  );
+  assert.throws(() => parseQualityQuery({ sql: 'drop table' }), BadRequestException);
+  assert.throws(() => parseQualityQuery({ rule: 'IMPORT_DUPLICATION' }), BadRequestException);
+  assert.throws(() => parseQualityQuery({ rule: 'ACTUAL_STATUS_UNRESOLVED' }), BadRequestException);
+  assert.throws(() => parseQualityQuery({ severity: 'CRITICAL' }), BadRequestException);
+  assert.throws(() => parseQualityQuery({ pageSize: '101' }), BadRequestException);
+});
+
+test('P034 restringe moeda relevante ao universo billing_actual posted', () => {
+  assert.equal(isMaterialBillingActual({ metricType: 'billing_actual', status: 'posted' }), true);
+  assert.equal(isMaterialBillingActual({ metricType: 'billing_actual', status: 'draft' }), false);
+  assert.equal(isMaterialBillingActual({ metricType: 'receipt_actual', status: 'posted' }), false);
+});
+
+test('adapter P034 preserva a identidade deterministica das duplicidades P015', () => {
+  const findings = deriveP034DuplicateFindings({
+    project_observations: [
+      {
+        project_code: 'P034-001',
+        project_id: findingRow.project_id,
+        source_references: [sourceReference],
+      },
+      {
+        project_code: 'P034-001',
+        project_id: findingRow.project_id,
+        source_references: [
+          { ...sourceReference, locator: 'Valores Projetos LTC-M!C5', fingerprint: 'b'.repeat(64) },
+        ],
+      },
+    ],
+    item_observations: [],
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]?.finding_code, 'DUPLICATE_PROJECT_SOURCE_IDENTITY');
+  assert.equal(
+    findings[0]?.finding_id,
+    'p015-finding-v1:c923da1db536f48810b8e2ce7fcbac6e17b701772917330cbdaa8083a8eb2be1',
+  );
+  assert.deepEqual(
+    findings[0]?.source_references.map(({ locator }) => locator),
+    ['Valores Projetos LTC-M!C4', 'Valores Projetos LTC-M!C5'],
+  );
+});
+
+test('adapter P034 agrupa item por project_code e source_line_key', () => {
+  const lineKey = `p012-line-v1:${'d'.repeat(64)}`;
+  const findings = deriveP034DuplicateFindings({
+    project_observations: [
+      {
+        project_code: 'P034-001',
+        project_id: findingRow.project_id,
+        source_references: [sourceReference],
+      },
+    ],
+    item_observations: [
+      {
+        project_code: 'P034-001',
+        source_line_key: lineKey,
+        item_id: null,
+        source_references: [sourceReference],
+      },
+      {
+        project_code: 'P034-001',
+        source_line_key: lineKey,
+        item_id: null,
+        source_references: [
+          { ...sourceReference, locator: 'Itens!A5', fingerprint: 'b'.repeat(64) },
+        ],
+      },
+    ],
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]?.finding_code, 'DUPLICATE_ITEM_SOURCE_IDENTITY');
+  assert.equal(
+    findings[0]?.finding_id,
+    'p015-finding-v1:fac23283cc07c946b9bcf16d157f9b8c60c3584d679b3a4e0801f829bb7d5e75',
+  );
+});
+
+test('P034 compoe resposta no contexto do ator e seleciona provenance latest', async () => {
+  let sql = '';
+  let values: readonly unknown[] = [];
+  const database = {
+    actorTransaction: async <T>(
+      receivedActor: typeof actor,
+      operation: (client: {
+        query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
+      }) => Promise<T>,
+    ) => {
+      assert.deepEqual(receivedActor, actor);
+      return operation({
+        query: async <Row>(text: string, receivedValues?: readonly unknown[]) => {
+          if (text.includes('scoped_project_count')) {
+            return {
+              rows: [{ scoped_project_count: '1', covered_project_count: '1' } as Row],
+            };
+          }
+          sql = text;
+          values = receivedValues ?? [];
+          return { rows: [findingRow as Row] };
+        },
+      });
+    },
+  };
+  const clock: QualityClock = { now: () => new Date('2026-09-09T12:00:00.000Z') };
+  const response = await new QualityService(database as never, clock).list(
+    {
+      search: '50%_\\',
+      severity: 'ERROR',
+      sort: 'severity',
+      order: 'desc',
+      page: 1,
+      pageSize: 25,
+    },
+    actor,
+  );
+
+  assert.equal(response.contract, 'ltcm.p034.data-quality-center.v3');
+  assert.equal(response.items[0]?.id, findingRow.id);
+  assert.equal(response.items[0]?.rule.code, 'PROJECT_VALUE_MISMATCH');
+  assert.equal(response.totalItems, 1);
+  assert.equal(response.totalPages, 1);
+  assert.match(sql, /v_tableau_data_quality/u);
+  assert.match(sql, /finding_code = 'PROJECT_VALUE_MISMATCH'/u);
+  assert.doesNotMatch(sql, /ACTUAL_STATUS_UNRESOLVED|IMPORT_DUPLICATION/u);
+  assert.match(sql, /scoped_projects/u);
+  assert.match(sql, /distinct on \(snapshots\.project_id\)/u);
+  assert.match(sql, /authority_revision desc/u);
+  assert.match(sql, /p034_provenance_project_observations/u);
+  assert.match(sql, /p034_provenance_item_observations/u);
+  assert.match(
+    sql,
+    /actual_currency_issues[\s\S]*events\.metric_type = 'billing_actual'[\s\S]*events\.status = 'posted'/u,
+  );
+  assert.match(sql, /rule_label ilike \$4/u);
+  assert.doesNotMatch(sql, /limit \$/u);
+  assert.deepEqual(values, [null, '2026-09-09T12:00:00.000Z', 'ERROR', '%50\\%\\_\\\\%']);
+  assert.doesNotMatch(sql, /insert\s+into|update\s+|delete\s+from|drop\s+/iu);
+});
+
+test('P034 materializa GRAIN_MISMATCH de moeda com identidade e navegação estáveis', async () => {
+  const itemId = '00000000-0000-4000-8000-000000034201';
+  const databaseLocator = `ltc_m.project_items:${itemId}`;
+  const databaseFingerprint = createHash('sha256').update(databaseLocator).digest('hex');
+  const grainRow = {
+    ...findingRow,
+    id: `p034:grain-mismatch:${findingRow.project_id}:${itemId}`,
+    rule_code: 'GRAIN_MISMATCH',
+    severity: 'ERROR',
+    expected_value: null,
+    observed_value: null,
+    delta: null,
+    currency_code: 'USD',
+    finding_origin: 'p034_database_projection',
+    origin_entity: 'project_item',
+    origin_entity_id: itemId,
+    source_reference: null,
+    database_reference: databaseLocator,
+    evidence: {
+      sourceLineKey: 'line-1',
+      projectCurrency: 'BRL',
+      itemCurrency: 'USD',
+    },
+    explanation: 'Item and project currencies are incompatible; values were not summed.',
+    remediation: 'correct_source',
+    provenance_payload: null,
+    total_items: '1',
+  };
+  let sql = '';
+  let values: readonly unknown[] = [];
+  const database = {
+    actorTransaction: async <T>(
+      _receivedActor: typeof actor,
+      operation: (client: {
+        query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
+      }) => Promise<T>,
+    ) =>
+      operation({
+        query: async <Row>(text: string, receivedValues?: readonly unknown[]) => {
+          if (text.includes('scoped_project_count')) {
+            return {
+              rows: [{ scoped_project_count: '1', covered_project_count: '1' } as Row],
+            };
+          }
+          sql = text;
+          values = receivedValues ?? [];
+          return text.includes('grain_findings') ? { rows: [grainRow as Row] } : { rows: [] };
+        },
+      }),
+  };
+  const query = {
+    projectId: findingRow.project_id,
+    rule: 'GRAIN_MISMATCH' as const,
+    severity: 'ERROR' as const,
+    sort: 'id' as const,
+    order: 'asc' as const,
+    page: 1,
+    pageSize: 25,
+  };
+  const clock: QualityClock = { now: () => new Date('2026-09-11T00:00:00.000Z') };
+
+  const first = await new QualityService(database as never, clock).list(query, actor);
+  const second = await new QualityService(database as never, clock).list(query, actor);
+  const finding = first.items[0];
+  assert.ok(finding);
+  assert.deepEqual(finding, {
+    id: grainRow.id,
+    project: {
+      id: findingRow.project_id,
+      code: findingRow.project_code,
+      name: findingRow.project_name,
+    },
+    rule: { code: 'GRAIN_MISMATCH', label: 'Divergência de moeda/unidade' },
+    severity: 'ERROR',
+    expectedValue: null,
+    observedValue: null,
+    delta: null,
+    currencyCode: 'USD',
+    origin: {
+      findingOrigin: 'p034_database_projection',
+      entity: 'project_item',
+      databaseReferences: [
+        {
+          kind: 'database',
+          locator: databaseLocator,
+          fingerprint: databaseFingerprint,
+        },
+      ],
+    },
+    evidence: grainRow.evidence,
+    explanation: grainRow.explanation,
+    remediation: 'correct_source',
+    navigationAction: {
+      target: 'project_item',
+      projectId: findingRow.project_id,
+      entityId: itemId,
+    },
+  });
+  assert.equal(second.items[0]?.id, finding.id);
+  assert.equal(first.totalItems, 1);
+  assert.equal(first.totalPages, 1);
+  assert.match(sql, /grain_findings/u);
+  assert.match(sql, /projects\.base_currency is not null/u);
+  assert.match(sql, /items\.currency_code is not null/u);
+  assert.match(sql, /items\.currency_code <> projects\.base_currency/u);
+  assert.doesNotMatch(sql, /provenance_payload.*GRAIN_MISMATCH/iu);
+  assert.deepEqual(values, [
+    findingRow.project_id,
+    '2026-09-11T00:00:00.000Z',
+    'GRAIN_MISMATCH',
+    'ERROR',
+  ]);
+});
+
+test('P034 falha fechado quando nao ha snapshot autoritativo', async () => {
+  const database = {
+    actorTransaction: async <T>(
+      _actor: typeof actor,
+      operation: (client: {
+        query: () => Promise<{
+          rows: [{ scoped_project_count: string; covered_project_count: string }];
+        }>;
+      }) => Promise<T>,
+    ) =>
+      operation({
+        query: async () => ({ rows: [{ scoped_project_count: '1', covered_project_count: '0' }] }),
+      }),
+  };
+  await assert.rejects(
+    () => new QualityService(database as never).list(parseQualityQuery({}), actor),
+    /P034_PROVENANCE_SNAPSHOT_UNAVAILABLE/u,
+  );
+});
+
+test('P034 retorna vazio quando o escopo autorizado está vazio', async () => {
+  const database = {
+    actorTransaction: async <T>(
+      _actor: typeof actor,
+      operation: (client: {
+        query: () => Promise<{
+          rows: [{ scoped_project_count: string; covered_project_count: string }];
+        }>;
+      }) => Promise<T>,
+    ) =>
+      operation({
+        query: async () => ({ rows: [{ scoped_project_count: '0', covered_project_count: '0' }] }),
+      }),
+  };
+  const response = await new QualityService(database as never).list(parseQualityQuery({}), actor);
+  assert.deepEqual(response.items, []);
+  assert.equal(response.totalItems, 0);
+  assert.equal(response.totalPages, 0);
+});
+
+test('P034 ordena findings finais por ID público e pagina após normalização', () => {
+  const databaseFinding = { ...findingRow, id: 'p016-finding-v1:z' };
+  const provenanceFinding = {
+    ...findingRow,
+    id: 'p015-finding-v1:a',
+    rule_code: 'DUPLICATE_PROJECT_SOURCE_IDENTITY',
+  };
+  const grainFinding = { ...findingRow, id: 'p034:grain-mismatch:z', rule_code: 'GRAIN_MISMATCH' };
+  const rows = [databaseFinding, provenanceFinding, grainFinding].map((row) => ({
+    ...row,
+    project: { id: row.project_id, code: row.project_code, name: row.project_name },
+    rule: { code: row.rule_code, label: row.rule_code },
+    origin: { entity: row.origin_entity },
+  })) as unknown as QualityFinding[];
+  assert.deepEqual(
+    rows
+      .sort((left, right) => compareQualityFindings(left, right, 'id', 'asc'))
+      .map((row) => row.id),
+    ['p015-finding-v1:a', 'p016-finding-v1:z', 'p034:grain-mismatch:z'],
+  );
+  assert.deepEqual(
+    rows
+      .sort((left, right) => compareQualityFindings(left, right, 'id', 'desc'))
+      .map((row) => row.id),
+    ['p034:grain-mismatch:z', 'p016-finding-v1:z', 'p015-finding-v1:a'],
+  );
+});
+
+test('P034 normaliza findings do adapter sem expor o payload de provenance', async () => {
+  const database = {
+    actorTransaction: async <T>(
+      _actor: typeof actor,
+      operation: (client: {
+        query: <Row>(text: string, values?: readonly unknown[]) => Promise<{ rows: Row[] }>;
+      }) => Promise<T>,
+    ) =>
+      operation({
+        query: async <Row>(text: string) => {
+          if (text.includes('scoped_project_count')) {
+            return {
+              rows: [{ scoped_project_count: '1', covered_project_count: '1' } as Row],
+            };
+          }
+          return {
+            rows: [
+              {
+                ...findingRow,
+                id: 'temporary-p034-id',
+                rule_code: 'DUPLICATE_PROJECT_SOURCE_IDENTITY',
+                expected_value: null,
+                observed_value: null,
+                delta: null,
+                currency_code: null,
+                source_reference: null,
+                database_reference: null,
+                provenance_payload: {
+                  project_observations: [
+                    {
+                      project_code: findingRow.project_code,
+                      project_id: findingRow.project_id,
+                      source_references: [sourceReference],
+                    },
+                    {
+                      project_code: findingRow.project_code,
+                      project_id: findingRow.project_id,
+                      source_references: [
+                        {
+                          ...sourceReference,
+                          locator: 'Valores Projetos LTC-M!C5',
+                          fingerprint: 'b'.repeat(64),
+                        },
+                      ],
+                    },
+                  ],
+                  item_observations: [],
+                },
+              } as Row,
+            ],
+          };
+        },
+      }),
+  };
+  const response = await new QualityService(database as never).list(parseQualityQuery({}), actor);
+  assert.equal(
+    response.items[0]?.id,
+    'p015-finding-v1:c923da1db536f48810b8e2ce7fcbac6e17b701772917330cbdaa8083a8eb2be1',
+  );
+  assert.equal(response.items[0]?.origin.sourceReferences?.[0]?.fingerprint, 'a'.repeat(64));
+  assert.equal('provenance_payload' in (response.items[0] ?? {}), false);
+});
+
+test('P034 propaga falha tecnica da fonte e nao responde como lista vazia', async () => {
+  const database = {
+    actorTransaction: async <T>(
+      _actor: typeof actor,
+      operation: (client: { query: () => Promise<never> }) => Promise<T>,
+    ) =>
+      operation({
+        query: async () => {
+          throw new Error('source unavailable');
+        },
+      }),
+  };
+  await assert.rejects(
+    () => new QualityService(database as never).list(parseQualityQuery({}), actor),
+    /source unavailable/u,
+  );
+});
